@@ -12,6 +12,37 @@ const store = {
   del(k) { localStorage.removeItem(k); }
 };
 
+const assetDb = {
+  open() {
+    return new Promise((resolve, reject) => {
+      if (!window.indexedDB) { reject(new Error('IndexedDB unavailable')); return; }
+      const req = indexedDB.open('promotors-assets', 1);
+      req.onupgradeneeded = () => req.result.createObjectStore('files');
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+  },
+  async get(key) {
+    const db = await this.open();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction('files', 'readonly');
+      const req = tx.objectStore('files').get(key);
+      req.onsuccess = () => resolve(req.result || null);
+      req.onerror = () => reject(req.error);
+      tx.oncomplete = () => db.close();
+    });
+  },
+  async set(key, value) {
+    const db = await this.open();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction('files', 'readwrite');
+      tx.objectStore('files').put(value, key);
+      tx.oncomplete = () => { db.close(); resolve(); };
+      tx.onerror = () => { db.close(); reject(tx.error); };
+    });
+  }
+};
+
 /* 관리자 비밀번호 */
 const ADMIN_PW = 'goodpro1!';
 
@@ -26,9 +57,20 @@ const DEFAULT_BRANCHES = [
 ];
 const DEFAULT_NOTICES = [];
 
-const getBranches = () => store.get('pm-branches', DEFAULT_BRANCHES);
-const getNotices  = () => store.get('pm-notices', DEFAULT_NOTICES);
-const getCases    = () => store.get('promotors-cases', []);
+const DEFAULT_PRODUCTS = [
+  { name: '엔진오일 교환', price: '', desc: '', link: '' },
+  { name: '미션오일 교환', price: '', desc: '', link: '' },
+  { name: '브레이크 패드 교체', price: '', desc: '', link: '' },
+  { name: '타이어 교체/위치교환', price: '', desc: '', link: '' },
+  { name: '에어컨 필터 교체', price: '', desc: '', link: '' }
+];
+
+const getBranches  = () => store.get('pm-branches', DEFAULT_BRANCHES);
+const getNotices   = () => store.get('pm-notices', DEFAULT_NOTICES);
+const getCases     = () => store.get('promotors-cases', []);
+const getProducts  = () => store.get('pm-products', DEFAULT_PRODUCTS);
+const getBlocked   = () => store.get('pm-blocked', []);
+const getCustomers = () => store.get('pm-customers', {});
 const today = () => new Date().toLocaleDateString('ko-KR').replace(/\. /g, '.').replace(/\.$/, '');
 
 /* ============================================================
@@ -44,6 +86,9 @@ function wireNav() {
   $$('.top-nav [data-view]').forEach(btn => {
     btn.addEventListener('click', () => {
       showView(btn.dataset.view);
+      if (btn.dataset.view === 'adm-book') initAdmBook();
+      if (btn.dataset.view === 'adm-cust') renderAdmCust();
+      if (btn.dataset.view === 'adm-prod') renderAdmProd();
       if (btn.dataset.tab) activateTab(btn.dataset.tab);
       if (btn.dataset.branch !== undefined) {
         const el = document.getElementById('branch-' + btn.dataset.branch);
@@ -112,6 +157,9 @@ function applyAuthUI() {
   renderBranches();
   renderNotices();
   renderCases();
+  renderAdmCust();
+  renderAdmProd();
+  if (isAdmin) initAdmBook();
   $('#case-empty').textContent = isAdmin
     ? '등록된 정비사례가 없습니다. 첫 게시글을 등록해보세요.'
     : '등록된 정비사례가 없습니다.';
@@ -130,6 +178,8 @@ function logout() {
   member = null;
   sessionStorage.removeItem('pm-admin');
   store.del('pm-member');
+  /* 관리자 화면에 있었다면 소개로 이동 */
+  if (document.querySelector('.view.active')?.id.startsWith('view-adm')) showView('intro');
   applyAuthUI();
 }
 
@@ -460,32 +510,52 @@ function cardActions(onEdit, onDelete) {
 /* ============================================================
    소개 이미지 변경 (관리자)
    ============================================================ */
-function initShopImage() {
+async function initShopImage() {
   const img = $('#shop-img');
-  const saved = store.get('pm-shop-img', null);
+  let objectUrl = null;
 
   const showFallback = () => {
     img.hidden = true;
     $('#shop-photo').classList.add('no-img');
   };
+  const showImage = src => {
+    img.src = src;
+    img.hidden = false;
+    $('#shop-photo').classList.remove('no-img');
+  };
   img.addEventListener('error', showFallback);
-  /* 스크립트 로드 전에 이미 404가 난 경우 처리 */
-  if (img.complete && img.naturalWidth === 0) showFallback();
-  if (saved) { img.src = saved; img.hidden = false; $('#shop-photo').classList.remove('no-img'); }
+
+  try {
+    const savedFile = await assetDb.get('shop-image');
+    if (savedFile) {
+      objectUrl = URL.createObjectURL(savedFile);
+      showImage(objectUrl);
+    } else {
+      const legacySaved = store.get('pm-shop-img', null);
+      if (legacySaved) showImage(legacySaved);
+      else showFallback();
+    }
+  } catch {
+    const legacySaved = store.get('pm-shop-img', null);
+    if (legacySaved) showImage(legacySaved);
+    else showFallback();
+  }
 
   $('#btn-shop-img').addEventListener('click', () => $('#shop-img-input').click());
-  $('#shop-img-input').addEventListener('change', e => {
+  $('#shop-img-input').addEventListener('change', async e => {
     const f = e.target.files[0];
     if (!f) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      try { store.set('pm-shop-img', reader.result); }
-      catch { alert('이미지 용량이 너무 큽니다. 더 작은 사진을 사용해주세요.'); return; }
-      img.src = reader.result;
-      img.hidden = false;
-      $('#shop-photo').classList.remove('no-img');
-    };
-    reader.readAsDataURL(f);
+    try {
+      await assetDb.set('shop-image', f);
+      store.del('pm-shop-img');
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+      objectUrl = URL.createObjectURL(f);
+      showImage(objectUrl);
+    } catch {
+      alert('이 브라우저 저장공간에 이미지를 저장하지 못했습니다. 더 작은 파일을 사용하거나 브라우저 저장공간을 비워주세요.');
+    } finally {
+      e.target.value = '';
+    }
   });
 }
 
@@ -608,13 +678,15 @@ function renderCalendar(message) {
 function renderSlots(branchBookings) {
   const wrap = $('#cal-slots');
   const dayBookings = branchBookings.filter(b => b.date === cal.selDate);
-  const mine = dayBookings.find(b => b.car === member.car);
+  const blockedTimes = getBlocked()
+    .filter(b => b.branch === cal.branch && b.date === cal.selDate)
+    .map(b => b.time);
 
-  let html = `<p class="slots-title">${cal.selDate} 예약 시간 선택</p>`;
-  if (mine) html += `<button type="button" class="my-booking-cancel" id="cancel-mine">내 예약 취소 (${mine.time})</button>`;
-  html += '<div class="slots" id="slots"></div>';
-  html += `<div class="modal-actions"><button type="button" class="modal-submit" id="confirm-booking" ${cal.selTime ? '' : 'disabled'}>예약 확정</button></div>`;
-  wrap.innerHTML = html;
+  wrap.innerHTML = `
+    <p class="slots-title">${cal.selDate} 예약 시간 선택</p>
+    <div class="slots" id="slots"></div>
+    <div class="modal-actions"><button type="button" class="modal-submit" id="confirm-booking" ${cal.selTime ? '' : 'disabled'}>예약하기</button></div>
+    <p class="cal-msg">이미 예약된 시간만 선택할 수 없습니다. 내 예약(초록)을 누르면 취소됩니다.</p>`;
 
   const slots = $('#slots');
   SLOT_TIMES.forEach(t => {
@@ -623,53 +695,391 @@ function renderSlots(branchBookings) {
     el.className = 'slot';
     el.textContent = t;
     const taken = dayBookings.find(b => b.time === t);
-    if (taken) {
+
+    if (blockedTimes.includes(t)) {
       el.disabled = true;
-      if (taken.car === member.car) { el.classList.add('mine'); el.title = '내 예약'; }
+      el.classList.add('blocked');
+      el.title = '예약 불가';
+    } else if (taken && taken.car === member.car) {
+      el.classList.add('mine');
+      el.title = '내 예약 - 누르면 취소';
+      el.addEventListener('click', () => {
+        if (!confirm(t + ' 예약을 취소할까요?')) return;
+        const arr = getBookings();
+        const idx = arr.findIndex(b => b.branch === cal.branch && b.date === cal.selDate && b.time === t && b.car === member.car);
+        if (idx > -1) { arr.splice(idx, 1); store.set('pm-bookings', arr); }
+        renderCalendar('예약이 취소되었습니다.');
+      });
+    } else if (taken) {
+      el.disabled = true; /* 해당 시간만 차단 - 다른 시간은 예약 가능 */
+    } else {
+      if (cal.selTime === t) el.classList.add('sel');
+      el.addEventListener('click', () => { cal.selTime = t; renderSlots(branchBookings); });
     }
-    if (cal.selTime === t) el.classList.add('sel');
-    el.addEventListener('click', () => {
-      cal.selTime = t;
-      renderSlots(branchBookings);
-    });
     slots.append(el);
   });
 
-  const confirmBtn = $('#confirm-booking');
-  confirmBtn.disabled = !cal.selTime || !!mine;
-  if (mine) confirmBtn.textContent = '이미 이 날짜에 예약이 있습니다';
-  confirmBtn.addEventListener('click', () => {
-    if (!cal.selTime) return;
+  $('#confirm-booking').addEventListener('click', () => {
+    if (cal.selTime) renderServiceStep();
+  });
+}
+
+/* ---------- 예약 2단계: 서비스 선택 ---------- */
+function renderServiceStep() {
+  const products = getProducts();
+  openModal(`
+    <h3>어떤 서비스가 필요하세요?</h3>
+    <p class="cal-msg">${cal.branch} · ${cal.selDate} ${cal.selTime} · ${member.car}</p>
+    <div class="svc-list" id="svc-list"></div>
+    <textarea id="svc-memo" rows="3" placeholder="요청사항 메모 (기타 선택 시 내용을 적어주세요)"></textarea>
+    <div class="modal-actions">
+      <button type="button" class="modal-submit" id="svc-confirm">예약 확정</button>
+      <button type="button" class="modal-cancel" id="svc-back">이전</button>
+    </div>
+  `, true);
+
+  const list = $('#svc-list');
+  const options = [...products.map(p => ({ value: p.name, label: p.name + (p.price ? ` (${p.price})` : '') })),
+                   { value: '기타', label: '기타 (아래 메모에 내용을 적어주세요)' }];
+  options.forEach(o => {
+    const l = document.createElement('label');
+    l.className = 'svc-item';
+    const cb = document.createElement('input');
+    cb.type = 'checkbox'; cb.value = o.value;
+    l.append(cb, document.createTextNode(' ' + o.label));
+    list.append(l);
+  });
+
+  $('#svc-back').addEventListener('click', () => renderCalendar());
+  $('#svc-confirm').addEventListener('click', () => {
+    const services = [...list.querySelectorAll('input:checked')].map(c => c.value);
+    const memo = $('#svc-memo').value.trim();
+    if (!services.length && !memo) { alert('서비스를 선택하거나 기타 메모를 입력해주세요.'); return; }
     const arr = getBookings();
+    if (arr.some(b => b.branch === cal.branch && b.date === cal.selDate && b.time === cal.selTime)) {
+      renderCalendar('죄송합니다. 방금 다른 고객이 해당 시간을 예약했습니다.'); return;
+    }
     arr.push({ branch: cal.branch, date: cal.selDate, time: cal.selTime,
-               car: member.car, name: member.name, phone: member.phone, model: member.model || '' });
+               car: member.car, name: member.name, phone: member.phone, model: member.model || '',
+               services, memo });
     store.set('pm-bookings', arr);
-    const done = `${cal.selDate} ${cal.selTime} 예약이 완료되었습니다.`;
+    const done = `${cal.selDate} ${cal.selTime} 예약이 확정되었습니다.`;
     cal.selTime = null;
     renderCalendar(done);
   });
+}
 
-  if (mine) {
-    $('#cancel-mine').addEventListener('click', () => {
-      if (!confirm('예약을 취소할까요?')) return;
-      const arr = getBookings();
-      const idx = arr.findIndex(b => b.branch === cal.branch && b.date === cal.selDate && b.car === member.car);
-      if (idx > -1) { arr.splice(idx, 1); store.set('pm-bookings', arr); }
-      renderCalendar('예약이 취소되었습니다.');
-    });
+/* ============================================================
+   관리자: 예약관리 — 현황 캘린더 / 예약금지 / 변경 / 취소
+   ============================================================ */
+let adm = null;
+
+function initAdmBook() {
+  const now = new Date();
+  if (!adm) adm = { branch: getBranches()[0]?.name, y: now.getFullYear(), m: now.getMonth(), selDate: null };
+  renderAdmBook();
+}
+
+function renderAdmBook() {
+  const body = $('#adm-book-body');
+  if (!isAdmin || !adm) { body.innerHTML = ''; return; }
+  const branches = getBranches();
+  if (!branches.some(b => b.name === adm.branch)) adm.branch = branches[0]?.name;
+  const bookings = getBookings().filter(b => b.branch === adm.branch);
+  const blocked = getBlocked().filter(b => b.branch === adm.branch);
+  const first = new Date(adm.y, adm.m, 1).getDay();
+  const days = new Date(adm.y, adm.m + 1, 0).getDate();
+
+  body.innerHTML = `
+    <div class="adm-tabs" id="adm-branch-tabs"></div>
+    <div class="cal-head">
+      <button type="button" class="cal-nav" id="adm-prev">‹</button>
+      <h4>${adm.y}. ${String(adm.m + 1).padStart(2, '0')}</h4>
+      <button type="button" class="cal-nav" id="adm-next">›</button>
+    </div>
+    <div class="cal-grid" id="adm-grid"></div>
+    <div id="adm-day"></div>`;
+
+  const tabs = $('#adm-branch-tabs');
+  branches.forEach(b => {
+    const t = document.createElement('button');
+    t.type = 'button';
+    t.className = 'tab' + (b.name === adm.branch ? ' active' : '');
+    t.textContent = b.name;
+    t.addEventListener('click', () => { adm.branch = b.name; adm.selDate = null; renderAdmBook(); });
+    tabs.append(t);
+  });
+
+  const grid = $('#adm-grid');
+  ['일','월','화','수','목','금','토'].forEach((d, i) => {
+    const el = document.createElement('div');
+    el.className = 'cal-dow' + (i === 0 ? ' sun' : '');
+    el.textContent = d;
+    grid.append(el);
+  });
+  for (let i = 0; i < first; i++) {
+    const el = document.createElement('button');
+    el.className = 'cal-day empty'; el.disabled = true;
+    grid.append(el);
   }
+  for (let d = 1; d <= days; d++) {
+    const key = dateKey(adm.y, adm.m, d);
+    const el = document.createElement('button');
+    el.type = 'button'; el.className = 'cal-day'; el.textContent = d;
+    const cnt = bookings.filter(b => b.date === key).length;
+    const blk = blocked.filter(b => b.date === key).length;
+    if (cnt || blk) {
+      const c = document.createElement('span');
+      c.className = 'cnt';
+      c.textContent = (cnt ? '예약 ' + cnt : '') + (cnt && blk ? ' · ' : '') + (blk ? '금지 ' + blk : '');
+      el.append(c);
+    }
+    if (adm.selDate === key) el.classList.add('sel');
+    el.addEventListener('click', () => { adm.selDate = key; renderAdmBook(); });
+    grid.append(el);
+  }
+  $('#adm-prev').addEventListener('click', () => { adm.m--; if (adm.m < 0) { adm.m = 11; adm.y--; } adm.selDate = null; renderAdmBook(); });
+  $('#adm-next').addEventListener('click', () => { adm.m++; if (adm.m > 11) { adm.m = 0; adm.y++; } adm.selDate = null; renderAdmBook(); });
+
+  if (adm.selDate) renderAdmDay();
+}
+
+function renderAdmDay() {
+  const wrap = $('#adm-day');
+  const bookings = getBookings();
+  const blocked = getBlocked();
+  wrap.innerHTML = `<p class="slots-title">${adm.selDate} 시간대 현황</p><div id="slot-rows"></div>`;
+  const rows = $('#slot-rows');
+
+  SLOT_TIMES.forEach(t => {
+    const row = document.createElement('div');
+    row.className = 'slot-row';
+    const bIdx = bookings.findIndex(b => b.branch === adm.branch && b.date === adm.selDate && b.time === t);
+    const blkIdx = blocked.findIndex(b => b.branch === adm.branch && b.date === adm.selDate && b.time === t);
+
+    const time = document.createElement('strong');
+    time.textContent = t;
+    const info = document.createElement('span');
+    info.className = 'slot-info';
+    row.append(time, info);
+
+    if (bIdx > -1) {
+      const b = bookings[bIdx];
+      info.textContent = `${b.car} ${b.name} (${b.model || '-'}) · ${(b.services && b.services.length) ? b.services.join(', ') : '서비스 미선택'}${b.memo ? ' · ' + b.memo : ''}`;
+      row.append(miniBtn('변경', () => openMoveBooking(bIdx)),
+                 miniBtn('취소', () => {
+                   if (!confirm('이 예약을 취소할까요?')) return;
+                   const arr = getBookings(); arr.splice(bIdx, 1); store.set('pm-bookings', arr); renderAdmBook();
+                 }, true));
+    } else if (blkIdx > -1) {
+      info.textContent = '예약금지';
+      info.classList.add('blocked-text');
+      row.append(miniBtn('금지 해제', () => {
+        const arr = getBlocked(); arr.splice(blkIdx, 1); store.set('pm-blocked', arr); renderAdmBook();
+      }));
+    } else {
+      info.textContent = '비어있음';
+      row.append(miniBtn('예약금지', () => {
+        const arr = getBlocked(); arr.push({ branch: adm.branch, date: adm.selDate, time: t }); store.set('pm-blocked', arr); renderAdmBook();
+      }));
+    }
+    rows.append(row);
+  });
+}
+
+function miniBtn(text, fn, danger) {
+  const b = document.createElement('button');
+  b.type = 'button';
+  b.className = 'mini-btn' + (danger ? ' danger' : '');
+  b.textContent = text;
+  b.addEventListener('click', fn);
+  return b;
+}
+
+function openMoveBooking(idx) {
+  const b = getBookings()[idx];
+  openModal(`
+    <h3>예약 변경</h3>
+    <p class="cal-msg">${b.car} ${b.name} · 현재 ${b.date} ${b.time}</p>
+    <form id="move-form">
+      <input type="date" id="mv-date" required>
+      <select id="mv-time">${SLOT_TIMES.map(t => `<option>${t}</option>`).join('')}</select>
+      <p class="form-error" id="mv-error"></p>
+      <div class="modal-actions">
+        <button type="submit" class="modal-submit">변경</button>
+        <button type="button" class="modal-cancel" onclick="document.getElementById('modal').hidden=true">취소</button>
+      </div>
+    </form>`);
+  $('#mv-date').value = b.date.replaceAll('.', '-');
+  $('#mv-time').value = b.time;
+  $('#move-form').addEventListener('submit', e => {
+    e.preventDefault();
+    const nd = $('#mv-date').value.replaceAll('-', '.');
+    const nt = $('#mv-time').value;
+    const all = getBookings();
+    if (all.some((x, i) => i !== idx && x.branch === b.branch && x.date === nd && x.time === nt)) {
+      $('#mv-error').textContent = '해당 시간에 이미 예약이 있습니다.'; return;
+    }
+    if (getBlocked().some(x => x.branch === b.branch && x.date === nd && x.time === nt)) {
+      $('#mv-error').textContent = '해당 시간은 예약금지 상태입니다.'; return;
+    }
+    all[idx] = { ...b, date: nd, time: nt };
+    store.set('pm-bookings', all);
+    closeModal();
+    renderAdmBook();
+  });
+}
+
+/* ============================================================
+   관리자: 고객관리 — 메모 / 서비스 이력 / 정산
+   ============================================================ */
+function esc(s) { const d = document.createElement('div'); d.textContent = s == null ? '' : String(s); return d.innerHTML; }
+
+function mutateCust(car, fn) {
+  const customers = getCustomers();
+  const c = customers[car] || { memo: '', records: [] };
+  fn(c);
+  customers[car] = c;
+  store.set('pm-customers', customers);
+  renderAdmCust();
+}
+
+function renderAdmCust() {
+  const body = $('#adm-cust-body');
+  if (!isAdmin) { body.innerHTML = ''; return; }
+  const members = store.get('pm-members', []);
+  const customers = getCustomers();
+  body.innerHTML = members.length ? '' : '<p class="hint">가입된 고객이 없습니다.</p>';
+
+  members.forEach(m => {
+    const c = customers[m.car] || { memo: '', records: [] };
+    const bookCnt = getBookings().filter(b => b.car === m.car).length;
+    const card = document.createElement('article');
+    card.className = 'cust-card';
+    card.innerHTML = `
+      <div class="cust-head">
+        <strong>${esc(m.name)}</strong>
+        <span>${esc(m.car)} · ${esc(m.model || '-')} · ${esc(m.phone)}</span>
+        <em>예약 ${bookCnt}건</em>
+      </div>
+      <textarea class="cust-memo" rows="2" placeholder="고객 메모 (성향, 주의사항 등)">${esc(c.memo)}</textarea>
+      <button type="button" class="mini-btn memo-save">메모 저장</button>
+      <table class="rec-table">
+        <thead><tr><th>날짜</th><th>서비스</th><th>금액</th><th>정산</th><th></th></tr></thead>
+        <tbody></tbody>
+      </table>
+      <form class="rec-form">
+        <input type="date" class="rec-date" required>
+        <input type="text" class="rec-svc" placeholder="받은 서비스" required>
+        <input type="number" class="rec-amt" placeholder="금액(원)" min="0">
+        <label class="rec-paid-label"><input type="checkbox" class="rec-paid"> 정산완료</label>
+        <button type="submit" class="mini-btn add">추가</button>
+      </form>`;
+
+    const tbody = card.querySelector('tbody');
+    c.records.forEach((r, ri) => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `<td>${esc(r.date)}</td><td>${esc(r.service)}</td><td>${r.amount ? Number(r.amount).toLocaleString() + '원' : '-'}</td>`;
+      const tdPaid = document.createElement('td');
+      const pill = document.createElement('button');
+      pill.type = 'button';
+      pill.className = 'pay-pill' + (r.paid ? ' paid' : '');
+      pill.textContent = r.paid ? '정산' : '미정산';
+      pill.addEventListener('click', () => mutateCust(m.car, cc => { cc.records[ri].paid = !cc.records[ri].paid; }));
+      tdPaid.append(pill);
+      const tdDel = document.createElement('td');
+      tdDel.append(miniBtn('삭제', () => { if (confirm('기록을 삭제할까요?')) mutateCust(m.car, cc => cc.records.splice(ri, 1)); }, true));
+      tr.append(tdPaid, tdDel);
+      tbody.append(tr);
+    });
+
+    card.querySelector('.memo-save').addEventListener('click', () =>
+      mutateCust(m.car, cc => { cc.memo = card.querySelector('.cust-memo').value; }));
+
+    const form = card.querySelector('.rec-form');
+    form.querySelector('.rec-date').value = new Date().toISOString().slice(0, 10);
+    form.addEventListener('submit', e => {
+      e.preventDefault();
+      mutateCust(m.car, cc => cc.records.unshift({
+        date: form.querySelector('.rec-date').value.replaceAll('-', '.'),
+        service: form.querySelector('.rec-svc').value.trim(),
+        amount: form.querySelector('.rec-amt').value,
+        paid: form.querySelector('.rec-paid').checked
+      }));
+    });
+
+    body.append(card);
+  });
+}
+
+/* ============================================================
+   관리자: 상품관리 — 예약 시 선택 가능한 서비스
+   ============================================================ */
+function renderAdmProd() {
+  const body = $('#adm-prod-body');
+  if (!isAdmin) { body.innerHTML = ''; return; }
+  const products = getProducts();
+  body.innerHTML = products.length ? '' : '<p class="hint">등록된 상품이 없습니다. 상품을 추가하면 고객 예약 화면에 표시됩니다.</p>';
+
+  products.forEach((p, i) => {
+    const card = document.createElement('article');
+    card.className = 'prod-card';
+    const main = document.createElement('div');
+    main.className = 'prod-main';
+    main.innerHTML = `<strong>${esc(p.name)}</strong>${p.price ? `<span class="prod-price">${esc(p.price)}</span>` : ''}
+      ${p.desc ? `<p>${esc(p.desc)}</p>` : ''}
+      ${p.link ? `<a href="${esc(p.link)}" target="_blank" rel="noopener">참고 링크 열기</a>` : ''}`;
+    const actions = document.createElement('div');
+    actions.className = 'card-actions';
+    actions.append(miniBtn('수정', () => openProductModal(i)),
+                   miniBtn('삭제', () => {
+                     if (!confirm(`"${p.name}" 상품을 삭제할까요?`)) return;
+                     const arr = getProducts(); arr.splice(i, 1); store.set('pm-products', arr); renderAdmProd();
+                   }, true));
+    card.append(main, actions);
+    body.append(card);
+  });
+}
+
+function openProductModal(index) {
+  const p = index != null ? getProducts()[index] : { name: '', price: '', desc: '', link: '' };
+  openModal(`
+    <h3>${index != null ? '상품 수정' : '상품 추가'}</h3>
+    <form id="prod-form">
+      <input type="text" id="p-name" placeholder="상품명 (예: 엔진오일 교환)" required>
+      <input type="text" id="p-price" placeholder="가격 표시 (예: 80,000원~ / 선택)">
+      <textarea id="p-desc" rows="3" placeholder="설명 (선택)"></textarea>
+      <input type="url" id="p-link" placeholder="참고 링크 URL (선택)">
+      <div class="modal-actions">
+        <button type="submit" class="modal-submit">저장</button>
+        <button type="button" class="modal-cancel" onclick="document.getElementById('modal').hidden=true">취소</button>
+      </div>
+    </form>`);
+  $('#p-name').value = p.name; $('#p-price').value = p.price || '';
+  $('#p-desc').value = p.desc || ''; $('#p-link').value = p.link || '';
+  $('#prod-form').addEventListener('submit', e => {
+    e.preventDefault();
+    const arr = getProducts();
+    const data = { name: $('#p-name').value.trim(), price: $('#p-price').value.trim(),
+                   desc: $('#p-desc').value.trim(), link: $('#p-link').value.trim() };
+    if (index != null) arr[index] = data; else arr.push(data);
+    store.set('pm-products', arr);
+    closeModal();
+    renderAdmProd();
+  });
 }
 
 /* ============================================================
    시작
    ============================================================ */
-/* PC 고정 캔버스: 1920×1080 화면을 어떤 PC에서든 같은 비율로 축소/확대 */
+/* PC 고정 캔버스: 1920×1080 화면을 가로폭에 꽉 차게 (좌우 여백 없음) */
 function fitStage() {
   const hero = $('.hero');
   if (window.matchMedia('(min-width: 901px)').matches) {
-    const s = Math.min(window.innerWidth / 1920, window.innerHeight / 1080);
-    hero.style.transform = `translate(-50%, -50%) scale(${s})`;
+    hero.style.zoom = '';
+    hero.style.transform = '';
   } else {
+    hero.style.zoom = '';
     hero.style.transform = '';
   }
 }
@@ -682,5 +1092,6 @@ wireNav();
 initShopImage();
 $('#btn-add-notice').addEventListener('click', () => openNoticeModal(null));
 $('#btn-add-branch').addEventListener('click', () => openBranchModal(null));
+$('#btn-add-product').addEventListener('click', () => openProductModal(null));
 $('.btn-reserve').addEventListener('click', e => { e.preventDefault(); openReserveFlow(); });
 applyAuthUI();

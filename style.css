@@ -78,35 +78,35 @@ body {
   position: relative;
   z-index: 2;
   flex: 0 0 41.67%;         /* 왼쪽 1.25 : 오른쪽 1.75 */
-  padding: 8px 64px 56px 48px; /* 로고를 최상단·왼쪽으로 */
+  padding: 0 64px 56px 48px; /* 로고를 최상단·왼쪽으로 */
   display: flex;
   flex-direction: column;
   align-items: flex-start;  /* 일반(왼쪽) 정렬 */
 }
 
-/* 로고 - 제일 왼쪽 상단 (배경은 투명 처리된 PNG) */
-.logo { margin: 0 0 0 -24px; } /* 이미지 내부 여백만큼 왼쪽으로 당김 */
+/* 로고 - 제일 왼쪽 상단 (투명 여백까지 잘라낸 PNG) */
+.logo { margin: 0; }
 
 .logo img {
   display: block;
-  width: 576px;
-  max-width: 110%;
+  width: 505px;
+  max-width: 100%;
   height: auto;
 }
 
 /* 노란 바 */
 .yellow-bar {
   display: block;
-  width: 56px;
-  height: 7px;
+  width: 68px;
+  height: 8px;
   background: var(--yellow);
   border-radius: 3px;
-  margin: 18px 0 16px;   /* 정비예약 블록을 살짝 위로 */
+  margin: 56px 0 16px;   /* 로고와 정비예약 사이 여백 */
 }
 
 /* 타이틀 */
 .title {
-  font-size: 104px;
+  font-size: 125px;   /* 1.2배 */
   font-weight: 900;
   color: var(--navy);
   letter-spacing: -2px;
@@ -116,7 +116,7 @@ body {
 
 .desc {
   margin-top: 20px;
-  font-size: 23px;
+  font-size: 28px;   /* 1.2배 */
   font-weight: 500;
   color: #2b2f33;
   line-height: 1.55;
@@ -130,11 +130,11 @@ body {
   justify-content: center;
   position: relative;
   width: 100%;
-  max-width: 500px;          /* 1.2배 확대 */
-  padding: 26px 38px;
+  max-width: 600px;          /* 1.2배 확대 */
+  padding: 30px 44px;
   background: var(--navy);
   color: var(--yellow);
-  font-size: 30px;
+  font-size: 36px;
   font-weight: 700;
   text-decoration: none;
   border-radius: 12px;
@@ -155,11 +155,11 @@ body {
 /* 브랜드 로고 - 컬러 기본, 호버 시 흑백 / 하단에서 4cm */
 .brands {
   position: relative;
-  margin-top: auto;
-  padding-top: 24px;
+  margin-top: 2cm;   /* 예약하기 버튼과의 여백 */
+  padding-top: 0;
   width: 100%;
   max-width: 620px;
-  margin-bottom: calc(4cm - 56px);
+  margin-bottom: 2cm;
 }
 .brands img.color {
   display: block;
@@ -168,7 +168,7 @@ body {
 }
 .brands img.bw {
   position: absolute;
-  top: 24px;
+  top: 0;
   left: 0;
   width: 100%;
   height: auto;
@@ -804,18 +804,178 @@ body:not(.admin) .admin-only { display: none !important; }
   margin-bottom: 12px;
 }
 
-/* ===== PC 고정 캔버스 (1920×1080 기준, 모든 PC에서 동일 비율) ===== */
+/* ===== 관리자 설정 화면 (예약관리/고객관리/상품관리) ===== */
+.adm-body { width: 100%; max-width: 880px; margin: 0 auto; }
+.adm-tabs { display: flex; gap: 8px; margin: 28px 0 20px; border-bottom: 2px solid #dfe3e8; }
+#view-adm-book .cal-grid { margin-bottom: 20px; }
+#view-adm-book .cal-head { margin-top: 4px; }
+
+.slot-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: #fff;
+  border: 1px solid #e2e6ea;
+  border-radius: 8px;
+  padding: 10px 14px;
+  margin-bottom: 8px;
+}
+.slot-row strong { width: 56px; color: var(--navy); flex-shrink: 0; }
+.slot-info { flex: 1; font-size: 14px; color: #2b2f33; }
+.slot-info.blocked-text { color: #c0392b; font-weight: 700; }
+.slot.blocked {
+  background: #fdecea;
+  border-color: #f5b7b1;
+  color: #c0392b;
+  text-decoration: none;
+}
+
+/* 고객관리 */
+.cust-card {
+  background: #fff;
+  border: 1px solid #e2e6ea;
+  border-radius: 12px;
+  padding: 20px;
+  margin-bottom: 16px;
+}
+.cust-head { display: flex; gap: 10px; align-items: baseline; margin-bottom: 10px; flex-wrap: wrap; }
+.cust-head strong { font-size: 18px; color: var(--navy); }
+.cust-head span { color: #555f6b; font-size: 14px; }
+.cust-head em { margin-left: auto; font-style: normal; font-size: 13px; color: #b8963a; font-weight: 700; }
+.cust-memo {
+  width: 100%;
+  font-family: inherit;
+  font-size: 14px;
+  padding: 10px 12px;
+  border: 1px solid #d6dbe1;
+  border-radius: 8px;
+  margin-bottom: 8px;
+  resize: vertical;
+}
+.rec-table { width: 100%; border-collapse: collapse; margin: 14px 0 10px; font-size: 14px; }
+.rec-table th, .rec-table td { border-bottom: 1px solid #eef1f4; padding: 8px 6px; text-align: left; }
+.rec-table th { font-size: 12px; color: #8a94a0; font-weight: 700; }
+.pay-pill {
+  border: none;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 5px 12px;
+  border-radius: 999px;
+  background: #fdecea;
+  color: #c0392b;
+}
+.pay-pill.paid { background: #e6f7ee; color: #038550; }
+.rec-form { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.rec-form input[type="date"], .rec-form input[type="text"], .rec-form input[type="number"] {
+  font-family: inherit;
+  font-size: 13px;
+  padding: 8px 10px;
+  border: 1px solid #d6dbe1;
+  border-radius: 6px;
+}
+.rec-form .rec-svc { flex: 1; min-width: 160px; }
+.rec-form .rec-amt { width: 110px; }
+.rec-paid-label { font-size: 13px; color: #555f6b; display: flex; gap: 4px; align-items: center; }
+
+/* 상품관리 */
+.prod-card {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  background: #fff;
+  border: 1px solid #e2e6ea;
+  border-radius: 10px;
+  padding: 16px 20px;
+  margin-bottom: 10px;
+}
+.prod-main strong { color: var(--navy); font-size: 16px; }
+.prod-price { margin-left: 10px; color: #b8963a; font-weight: 700; font-size: 14px; }
+.prod-main p { font-size: 13px; color: #555f6b; margin-top: 4px; }
+.prod-main a { font-size: 13px; color: var(--navy); }
+.prod-card .card-actions { padding: 0; flex-shrink: 0; }
+
+/* 예약 - 서비스 선택 단계 */
+.svc-list { display: grid; gap: 8px; margin-bottom: 12px; }
+.svc-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid #e2e6ea;
+  border-radius: 8px;
+  padding: 12px 14px;
+  font-size: 15px;
+  cursor: pointer;
+  transition: border-color .15s;
+}
+.svc-item:hover { border-color: var(--navy); }
+.svc-item input { width: 18px; height: 18px; accent-color: var(--navy); flex-shrink: 0; }
+
+/* ===== PC 첫 화면: 좌우 여백 없이 뷰포트 전체 사용 ===== */
 @media (min-width: 901px) {
   html, body { height: 100%; overflow: hidden; }
-  body { background: #d9dee4; }
+  html, body { scrollbar-width: none; }  /* 스크롤바 숨김 - 좌우 여백 0 유지 */
+  html::-webkit-scrollbar, body::-webkit-scrollbar { display: none; }
+  body {
+    overflow-x: hidden;
+    overflow-y: hidden;
+    background: #d9dee4;
+  }
   .hero {
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    width: 1920px;
-    height: 1080px;
+    position: relative;
+    width: 100vw;
+    height: 100vh;
     min-height: 0;
-    transform: translate(-50%, -50%); /* JS가 배율(scale)을 추가 */
+    transform: none;
+  }
+  .left-panel {
+    padding: 0 clamp(32px, 3.33vw, 64px) clamp(32px, 5.2vh, 56px) clamp(28px, 2.5vw, 48px);
+  }
+  .logo img {
+    width: min(505px, 100%);
+  }
+  .yellow-bar {
+    width: clamp(52px, 3.55vw, 68px);
+    height: clamp(6px, .42vw, 8px);
+    margin: clamp(30px, 5.2vh, 56px) 0 clamp(12px, 1.5vh, 16px);
+  }
+  .title {
+    font-size: clamp(72px, 6.5vw, 125px);
+  }
+  .desc {
+    margin-top: clamp(12px, 1.85vh, 20px);
+    font-size: clamp(18px, 1.45vw, 28px);
+  }
+  .btn-reserve {
+    margin-top: clamp(18px, 2.6vh, 28px);
+    max-width: min(600px, 100%);
+    padding: clamp(18px, 2.8vh, 30px) clamp(28px, 2.3vw, 44px);
+    font-size: clamp(22px, 1.875vw, 36px);
+  }
+  .brands {
+    margin-top: min(2cm, 7vh);
+    margin-bottom: min(2cm, 7vh);
+    max-width: min(620px, 100%);
+  }
+  .right-panel {
+    padding: clamp(20px, 2.6vh, 28px) clamp(40px, 3.33vw, 64px) clamp(18px, 2.2vh, 24px) clamp(72px, 6vw, 116px);
+    overflow-y: hidden;
+  }
+  .nav-row {
+    margin-bottom: clamp(28px, 5.2vh, 1.5cm);
+  }
+  .intro h2 {
+    font-size: clamp(44px, 3.75vw, 72px);
+  }
+  .intro-sub {
+    margin-top: clamp(12px, 1.85vh, 20px);
+    font-size: clamp(18px, 1.45vw, 28px);
+  }
+  .shop-photo {
+    margin-top: clamp(24px, 3.7vh, 40px);
+    min-height: 0;
   }
 }
 
@@ -840,7 +1000,7 @@ body:not(.admin) .admin-only { display: none !important; }
     width: 100%;
     max-width: 100%;
     margin-left: 0;
-    margin-bottom: 24px;
+    margin-bottom: 2cm;
     padding-top: 16px;
   }
   .brands img.bw { top: 16px; }

@@ -66,6 +66,14 @@
         <li>
           <button class="nav-btn" data-view="notice">공지사항</button>
         </li>
+        <li class="admin-only">
+          <button class="nav-btn" data-view="adm-book">설정</button>
+          <div class="dropdown">
+            <button data-view="adm-book">예약관리</button>
+            <button data-view="adm-cust">고객관리</button>
+            <button data-view="adm-prod">상품관리</button>
+          </div>
+        </li>
       </ul>
     </nav>
     <div class="auth-bar" id="auth-bar"></div>
@@ -142,6 +150,36 @@
         <button type="button" class="mini-btn add" id="btn-add-notice">+ 새 공지</button>
       </div>
       <div class="album" id="album"></div>
+    </div>
+
+    <!-- ⑤ 관리자: 예약관리 -->
+    <div class="view" id="view-adm-book">
+      <header class="intro">
+        <h2>예약관리</h2>
+        <p class="intro-sub"><span class="line"></span>예약 현황 · 예약금지 · 변경/취소<span class="line"></span></p>
+      </header>
+      <div class="adm-body" id="adm-book-body"></div>
+    </div>
+
+    <!-- ⑥ 관리자: 고객관리 -->
+    <div class="view" id="view-adm-cust">
+      <header class="intro">
+        <h2>고객관리</h2>
+        <p class="intro-sub"><span class="line"></span>메모 · 서비스 이력 · 정산<span class="line"></span></p>
+      </header>
+      <div class="adm-body" id="adm-cust-body"></div>
+    </div>
+
+    <!-- ⑦ 관리자: 상품관리 -->
+    <div class="view" id="view-adm-prod">
+      <header class="intro">
+        <h2>상품관리</h2>
+        <p class="intro-sub"><span class="line"></span>예약 시 선택 가능한 서비스<span class="line"></span></p>
+      </header>
+      <div class="admin-tools">
+        <button type="button" class="mini-btn add" id="btn-add-product">+ 상품 추가</button>
+      </div>
+      <div class="adm-body" id="adm-prod-body"></div>
     </div>
 
   </section>
