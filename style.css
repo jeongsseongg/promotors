@@ -956,7 +956,7 @@ body:not(.admin) .admin-only { display: none !important; }
   }
   .brands {
     margin-top: min(2cm, 7vh);
-    margin-bottom: min(2cm, 7vh);
+    margin-bottom: 2cm;
     max-width: min(620px, 100%);
   }
   .right-panel {
