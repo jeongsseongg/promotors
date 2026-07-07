@@ -955,8 +955,11 @@ body:not(.admin) .admin-only { display: none !important; }
     font-size: clamp(22px, 1.875vw, 36px);
   }
   .brands {
-    margin-top: min(2cm, 7vh);
-    margin-bottom: 2cm;
+    position: absolute;
+    left: clamp(28px, 2.5vw, 48px);
+    right: clamp(32px, 3.33vw, 64px);
+    bottom: 2cm;
+    margin: 0;
     max-width: min(620px, 100%);
   }
   .right-panel {
