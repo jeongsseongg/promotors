@@ -931,7 +931,7 @@ body:not(.admin) .admin-only { display: none !important; }
     transform: none;
   }
   .left-panel {
-    padding: 0 clamp(32px, 3.33vw, 64px) clamp(32px, 5.2vh, 56px) clamp(28px, 2.5vw, 48px);
+    padding: 0 clamp(32px, 3.33vw, 64px) 0 clamp(28px, 2.5vw, 48px);
   }
   .logo img {
     width: min(505px, 100%);
@@ -955,12 +955,9 @@ body:not(.admin) .admin-only { display: none !important; }
     font-size: clamp(22px, 1.875vw, 36px);
   }
   .brands {
-    position: absolute;
-    left: clamp(28px, 2.5vw, 48px);
-    right: clamp(32px, 3.33vw, 64px);
-    bottom: 2cm;
-    margin: 0;
-    max-width: min(620px, 100%);
+    margin-top: auto;
+    margin-bottom: 2cm;
+    max-width: min(560px, 100%);
   }
   .right-panel {
     padding: clamp(20px, 2.6vh, 28px) clamp(40px, 3.33vw, 64px) clamp(18px, 2.2vh, 24px) clamp(72px, 6vw, 116px);
