@@ -1,0 +1,27 @@
+# Dependencies and build output
+node_modules/
+dist/
+
+# Local environment and credentials
+.env
+.env.*
+!.env.example
+*.local
+service-account*.json
+firebase-debug.log
+firestore-debug.log
+ui-debug.log
+
+# Internal working notes and source-only references
+.claude/
+CLAUDE.md
+AGENTS.md
+design-guides-core/
+design-guides-full/
+ChatGPT Image*.png
+
+# OS/editor noise
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

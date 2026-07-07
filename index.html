@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>프로모터스 - 수입차 정비 전문</title>
+<link rel="icon" type="image/png" href="images/logo-icon.png">
+<link rel="stylesheet" href="style.css">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700;900&display=swap" rel="stylesheet">
+</head>
+<body>
+
+<main class="hero">
+
+  <!-- 사선으로 잘린 왼쪽 시트 + 금색 테두리 배경 -->
+  <div class="bg-angled" aria-hidden="true"></div>
+
+  <!-- ===== 왼쪽 패널 (완전 고정) ===== -->
+  <section class="left-panel">
+
+    <div class="logo">
+      <img src="images/logo-lockup.png" alt="프로모터스 PRO MOTORS - 수입차 정비 전문 Car Maintenance &amp; Repair">
+    </div>
+
+    <span class="yellow-bar"></span>
+
+    <h1 class="title">정비예약</h1>
+
+    <p class="desc">소중한 내 차량,<br>차별화된 맞춤 컨설팅을 받아보세요</p>
+
+    <a href="#reserve" class="btn-reserve">
+      <span>예약하기</span>
+      <span class="arrow">›</span>
+    </a>
+
+    <div class="brands">
+      <img class="bw" src="images/brands-bw.png" alt="취급 브랜드: 메르세데스-벤츠, BMW, 아우디, 폭스바겐, 페라리, 람보르기니, 마세라티, 재규어, 벤틀리, 롤스로이스, 미니, 볼보, 렉서스, 지프, 랜드로버, 포르쉐">
+      <img class="color" src="images/brands-color.png" alt="" aria-hidden="true">
+    </div>
+  </section>
+
+  <!-- ===== 오른쪽 패널 (내부 스크롤, 카테고리별 전환) ===== -->
+  <section class="right-panel">
+
+    <!-- 카테고리 + 로그인 (같은 줄) -->
+    <div class="nav-row">
+    <nav class="top-nav" aria-label="주요 메뉴">
+      <ul>
+        <li>
+          <button class="nav-btn active" data-view="intro">프로모터스</button>
+          <div class="dropdown">
+            <button data-view="intro">프로모터스 소개</button>
+          </div>
+        </li>
+        <li>
+          <button class="nav-btn" data-view="location">오시는길</button>
+          <div class="dropdown" id="dropdown-branches"></div>
+        </li>
+        <li>
+          <button class="nav-btn" data-view="cases">정비사례</button>
+          <div class="dropdown">
+            <button data-view="cases" data-tab="tab-blog">네이버 블로그</button>
+            <button data-view="cases" data-tab="tab-web">웹 게시글</button>
+          </div>
+        </li>
+        <li>
+          <button class="nav-btn" data-view="notice">공지사항</button>
+        </li>
+      </ul>
+    </nav>
+    <div class="auth-bar" id="auth-bar"></div>
+    </div><!-- /nav-row -->
+
+    <!-- ① 프로모터스 소개 -->
+    <div class="view active" id="view-intro">
+      <header class="intro">
+        <h2>프로모터스 소개</h2>
+        <p class="intro-sub"><span class="line"></span>수입차 전문 정비센터<span class="line"></span></p>
+      </header>
+
+      <figure class="shop-photo no-img" id="shop-photo">
+        <img id="shop-img" alt="프로모터스 매장 전경" hidden>
+        <div class="placeholder">
+          <p class="ph-tel">안산점 031.831.9738</p>
+          <p class="ph-note">관리자 로그인 후 소개 이미지를 변경하세요</p>
+        </div>
+        <button type="button" class="mini-btn photo-edit admin-only" id="btn-shop-img">소개 이미지 변경</button>
+        <input type="file" id="shop-img-input" accept="image/*" hidden>
+      </figure>
+    </div>
+
+    <!-- ② 오시는길 -->
+    <div class="view" id="view-location">
+      <header class="intro">
+        <h2>오시는길</h2>
+        <p class="intro-sub"><span class="line"></span>프로모터스 지점 안내<span class="line"></span></p>
+      </header>
+
+      <div class="admin-tools admin-only">
+        <button type="button" class="mini-btn add" id="btn-add-branch">+ 지점 추가</button>
+      </div>
+      <div class="branches" id="branches"></div>
+    </div>
+
+    <!-- ③ 정비사례 -->
+    <div class="view" id="view-cases">
+      <header class="intro">
+        <h2>정비사례</h2>
+        <p class="intro-sub"><span class="line"></span>프로모터스의 작업 기록<span class="line"></span></p>
+      </header>
+
+      <div class="tabs" role="tablist">
+        <button class="tab active" data-tab="tab-blog">네이버 블로그</button>
+        <button class="tab" data-tab="tab-web">웹 게시글</button>
+      </div>
+
+      <div class="tab-panel active" id="tab-blog">
+        <p class="panel-desc">네이버 블로그에 올라온 실제 정비사례를 확인하세요.</p>
+        <a class="btn-blog" href="#" onclick="return false;">네이버 블로그 바로가기</a>
+        <p class="hint">※ 블로그 주소를 알려주시면 버튼에 연결됩니다</p>
+      </div>
+
+      <div class="tab-panel" id="tab-web">
+        <form id="case-form" class="admin-only" autocomplete="off">
+          <input type="text" id="case-title" placeholder="제목 (예: BMW 520d 브레이크 패드 교체)" required>
+          <textarea id="case-body" rows="4" placeholder="정비 내용을 입력하세요" required></textarea>
+          <button type="submit">게시글 등록</button>
+        </form>
+        <ul id="case-list" aria-live="polite"></ul>
+        <p class="hint" id="case-empty">등록된 정비사례가 없습니다.</p>
+      </div>
+    </div>
+
+    <!-- ④ 공지사항 -->
+    <div class="view" id="view-notice">
+      <header class="intro">
+        <h2>공지사항</h2>
+        <p class="intro-sub"><span class="line"></span>프로모터스 소식<span class="line"></span></p>
+      </header>
+
+      <div class="admin-tools admin-only">
+        <button type="button" class="mini-btn add" id="btn-add-notice">+ 새 공지</button>
+      </div>
+      <div class="album" id="album"></div>
+    </div>
+
+  </section>
+
+</main>
+
+<!-- 모달 (로그인/회원가입/관리자/글 편집 공용) -->
+<div class="modal-backdrop" id="modal" hidden>
+  <div class="modal-card" id="modal-card" role="dialog" aria-modal="true"></div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>
