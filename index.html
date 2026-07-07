@@ -4,9 +4,28 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>프로모터스 - 수입차 정비 전문</title>
+<meta name="description" content="프로모터스는 수입차 정비예약, 지점 안내, 실제 정비사례와 공지사항을 제공하는 수입차 전문 정비센터입니다.">
+<meta name="robots" content="index, follow">
+<meta property="og:type" content="website">
+<meta property="og:title" content="프로모터스 - 수입차 정비 전문">
+<meta property="og:description" content="수입차 전문 정비센터 프로모터스. 정비예약, 지점 안내, 실제 정비사례를 확인하세요.">
+<meta property="og:url" content="https://promotors.kr">
+<meta property="og:image" content="https://promotors.kr/images/logo-lockup.png">
 <link rel="icon" type="image/png" href="images/logo-icon.png">
 <link rel="stylesheet" href="style.css">
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700;900&display=swap" rel="stylesheet">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "AutoRepair",
+  "name": "프로모터스",
+  "url": "https://promotors.kr",
+  "logo": "https://promotors.kr/images/logo-lockup.png",
+  "telephone": "031-831-9738",
+  "areaServed": "KR",
+  "description": "수입차 전문 정비센터"
+}
+</script>
 </head>
 <body>
 
@@ -59,8 +78,8 @@
         <li>
           <button class="nav-btn" data-view="cases">정비사례</button>
           <div class="dropdown">
-            <button data-view="cases" data-tab="tab-blog">네이버 블로그</button>
-            <button data-view="cases" data-tab="tab-web">웹 게시글</button>
+            <button data-view="cases" data-tab="tab-blog">네이버 공식블로그</button>
+            <button data-view="cases" data-tab="tab-web">실제 정비사례</button>
           </div>
         </li>
         <li>
@@ -87,13 +106,16 @@
       </header>
 
       <figure class="shop-photo no-img" id="shop-photo">
-        <img id="shop-img" alt="프로모터스 매장 전경" hidden>
+        <div class="intro-slider" id="intro-slider" aria-live="polite"></div>
+        <button type="button" class="slide-nav prev" id="intro-prev" aria-label="이전 소개 이미지">‹</button>
+        <button type="button" class="slide-nav next" id="intro-next" aria-label="다음 소개 이미지">›</button>
+        <div class="slide-dots" id="intro-dots"></div>
         <div class="placeholder">
           <p class="ph-tel">안산점 031.831.9738</p>
-          <p class="ph-note">관리자 로그인 후 소개 이미지를 변경하세요</p>
+          <p class="ph-note">관리자 로그인 후 소개 이미지를 최대 10장까지 등록하세요</p>
         </div>
-        <button type="button" class="mini-btn photo-edit admin-only" id="btn-shop-img">소개 이미지 변경</button>
-        <input type="file" id="shop-img-input" accept="image/*" hidden>
+        <button type="button" class="mini-btn photo-edit admin-only" id="btn-shop-img">소개 이미지 관리</button>
+        <input type="file" id="shop-img-input" accept="image/*" multiple hidden>
       </figure>
     </div>
 
@@ -107,7 +129,10 @@
       <div class="admin-tools admin-only">
         <button type="button" class="mini-btn add" id="btn-add-branch">+ 지점 추가</button>
       </div>
-      <div class="branches" id="branches"></div>
+      <div class="location-layout">
+        <div class="branches" id="branches"></div>
+        <aside class="branch-preview" id="branch-preview"></aside>
+      </div>
     </div>
 
     <!-- ③ 정비사례 -->
@@ -118,23 +143,24 @@
       </header>
 
       <div class="tabs" role="tablist">
-        <button class="tab active" data-tab="tab-blog">네이버 블로그</button>
-        <button class="tab" data-tab="tab-web">웹 게시글</button>
+        <button class="tab active" data-tab="tab-blog">네이버 공식블로그</button>
+        <button class="tab" data-tab="tab-web">실제 정비사례</button>
       </div>
 
       <div class="tab-panel active" id="tab-blog">
-        <p class="panel-desc">네이버 블로그에 올라온 실제 정비사례를 확인하세요.</p>
-        <a class="btn-blog" href="#" onclick="return false;">네이버 블로그 바로가기</a>
-        <p class="hint">※ 블로그 주소를 알려주시면 버튼에 연결됩니다</p>
+        <p class="panel-desc">네이버 공식블로그 게시글을 연결해 홈페이지에서 함께 확인합니다.</p>
+        <div class="admin-tools admin-only">
+          <button type="button" class="mini-btn add" id="btn-blog-settings">블로그 연동 설정</button>
+        </div>
+        <div class="blog-feed" id="blog-feed"></div>
       </div>
 
       <div class="tab-panel" id="tab-web">
-        <form id="case-form" class="admin-only" autocomplete="off">
-          <input type="text" id="case-title" placeholder="제목 (예: BMW 520d 브레이크 패드 교체)" required>
-          <textarea id="case-body" rows="4" placeholder="정비 내용을 입력하세요" required></textarea>
-          <button type="submit">게시글 등록</button>
-        </form>
-        <ul id="case-list" aria-live="polite"></ul>
+        <div class="admin-tools admin-only">
+          <button type="button" class="mini-btn add" id="btn-add-case">+ 정비사례 작성</button>
+        </div>
+        <div class="brand-filter" id="case-brand-filter"></div>
+        <div id="case-list" aria-live="polite"></div>
         <p class="hint" id="case-empty">등록된 정비사례가 없습니다.</p>
       </div>
     </div>
@@ -147,7 +173,7 @@
       </header>
 
       <div class="admin-tools admin-only">
-        <button type="button" class="mini-btn add" id="btn-add-notice">+ 새 공지</button>
+        <button type="button" class="mini-btn add" id="btn-add-notice">+ 공지 작성</button>
       </div>
       <div class="album" id="album"></div>
     </div>
