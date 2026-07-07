@@ -11,6 +11,7 @@ service-account*.json
 firebase-debug.log
 firestore-debug.log
 ui-debug.log
+.firebase/
 
 # Internal working notes and source-only references
 .claude/
