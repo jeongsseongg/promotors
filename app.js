@@ -1,6 +1,6 @@
 /* ============================================================
    프로모터스 - 화면 전환 / 로그인 / 관리자 CMS
-   데이터는 브라우저 localStorage에 저장됩니다 (서버 없음).
+   데이터는 localStorage에 우선 저장되고, Supabase 설정 시 원격 동기화됩니다.
    ============================================================ */
 
 const $ = s => document.querySelector(s);
@@ -12,6 +12,7 @@ const store = {
     localStorage.setItem(k, JSON.stringify(v));
     if (k !== 'pm-logs') syncSupabaseData(k, v);
   },
+  setLocal(k, v) { localStorage.setItem(k, JSON.stringify(v)); },
   del(k) { localStorage.removeItem(k); }
 };
 
@@ -113,34 +114,74 @@ function logEvent(type, payload = {}) {
   const logs = store.get('pm-logs', []);
   logs.unshift({ type, payload, at: new Date().toISOString() });
   store.set('pm-logs', logs.slice(0, 300));
-  const supa = store.get('pm-supabase', null);
-  if (supa?.url && supa?.anon) {
-    fetch(`${supa.url.replace(/\/$/, '')}/rest/v1/site_logs`, {
+  const supa = getSupabaseConfig();
+  if (supa) {
+    fetch(`${supa.url}/rest/v1/site_logs`, {
       method: 'POST',
-      headers: {
-        apikey: supa.anon,
-        Authorization: `Bearer ${supa.anon}`,
-        'Content-Type': 'application/json',
-        Prefer: 'return=minimal'
-      },
+      headers: supabaseHeaders(supa),
       body: JSON.stringify({ event_type: type, payload, page_url: location.href })
     }).catch(() => {});
   }
 }
 
-function syncSupabaseData(key, value) {
+const SUPABASE_DATA_KEYS = [
+  'pm-branches',
+  'pm-notices',
+  'promotors-cases',
+  'pm-products',
+  'pm-blocked',
+  'pm-customers',
+  'pm-bookings',
+  'pm-members',
+  'pm-blog-settings'
+];
+let isHydratingSupabase = false;
+
+function getSupabaseConfig() {
   const supa = store.get('pm-supabase', null);
-  if (!supa?.url || !supa?.anon) return;
-  fetch(`${supa.url.replace(/\/$/, '')}/rest/v1/site_data`, {
+  if (!supa?.url || !supa?.anon) return null;
+  return { url: supa.url.replace(/\/$/, ''), anon: supa.anon };
+}
+
+function supabaseHeaders(supa, prefer = 'return=minimal') {
+  return {
+    apikey: supa.anon,
+    Authorization: `Bearer ${supa.anon}`,
+    'Content-Type': 'application/json',
+    Prefer: prefer
+  };
+}
+
+function syncSupabaseData(key, value) {
+  if (isHydratingSupabase || !SUPABASE_DATA_KEYS.includes(key)) return;
+  const supa = getSupabaseConfig();
+  if (!supa) return;
+  fetch(`${supa.url}/rest/v1/site_data?on_conflict=data_key`, {
     method: 'POST',
-    headers: {
-      apikey: supa.anon,
-      Authorization: `Bearer ${supa.anon}`,
-      'Content-Type': 'application/json',
-      Prefer: 'return=minimal'
-    },
+    headers: supabaseHeaders(supa, 'resolution=merge-duplicates,return=minimal'),
     body: JSON.stringify({ data_key: key, payload: value, page_url: location.href })
   }).catch(() => {});
+}
+
+async function hydrateSupabaseData() {
+  const supa = getSupabaseConfig();
+  if (!supa) return { ok: false, reason: 'not-configured' };
+  const keys = SUPABASE_DATA_KEYS.map(k => `"${k}"`).join(',');
+  try {
+    const res = await fetch(`${supa.url}/rest/v1/site_data?select=data_key,payload&data_key=in.(${keys})`, {
+      headers: supabaseHeaders(supa, 'return=representation')
+    });
+    if (!res.ok) throw new Error(`Supabase ${res.status}`);
+    const rows = await res.json();
+    isHydratingSupabase = true;
+    rows.forEach(row => store.setLocal(row.data_key, row.payload));
+    isHydratingSupabase = false;
+    return { ok: true, count: rows.length };
+  } catch (err) {
+    isHydratingSupabase = false;
+    console.warn('Supabase load failed', err);
+    return { ok: false, reason: 'load-failed' };
+  }
 }
 
 /* 관리자 비밀번호 */
@@ -628,7 +669,7 @@ function openBlogSettings() {
   $('#blog-proxy').value = s.proxy || '';
   $('#supa-url').value = supa.url || '';
   $('#supa-anon').value = supa.anon || '';
-  $('#blog-settings-form').addEventListener('submit', e => {
+  $('#blog-settings-form').addEventListener('submit', async e => {
     e.preventDefault();
     store.set('pm-blog-settings', {
       url: $('#blog-url').value.trim(),
@@ -639,8 +680,9 @@ function openBlogSettings() {
       url: $('#supa-url').value.trim(),
       anon: $('#supa-anon').value.trim()
     });
+    await hydrateSupabaseData();
     closeModal();
-    renderBlogFeed();
+    applyAuthUI();
   });
 }
 
@@ -1516,13 +1558,18 @@ new ResizeObserver(fitStage).observe(document.documentElement);
 fitStage();
 document.body.dataset.view = document.querySelector('.view.active')?.id.replace('view-', '') || 'intro';
 
-wireNav();
-initShopImage();
-$('#btn-add-notice').addEventListener('click', () => openNoticeModal(null));
-$('#btn-add-case').addEventListener('click', () => openCaseModal(null));
-$('#btn-blog-settings').addEventListener('click', openBlogSettings);
-$('#btn-add-branch').addEventListener('click', () => openBranchModal(null));
-$('#btn-add-product').addEventListener('click', () => openProductModal(null));
-$('.btn-reserve').addEventListener('click', e => { e.preventDefault(); openReserveFlow(); });
-$('.logo').addEventListener('dblclick', openAdminModal);
-applyAuthUI();
+async function startApp() {
+  await hydrateSupabaseData();
+  wireNav();
+  initShopImage();
+  $('#btn-add-notice').addEventListener('click', () => openNoticeModal(null));
+  $('#btn-add-case').addEventListener('click', () => openCaseModal(null));
+  $('#btn-blog-settings').addEventListener('click', openBlogSettings);
+  $('#btn-add-branch').addEventListener('click', () => openBranchModal(null));
+  $('#btn-add-product').addEventListener('click', () => openProductModal(null));
+  $('.btn-reserve').addEventListener('click', e => { e.preventDefault(); openReserveFlow(); });
+  $('.logo').addEventListener('dblclick', openAdminModal);
+  applyAuthUI();
+}
+
+startApp();
