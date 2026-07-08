@@ -184,6 +184,7 @@ let introTimer = null;
    화면(뷰) 전환 — 오른쪽만 변경, 왼쪽 고정
    ============================================================ */
 function showView(name) {
+  document.body.dataset.view = name;
   $$('.view').forEach(v => v.classList.toggle('active', v.id === 'view-' + name));
   $$('.top-nav .nav-btn').forEach(b => b.classList.toggle('active', b.dataset.view === name));
   $('.right-panel').scrollTop = 0;
@@ -242,23 +243,13 @@ function applyAuthUI() {
   bar.innerHTML = '';
 
   if (isAdmin) {
-    bar.append(span('auth-user', '🔧 관리자 모드'), authBtn('로그아웃', logout));
+    bar.append(span('auth-user', '관리자 모드'), authBtn('로그아웃', logout));
   } else if (member) {
-    bar.append(span('auth-user', member.name + '님 (' + member.car + ')'), authBtn('로그아웃', logout));
+    bar.append(authBtn('로그아웃', logout));
   } else {
-    const btn = authBtn('로그인', null);
-    /* 클릭=회원 로그인, 더블클릭=관리자 로그인 */
-    let timer = null;
-    btn.addEventListener('click', () => {
-      clearTimeout(timer);
-      timer = setTimeout(() => openMemberModal('login'), 250);
-    });
-    btn.addEventListener('dblclick', () => {
-      clearTimeout(timer);
-      openAdminModal();
-    });
-    bar.append(btn);
+    bar.hidden = true;
   }
+  if (isAdmin || member) bar.hidden = false;
 
   /* 관리자 여부에 따라 다시 그리기 */
   renderBranches();
@@ -1513,6 +1504,7 @@ window.addEventListener('resize', fitStage);
 window.visualViewport?.addEventListener('resize', fitStage);
 new ResizeObserver(fitStage).observe(document.documentElement);
 fitStage();
+document.body.dataset.view = document.querySelector('.view.active')?.id.replace('view-', '') || 'intro';
 
 wireNav();
 initShopImage();
@@ -1522,4 +1514,5 @@ $('#btn-blog-settings').addEventListener('click', openBlogSettings);
 $('#btn-add-branch').addEventListener('click', () => openBranchModal(null));
 $('#btn-add-product').addEventListener('click', () => openProductModal(null));
 $('.btn-reserve').addEventListener('click', e => { e.preventDefault(); openReserveFlow(); });
+$('.logo').addEventListener('dblclick', openAdminModal);
 applyAuthUI();

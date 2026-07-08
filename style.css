@@ -317,6 +317,7 @@ body {
   gap: 12px;
 }
 .top-nav li { position: relative; }
+.top-nav li:first-child .dropdown { display: none; }
 
 .nav-btn {
   border: none;
@@ -677,6 +678,7 @@ body {
   min-height: 34px;
   flex-shrink: 0;
 }
+.auth-bar[hidden] { display: none; }
 .auth-user { font-size: 14px; font-weight: 700; color: var(--navy); }
 .auth-btn {
   border: 1.5px solid var(--navy);
@@ -1186,8 +1188,9 @@ body:not(.admin) .admin-only { display: none !important; }
   }
   .right-panel {
     padding: clamp(20px, 2.6vh, 28px) clamp(40px, 3.33vw, 64px) clamp(18px, 2.2vh, 24px) clamp(72px, 6vw, 116px);
-    overflow-y: hidden;
+    overflow-y: auto;
   }
+  body[data-view="intro"] .right-panel { overflow-y: hidden; }
   .nav-row {
     margin-bottom: clamp(28px, 5.2vh, 1.5cm);
   }
@@ -1206,20 +1209,37 @@ body:not(.admin) .admin-only { display: none !important; }
 
 /* ===== 반응형 ===== */
 @media (max-width: 900px) {
-  .hero { flex-direction: column; height: auto; min-height: 100vh; }
-  .right-panel { overflow-y: visible; }
+  .hero { flex-direction: column; height: 100vh; min-height: 0; overflow: hidden; }
+  .right-panel {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    padding: 24px 16px 0;
+  }
+  body[data-view="intro"] .right-panel { overflow-y: hidden; }
   .bg-angled { display: none; }
   .left-panel {
-    flex: none;
+    flex: 0 0 auto;
     background:
       linear-gradient(115deg, #ffffff 0%, #f3f4f6 30%, #ffffff 55%, #e9ebef 80%, #ffffff 100%);
     border-bottom: 5px solid var(--gold);
   }
-  .right-panel { padding: 40px 24px 0; }
   .brands { margin-top: 1.5cm; }
   .shop-photo { min-height: 260px; }
-  .top-nav ul { flex-wrap: wrap; }
-  .nav-row { flex-wrap: wrap; margin-bottom: 32px; }
+  .top-nav { width: 100%; }
+  .top-nav ul {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 0;
+    width: 100%;
+  }
+  .top-nav li.admin-only { display: none !important; }
+  body.admin .top-nav ul { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+  body.admin .top-nav li.admin-only { display: block !important; }
+  .nav-row {
+    display: block;
+    margin-bottom: 24px;
+  }
   .branches, .album { grid-template-columns: 1fr; }
   .brands {
     width: 100%;
@@ -1230,20 +1250,36 @@ body:not(.admin) .admin-only { display: none !important; }
   }
   .brands img.bw { top: 16px; }
   /* 고정 px 값들을 모바일 크기로 재조정 */
-  .left-panel { padding: 24px; }
+  .left-panel { padding: 18px 20px 22px; }
   .logo { margin-left: 0; }
-  .logo img { width: min(320px, 92%); max-width: 100%; }
-  .title { font-size: 48px; }
-  .desc { font-size: 17px; margin-top: 14px; }
-  .btn-reserve { font-size: 20px; padding: 16px 28px; margin-top: 20px; }
+  .logo img { width: min(280px, 86%); max-width: 100%; }
+  .yellow-bar { margin: 18px 0 10px; }
+  .title { font-size: 42px; }
+  .desc { font-size: 16px; margin-top: 10px; line-height: 1.45; }
+  .btn-reserve { font-size: 19px; padding: 14px 28px; margin-top: 16px; }
+  .brands { margin-top: 1.5cm; margin-bottom: 18px; }
   .intro h2 { font-size: 34px; }
   .intro-sub { font-size: 17px; margin-top: 12px; }
   .intro-sub .line { width: 40px; }
-  .nav-btn { font-size: 15px; padding: 8px 12px; }
+  .nav-btn {
+    width: 100%;
+    min-height: 42px;
+    font-size: 13px;
+    padding: 8px 4px;
+    white-space: nowrap;
+  }
+  .auth-bar { display: none; }
+  body.admin .auth-bar { display: flex; margin-top: 8px; justify-content: flex-start; }
   .tab { font-size: 15px; }
   .panel-desc { font-size: 15px; }
   .branch h3 { font-size: 19px; }
   .branch-tel { font-size: 22px; }
   .shop-photo { margin-top: 24px; }
   .branches, .album, .tabs { margin-top: 24px; }
+  .location-layout,
+  #case-list,
+  .blog-feed .post-grid {
+    grid-template-columns: 1fr;
+  }
+  .branch-preview { position: static; }
 }
