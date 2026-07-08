@@ -247,9 +247,19 @@ function applyAuthUI() {
   } else if (member) {
     bar.append(authBtn('로그아웃', logout));
   } else {
-    bar.hidden = true;
+    const btn = authBtn('로그인', null);
+    let timer = null;
+    btn.addEventListener('click', () => {
+      clearTimeout(timer);
+      timer = setTimeout(() => openMemberModal('login'), 250);
+    });
+    btn.addEventListener('dblclick', () => {
+      clearTimeout(timer);
+      openAdminModal();
+    });
+    bar.append(btn);
   }
-  if (isAdmin || member) bar.hidden = false;
+  bar.hidden = false;
 
   /* 관리자 여부에 따라 다시 그리기 */
   renderBranches();
