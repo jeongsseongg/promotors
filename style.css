@@ -1547,17 +1547,41 @@ body:not(.admin) .admin-only { display: none !important; }
 
 /* ===== 반응형 ===== */
 @media (max-width: 900px) {
-  .hero { flex-direction: column; height: 100vh; min-height: 0; overflow: hidden; }
-  .right-panel {
-    flex: 1 1 auto;
-    min-height: 0;
-    overflow: hidden;
-    padding: 24px 16px 0;
+  html,
+  body {
+    min-height: 100%;
+    overflow-x: hidden;
+    overflow-y: auto;
   }
-  body[data-view="intro"] .right-panel { overflow-y: hidden; }
+  .hero {
+    flex-direction: column;
+    height: auto;
+    min-height: 100vh;
+    overflow: visible;
+  }
+  .right-panel {
+    flex: 0 0 auto;
+    min-height: 100vh;
+    overflow: visible;
+    padding: 24px 16px 56px;
+  }
+  body[data-view="intro"] .right-panel { overflow: visible; }
+  .view.active,
+  #view-location.active,
+  #view-cases.active,
+  #view-notice.active,
+  #view-adm-book.active,
+  #view-adm-cust.active,
+  #view-adm-prod.active {
+    flex: 0 0 auto;
+    min-height: auto;
+    overflow: visible !important;
+    padding-right: 0;
+  }
   .bg-angled { display: none; }
   .left-panel {
     flex: 0 0 auto;
+    min-height: 100vh;
     background:
       linear-gradient(115deg, #ffffff 0%, #f3f4f6 30%, #ffffff 55%, #e9ebef 80%, #ffffff 100%);
     border-bottom: 5px solid var(--gold);
