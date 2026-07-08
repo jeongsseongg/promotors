@@ -135,7 +135,8 @@ const SUPABASE_DATA_KEYS = [
   'pm-members',
   'pm-blog-settings',
   'pm-intro-slides',
-  'pm-service-runs'
+  'pm-service-runs',
+  'pm-messages'
 ];
 let isHydratingSupabase = false;
 
@@ -192,6 +193,10 @@ const ADMIN_PW = 'goodpro1!';
 /* ---------- 상태 ---------- */
 let isAdmin = sessionStorage.getItem('pm-admin') === '1';
 let member = store.get('pm-member', null);
+if (!member && store.get('pm-auto-login', false)) {
+  member = store.get('pm-auto-member', null);
+  if (member) store.setLocal('pm-member', member);
+}
 
 /* ---------- 기본 데이터 ---------- */
 const DEFAULT_BRANCHES = [
@@ -208,7 +213,16 @@ const DEFAULT_PRODUCTS = [
   { name: '에어컨 필터 교체', price: '', desc: '', link: '' }
 ];
 
-const getBranches  = () => store.get('pm-branches', DEFAULT_BRANCHES);
+const getBranches  = () => {
+  const branches = store.get('pm-branches', null);
+  if (!branches?.length) return DEFAULT_BRANCHES;
+  const next = [...branches];
+  DEFAULT_BRANCHES.forEach(def => {
+    if (!next.some(b => b.name === def.name)) next.push(def);
+  });
+  if (next.length !== branches.length) store.setLocal('pm-branches', next);
+  return next;
+};
 const getNotices   = () => store.get('pm-notices', DEFAULT_NOTICES);
 const getCases     = () => store.get('promotors-cases', []);
 const getProducts  = () => store.get('pm-products', DEFAULT_PRODUCTS);
@@ -222,6 +236,7 @@ let selectedCaseBrand = '전체';
 let selectedBranchIndex = 0;
 let introSlideIndex = 0;
 let introTimer = null;
+let introLastActivity = Date.now();
 
 /* ============================================================
    화면(뷰) 전환 — 오른쪽만 변경, 왼쪽 고정
@@ -269,14 +284,14 @@ const modalCard = $('#modal-card');
 function openModal(html, wide, full) {
   modalCard.classList.toggle('wide', !!wide);
   modalCard.classList.toggle('full', !!full);
-  modalCard.innerHTML = html;
+  modalCard.innerHTML = `<button type="button" class="modal-x" id="modal-x" aria-label="닫기">×</button>${html}`;
   modal.hidden = false;
+  $('#modal-x')?.addEventListener('click', closeModal);
   const first = modalCard.querySelector('input, textarea, [contenteditable="true"]');
   if (first) first.focus();
 }
 function closeModal() { modal.hidden = true; modalCard.classList.remove('full'); modalCard.innerHTML = ''; }
-modal.addEventListener('click', e => { if (e.target === modal) closeModal(); });
-document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
+modal.addEventListener('click', e => { if (e.target === modal) e.preventDefault(); });
 
 /* ============================================================
    로그인 / 회원가입 / 관리자
@@ -330,17 +345,42 @@ function logout() {
   member = null;
   sessionStorage.removeItem('pm-admin');
   store.del('pm-member');
+  store.del('pm-auto-login');
+  store.del('pm-auto-member');
   /* 관리자 화면에 있었다면 소개로 이동 */
   if (document.querySelector('.view.active')?.id.startsWith('view-adm')) showView('intro');
   applyAuthUI();
 }
 
+function openAddressSearch(input) {
+  const finish = () => {
+    if (!window.daum?.Postcode) {
+      alert('주소 검색 스크립트를 불러오지 못했습니다. 주소를 직접 입력해주세요.');
+      return;
+    }
+    new daum.Postcode({
+      oncomplete(data) {
+        input.value = data.roadAddress || data.jibunAddress || '';
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+      }
+    }).open();
+  };
+  if (window.daum?.Postcode) return finish();
+  const script = document.createElement('script');
+  script.src = 'https://t1.daumcdn.net/mapjsapi/bundle/postcode/prod/postcode.v2.js';
+  script.onload = finish;
+  script.onerror = finish;
+  document.head.append(script);
+}
+
 /* ---------- 회원 로그인 / 가입 모달 ---------- */
 function validMemberPassword(value) {
-  return value.length >= 8 && /[가-힣]/.test(value) && /\d/.test(value);
+  return value.length >= 8 && /[A-Za-z가-힣]/.test(value) && /\d/.test(value);
 }
 
 function openMemberModal(tab) {
+  const draft = store.get('pm-signup-draft', {});
+  const rememberedId = store.get('pm-remember-id', '');
   openModal(`
     <h3>회원 ${tab === 'login' ? '로그인' : '가입'}</h3>
     <div class="modal-tabs">
@@ -354,14 +394,25 @@ function openMemberModal(tab) {
         <button type="button" id="m-eye" aria-label="비밀번호 보기">보기</button>
       </div>
       ${tab === 'signup' ? `
+        <div class="password-field">
+          <input type="password" id="m-password2" placeholder="비밀번호 확인" required>
+          <button type="button" id="m-eye2" aria-label="비밀번호 확인 보기">보기</button>
+        </div>
         <input type="text" id="m-name" placeholder="이름" required>
         <input type="text" id="m-model" placeholder="차량명 (예: BMW 520d M Sport)" required>
         <input type="text" id="m-car" placeholder="차량번호 (예: 12가3456)" required>
         <input type="tel" id="m-phone" placeholder="핸드폰번호 (예: 010-1234-5678)" required>
         <input type="email" id="m-email" placeholder="이메일" required>
-        <input type="text" id="m-address" placeholder="주소" required>
-        <p class="hint">비밀번호는 한글과 숫자를 포함해 8자 이상이어야 합니다.</p>
-      ` : ''}
+        <div class="address-field">
+          <input type="text" id="m-address" placeholder="주소" required>
+          <button type="button" id="m-address-find">주소찾기</button>
+        </div>
+        <p class="hint">비밀번호는 영어 또는 한글과 숫자를 포함해 8자 이상이어야 합니다.</p>
+      ` : `
+        <label class="check-line"><input type="checkbox" id="m-remember"> 아이디 기억하기</label>
+        <label class="check-line"><input type="checkbox" id="m-auto"> 자동로그인</label>
+        ${Object.keys(draft).length ? '<button type="button" class="mini-btn" id="resume-signup">회원가입 이어서하기</button>' : ''}
+      `}
       <p class="form-error" id="m-error"></p>
       <div class="modal-actions">
         <button type="submit" class="modal-submit">${tab === 'login' ? '로그인' : '가입하기'}</button>
@@ -372,6 +423,8 @@ function openMemberModal(tab) {
 
   modalCard.querySelectorAll('.mtab').forEach(b =>
     b.addEventListener('click', () => openMemberModal(b.dataset.t)));
+  $('#m-id').value = tab === 'signup' ? (draft.id || '') : rememberedId;
+  if (tab === 'login') $('#m-remember') && ($('#m-remember').checked = !!rememberedId);
 
   $('#m-eye').addEventListener('click', () => {
     const pw = $('#m-password');
@@ -379,6 +432,26 @@ function openMemberModal(tab) {
     $('#m-eye').textContent = pw.type === 'password' ? '보기' : '숨김';
     pw.focus();
   });
+  if (tab === 'signup') {
+    $('#m-eye2').addEventListener('click', () => {
+      const pw = $('#m-password2');
+      pw.type = pw.type === 'password' ? 'text' : 'password';
+      $('#m-eye2').textContent = pw.type === 'password' ? '보기' : '숨김';
+      pw.focus();
+    });
+    ['id','name','model','car','phone','email','address'].forEach(key => {
+      const el = $(`#m-${key}`);
+      if (el && draft[key]) el.value = draft[key];
+      el?.addEventListener('input', () => {
+        const next = store.get('pm-signup-draft', {});
+        next[key] = el.value;
+        store.setLocal('pm-signup-draft', next);
+      });
+    });
+    $('#m-address-find').addEventListener('click', () => openAddressSearch($('#m-address')));
+  } else {
+    $('#resume-signup')?.addEventListener('click', () => openMemberModal('signup'));
+  }
 
   $('#member-form').addEventListener('submit', e => {
     e.preventDefault();
@@ -394,16 +467,24 @@ function openMemberModal(tab) {
       const phone = $('#m-phone').value.trim();
       const email = $('#m-email').value.trim();
       const address = $('#m-address').value.trim();
-      if (!validMemberPassword(password)) { err.textContent = '비밀번호는 한글과 숫자를 포함해 8자 이상이어야 합니다.'; return; }
+      const password2 = $('#m-password2').value;
+      if (!validMemberPassword(password)) { err.textContent = '비밀번호는 영어 또는 한글과 숫자를 포함해 8자 이상이어야 합니다.'; return; }
+      if (password !== password2) { err.textContent = '비밀번호 확인이 일치하지 않습니다.'; return; }
       if (members.some(m => m.id === id)) { err.textContent = '이미 가입된 아이디입니다.'; return; }
       if (members.some(m => m.car === car)) { err.textContent = '이미 가입된 차량번호입니다.'; return; }
       members.push({ id, password, car, name, phone, model, email, address, role: 'customer' });
       store.set('pm-members', members);
       member = { id, password, car, name, phone, model, email, address, role: 'customer' };
+      store.del('pm-signup-draft');
     } else {
       const found = members.find(m => (m.id === id && m.password === password) || (!m.id && m.car === id && m.phone === password));
       if (!found) { err.textContent = '아이디 또는 비밀번호가 일치하지 않습니다.'; return; }
       member = found;
+      if ($('#m-remember')?.checked) store.setLocal('pm-remember-id', id); else store.del('pm-remember-id');
+      if ($('#m-auto')?.checked) {
+        store.setLocal('pm-auto-login', true);
+        store.setLocal('pm-auto-member', member);
+      }
     }
     store.set('pm-member', member);
     closeModal();
@@ -423,7 +504,11 @@ function openMyPageModal() {
     <tr><td>${esc(r.date)}</td><td>${esc(r.service)}</td><td>${r.amount ? Number(r.amount).toLocaleString() + '원' : '-'}</td><td>${esc(r.payType || (r.paid ? '정산완료' : '미정산'))}</td></tr>
   `).join('') : '<tr><td colspan="4">정비/결제 기록이 없습니다.</td></tr>';
   const runRows = serviceRuns.length ? serviceRuns.map(r => `
-    <li><strong>${esc(r.service || '실시간 정비')}</strong><span>${esc(r.stage || '진행 대기')} · ${esc(r.memo || '')}</span></li>
+    <li>
+      <strong>${esc(r.service || '실시간 정비')}</strong>
+      <span>${esc(r.status || '진행중')} · ${esc(r.reason || '')}</span>
+      <div class="service-steps">${(r.steps || []).map((s, i) => `<span class="${s.approved ? 'done' : i === r.currentStep ? 'active' : ''}">${esc(s.name)}${s.photoKeys?.length ? ' · 사진 ' + s.photoKeys.length : ''}</span>`).join('')}</div>
+    </li>
   `).join('') : '<li>실시간 정비 기록이 없습니다.</li>';
   openModal(`
     <h3>내 예약</h3>
@@ -445,7 +530,56 @@ function openMyPageModal() {
     </div>
   `, true);
   $('#customer-help').addEventListener('click', () => {
-    alert('고객센터 채팅은 다음 단계에서 Supabase 실시간 메시지 테이블과 연결합니다. 급한 문의는 지점 전화번호를 눌러 연락해주세요.');
+    openCustomerCenterModal(member);
+  });
+}
+
+function getMessagesFor(customer) {
+  const id = customer?.id || customer?.car || '';
+  return store.get('pm-messages', []).filter(m => m.memberId === id || m.car === customer?.car);
+}
+
+function openCustomerCenterModal(customer = member) {
+  const target = customer || member;
+  if (!target) return openMemberModal('login');
+  const messages = getMessagesFor(target);
+  const rows = messages.length ? messages.map(m => `
+    <li class="${m.from === 'admin' ? 'admin-msg' : 'user-msg'}">
+      <strong>${m.from === 'admin' ? '관리자' : esc(target.name || '고객')}</strong>
+      <p>${esc(m.message)}</p>
+      <time>${esc(new Date(m.createdAt).toLocaleString('ko-KR'))}</time>
+    </li>
+  `).join('') : '<li class="empty-msg">아직 메시지가 없습니다.</li>';
+  openModal(`
+    <h3>고객센터</h3>
+    <div class="customer-context">
+      <strong>${esc(target.name || '-')}</strong>
+      <span>${esc(target.car || '-')} · ${esc(target.model || '-')} · ${esc(target.phone || '-')}</span>
+    </div>
+    <ul class="message-list">${rows}</ul>
+    <form id="message-form">
+      <textarea id="message-body" rows="4" placeholder="문의 내용을 입력하세요." required></textarea>
+      <div class="modal-actions">
+        <button type="submit" class="modal-submit">보내기</button>
+        <button type="button" class="modal-cancel" onclick="closeModal()">닫기</button>
+      </div>
+    </form>
+  `, true);
+  $('#message-form').addEventListener('submit', e => {
+    e.preventDefault();
+    const all = store.get('pm-messages', []);
+    all.push({
+      id: `msg-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+      memberId: target.id || target.car || '',
+      car: target.car || '',
+      from: isAdmin ? 'admin' : 'customer',
+      message: $('#message-body').value.trim(),
+      serviceContext: getBookings().filter(b => b.car === target.car).slice(-3),
+      customer: target,
+      createdAt: new Date().toISOString()
+    });
+    store.set('pm-messages', all);
+    openCustomerCenterModal(target);
   });
 }
 
@@ -483,12 +617,20 @@ async function renderBranches() {
   const wrap = $('#branches');
   const preview = $('#branch-preview');
   wrap.innerHTML = '';
+  preview.hidden = true;
+  preview.innerHTML = '';
   if (!branches[selectedBranchIndex]) selectedBranchIndex = 0;
 
   for (const [i, b] of branches.entries()) {
     const card = document.createElement('article');
-    card.className = 'branch' + (i === selectedBranchIndex ? ' focus' : '');
+    card.className = 'branch branch-large' + (i === selectedBranchIndex ? ' focus' : '');
     card.id = 'branch-' + i;
+    const branchImageKeys = b.imageKeys?.length ? b.imageKeys : (b.imageKey ? [b.imageKey] : []);
+    const imageHtml = await renderImageStrip(branchImageKeys, b.name);
+    const media = document.createElement('div');
+    media.className = 'branch-large-media ' + (imageHtml ? '' : 'empty');
+    media.innerHTML = imageHtml || '이미지 준비중';
+    card.append(media);
 
     const h3 = document.createElement('h3'); h3.textContent = b.name;
     const tel = document.createElement('p'); tel.className = 'branch-tel';
@@ -535,22 +677,6 @@ async function renderBranches() {
       () => { if (confirm('"' + b.name + '" 지점을 삭제할까요?')) { const arr = getBranches(); arr.splice(i, 1); store.set('pm-branches', arr); applyAuthUI(); } }
     ));
     wrap.append(card);
-  }
-
-  const current = branches[selectedBranchIndex];
-  preview.innerHTML = '';
-  if (current) {
-    const branchImageKeys = current.imageKeys?.length ? current.imageKeys : (current.imageKey ? [current.imageKey] : []);
-    const imageHtml = await renderImageStrip(branchImageKeys, current.name);
-    preview.innerHTML = `
-      <div class="branch-preview-media ${imageHtml ? '' : 'empty'}">${imageHtml || '이미지 준비중'}</div>
-      <div class="branch-preview-body">
-        <h3>${esc(current.name)}</h3>
-        <a class="preview-phone" href="${phoneHref(current.tel)}">${esc(current.tel || '매장전화 미입력')}</a>
-        ${current.mobile ? `<a class="preview-phone" href="${phoneHref(current.mobile)}">${esc(current.mobile)}</a>` : ''}
-        <a class="preview-address" href="${normalizeUrl(current.map) || `https://map.naver.com/p/search/${encodeURIComponent(current.addr || current.name)}`}" target="_blank" rel="noopener">${esc(current.addr || '주소 미입력')}</a>
-        ${current.url ? `<a class="branch-map" href="${normalizeUrl(current.url)}" target="_blank" rel="noopener">지점 URL 열기</a>` : ''}
-      </div>`;
   }
 
   /* 드롭다운도 지점 목록과 동기화 */
@@ -636,7 +762,47 @@ async function renderImageStrip(keys = [], alt = '') {
   return urls.filter(Boolean).map(url => `<img src="${url}" alt="${esc(alt)}">`).join('');
 }
 
-function applyEditorToolbar(toolbar, editor) {
+function editorImageKeys(editor) {
+  return [...editor.querySelectorAll('img[data-asset-key]')].map(img => img.dataset.assetKey).filter(Boolean).slice(0, 10);
+}
+
+function saveEditorRange(editor) {
+  const sel = window.getSelection();
+  if (!sel?.rangeCount) return null;
+  const range = sel.getRangeAt(0);
+  return editor.contains(range.commonAncestorContainer) ? range.cloneRange() : null;
+}
+
+async function insertImagesIntoEditor(editor, keys, range = null) {
+  let insertRange = range;
+  if (!insertRange || !editor.contains(insertRange.commonAncestorContainer)) {
+    insertRange = document.createRange();
+    insertRange.selectNodeContents(editor);
+    insertRange.collapse(false);
+  }
+  for (const key of keys) {
+    const src = await assetSrc(key);
+    if (!src) continue;
+    const wrap = document.createElement('figure');
+    wrap.className = 'editor-image';
+    wrap.innerHTML = `<img data-asset-key="${esc(key)}" src="${src}" alt=""><figcaption contenteditable="true">사진 설명 또는 URL 메모</figcaption>`;
+    const spacer = document.createElement('p');
+    spacer.innerHTML = '<br>';
+    insertRange.insertNode(spacer);
+    insertRange.insertNode(wrap);
+    insertRange.setStartAfter(spacer);
+    insertRange.collapse(true);
+  }
+  const sel = window.getSelection();
+  sel.removeAllRanges();
+  sel.addRange(insertRange);
+  editor.focus();
+}
+
+function applyEditorToolbar(toolbar, editor, options = {}) {
+  let lastRange = null;
+  const remember = () => { lastRange = saveEditorRange(editor) || lastRange; };
+  ['keyup', 'mouseup', 'focus', 'input'].forEach(type => editor.addEventListener(type, remember));
   toolbar.querySelectorAll('[data-cmd]').forEach(btn => {
     btn.addEventListener('click', () => {
       const value = btn.dataset.value || null;
@@ -663,12 +829,38 @@ function applyEditorToolbar(toolbar, editor) {
       editor.focus();
     });
   });
+  toolbar.querySelectorAll('[data-image]').forEach(btn => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/*';
+    input.multiple = true;
+    input.hidden = true;
+    toolbar.append(input);
+    btn.addEventListener('click', () => {
+      remember();
+      input.click();
+    });
+    input.addEventListener('change', async e => {
+      const currentCount = editorImageKeys(editor).length;
+      const room = 10 - currentCount;
+      if (room <= 0) {
+        alert('본문 이미지는 최대 10장까지 넣을 수 있습니다.');
+        e.target.value = '';
+        return;
+      }
+      const keys = await saveFiles(e.target.files, options.prefix || 'post', room);
+      await insertImagesIntoEditor(editor, keys, lastRange);
+      options.onImages?.(keys);
+      e.target.value = '';
+    });
+  });
 }
 
 function editorHtml(id, value = '') {
   return `
     <div class="editor-wrap">
       <div class="editor-toolbar">
+        <button type="button" class="editor-icon-btn" data-image aria-label="이미지 추가">▧</button>
         <select data-font aria-label="글꼴">
           <option value="Pretendard, Arial, sans-serif">기본</option>
           <option value="Noto Sans KR, sans-serif">Noto Sans KR</option>
@@ -697,18 +889,6 @@ async function hydrateInlineImages(root = document) {
     const src = await assetSrc(img.dataset.assetKey);
     if (src) img.src = src;
   }));
-}
-
-async function insertImagesIntoEditor(editor, keys) {
-  for (const key of keys) {
-    const src = await assetSrc(key);
-    if (!src) continue;
-    const wrap = document.createElement('figure');
-    wrap.className = 'editor-image';
-    wrap.innerHTML = `<img data-asset-key="${esc(key)}" src="${src}" alt=""><figcaption contenteditable="true">사진 설명 또는 URL 메모</figcaption>`;
-    editor.append(wrap);
-  }
-  editor.focus();
 }
 
 async function mountAlbumGrid(wrap, keys, options) {
@@ -951,10 +1131,6 @@ function openNoticeModal(index) {
         <input type="datetime-local" id="n-scheduled">
       </label>
       ${editorHtml('n-editor', cleanHtml(n.bodyHtml || n.body || ''))}
-      <div>
-        <p class="field-title">본문 사진 (최대 10장, 드래그로 순서 변경)</p>
-        <div class="album-manager" id="n-img-manager"></div>
-      </div>
       <div class="modal-actions">
         <button type="submit" class="modal-submit">저장</button>
         <button type="button" class="modal-cancel" onclick="document.getElementById('modal').hidden=true">취소</button>
@@ -967,14 +1143,11 @@ function openNoticeModal(index) {
   $('#n-scheduled').value = n.scheduledAt || '';
   let imageKeys = [...(n.imageKeys || [])];
   const editor = $('#n-editor');
-  applyEditorToolbar(modalCard.querySelector('.editor-toolbar'), editor);
-  hydrateInlineImages(editor);
-  mountAlbumGrid($('#n-img-manager'), imageKeys, {
+  applyEditorToolbar(modalCard.querySelector('.editor-toolbar'), editor, {
     prefix: 'notice',
-    limit: 10,
-    editor,
-    onChange: keys => { imageKeys = keys; }
+    onImages: keys => { imageKeys = [...imageKeys, ...keys].slice(0, 10); }
   });
+  hydrateInlineImages(editor);
 
   $('#notice-form').addEventListener('submit', e => {
     e.preventDefault();
@@ -985,7 +1158,7 @@ function openNoticeModal(index) {
       postUrl: $('#n-url').value.trim(),
       scheduledAt: $('#n-scheduled').value,
       bodyHtml: cleanHtml($('#n-editor').innerHTML),
-      imageKeys
+      imageKeys: editorImageKeys(editor).length ? editorImageKeys(editor) : imageKeys
     };
     if (index != null) arr[index] = data; else arr.unshift(data);
     store.set('pm-notices', arr);
@@ -1054,10 +1227,6 @@ function openCaseModal(index = null) {
         <input type="datetime-local" id="ce-scheduled">
       </label>
       ${editorHtml('ce-editor', cleanHtml(c.bodyHtml || c.body || ''))}
-      <div>
-        <p class="field-title">본문 사진 (최대 10장, 드래그로 순서 변경)</p>
-        <div class="album-manager" id="ce-img-manager"></div>
-      </div>
       <div class="modal-actions">
         <button type="submit" class="modal-submit">저장</button>
         <button type="button" class="modal-cancel" onclick="document.getElementById('modal').hidden=true">취소</button>
@@ -1071,14 +1240,11 @@ function openCaseModal(index = null) {
   $('#ce-scheduled').value = c.scheduledAt || '';
   let imageKeys = [...(c.imageKeys || [])];
   const editor = $('#ce-editor');
-  applyEditorToolbar(modalCard.querySelector('.editor-toolbar'), editor);
-  hydrateInlineImages(editor);
-  mountAlbumGrid($('#ce-img-manager'), imageKeys, {
+  applyEditorToolbar(modalCard.querySelector('.editor-toolbar'), editor, {
     prefix: 'case',
-    limit: 10,
-    editor,
-    onChange: keys => { imageKeys = keys; }
+    onImages: keys => { imageKeys = [...imageKeys, ...keys].slice(0, 10); }
   });
+  hydrateInlineImages(editor);
 
   $('#case-edit-form').addEventListener('submit', e => {
     e.preventDefault();
@@ -1090,7 +1256,7 @@ function openCaseModal(index = null) {
       postUrl: $('#ce-url').value.trim(),
       scheduledAt: $('#ce-scheduled').value,
       bodyHtml: cleanHtml($('#ce-editor').innerHTML),
-      imageKeys
+      imageKeys: editorImageKeys(editor).length ? editorImageKeys(editor) : imageKeys
     };
     if (index != null) arr[index] = data; else arr.unshift(data);
     store.set('promotors-cases', arr);
@@ -1101,6 +1267,8 @@ function openCaseModal(index = null) {
 
 async function openPostView(post) {
   const images = await renderImageStrip(post.imageKeys || [], post.title);
+  const contentHtml = cleanHtml(post.bodyHtml || post.body || '');
+  const hasInlineImages = /data-asset-key=/.test(contentHtml);
   const articleSchema = {
     '@context': 'https://schema.org',
     '@type': 'Article',
@@ -1114,8 +1282,8 @@ async function openPostView(post) {
       <h3>${esc(post.title || '')}</h3>
       <p class="post-meta-line">${esc(post.date || '')}${post.brand ? ' · ' + esc(post.brand) : ''}</p>
       ${post.postUrl ? `<a class="post-link" href="${esc(normalizeUrl(post.postUrl))}" target="_blank" rel="noopener">원문/관련 URL 열기</a>` : ''}
-      <div class="post-images detail ${images ? '' : 'empty'}">${images || '<span>사진 준비중</span>'}</div>
-      <div class="post-content">${cleanHtml(post.bodyHtml || post.body || '')}</div>
+      ${hasInlineImages ? '' : `<div class="post-images detail ${images ? '' : 'empty'}">${images || '<span>사진 준비중</span>'}</div>`}
+      <div class="post-content">${contentHtml}</div>
     </article>
   `, true);
   hydrateInlineImages(modalCard);
@@ -1169,7 +1337,9 @@ async function renderIntroSlides() {
   }
 
   if (slides.length > 1) {
-    introTimer = setInterval(() => moveIntroSlide(1), 6000);
+    introTimer = setInterval(() => {
+      if (Date.now() - introLastActivity >= 15000) moveIntroSlide(1);
+    }, 1000);
   }
 }
 
@@ -1208,6 +1378,9 @@ async function initShopImage() {
   }
   $('#intro-prev').addEventListener('click', () => moveIntroSlide(-1));
   $('#intro-next').addEventListener('click', () => moveIntroSlide(1));
+  ['mousemove', 'pointerdown', 'mouseenter', 'touchstart', 'focusin'].forEach(type => {
+    $('#shop-photo').addEventListener(type, () => { introLastActivity = Date.now(); }, { passive: true });
+  });
   $('#btn-shop-img').addEventListener('click', openIntroAlbumModal);
   $('#shop-img-input').addEventListener('change', async e => {
     const current = getIntroSlides();
@@ -1662,12 +1835,18 @@ function renderAdmCust() {
       tbody.append(tr);
     });
 
-    card.querySelector('.memo-save').addEventListener('click', () =>
-      mutateCust(m.car, cc => { cc.memo = card.querySelector('.cust-memo').value; }));
-    card.querySelector('.detail-view').addEventListener('click', () => openCustomerDetail(m));
-    card.querySelector('.customer-chat').addEventListener('click', () => {
-      alert(`${m.name} 고객센터 대화는 다음 단계에서 메시지 테이블과 연결합니다.\n차량번호: ${m.car}\n차량명: ${m.model || '-'}\n전화: ${m.phone}`);
+    card.querySelector('.memo-save').addEventListener('click', e => {
+      const customers = getCustomers();
+      const cNext = customers[m.car] || { memo: '', records: [] };
+      cNext.memo = card.querySelector('.cust-memo').value;
+      cNext.memoUpdatedAt = new Date().toISOString();
+      customers[m.car] = cNext;
+      store.set('pm-customers', customers);
+      e.currentTarget.textContent = '저장됨';
+      setTimeout(() => { e.currentTarget.textContent = '메모 저장'; }, 1200);
     });
+    card.querySelector('.detail-view').addEventListener('click', () => openCustomerDetail(m));
+    card.querySelector('.customer-chat').addEventListener('click', () => openCustomerCenterModal(m));
 
     const form = card.querySelector('.rec-form');
     form.querySelector('.rec-date').value = new Date().toISOString().slice(0, 10);
@@ -1735,6 +1914,110 @@ function renderAdmProd() {
                    }, true));
     card.append(main, actions);
     body.append(card);
+  });
+  renderServiceRunAdmin(body);
+}
+
+function workflowSteps(workflow) {
+  return String(workflow || '입고 > 작업 > 출고').split('>').map(s => s.trim()).filter(Boolean);
+}
+
+function renderServiceRunAdmin(body) {
+  const members = store.get('pm-members', []);
+  const products = getProducts();
+  const runs = store.get('pm-service-runs', []);
+  const panel = document.createElement('section');
+  panel.className = 'service-admin-panel';
+  panel.innerHTML = `
+    <h3>실시간 서비스</h3>
+    <form id="service-run-form" class="rec-form">
+      <select id="sr-member" required>${members.map(m => `<option value="${esc(m.id || m.car)}">${esc(m.name)} · ${esc(m.car)} · ${esc(m.model || '-')}</option>`).join('')}</select>
+      <select id="sr-product" required>${products.map((p, i) => `<option value="${i}">${esc(p.name)}</option>`).join('')}</select>
+      <input type="text" id="sr-reason" placeholder="입고 사유">
+      <button type="submit" class="mini-btn add">작업 시작</button>
+    </form>
+    <div id="service-run-list"></div>`;
+  body.append(panel);
+
+  const list = panel.querySelector('#service-run-list');
+  list.innerHTML = runs.length ? '' : '<p class="hint">진행 중인 실시간 서비스가 없습니다.</p>';
+  runs.forEach((run, i) => {
+    const step = run.steps?.[run.currentStep] || run.steps?.[run.steps.length - 1];
+    const card = document.createElement('article');
+    card.className = 'service-run-card';
+    const steps = (run.steps || []).map((s, si) => `<span class="${s.approved ? 'done' : si === run.currentStep ? 'active' : ''}">${esc(s.name)}</span>`).join('');
+    card.innerHTML = `
+      <div class="service-run-head">
+        <strong>${esc(run.name)} · ${esc(run.car)}</strong>
+        <em>${esc(run.service)} · ${esc(run.status || '진행중')}</em>
+      </div>
+      <p>${esc(run.reason || '')}</p>
+      <div class="service-steps">${steps}</div>
+      <p class="hint">현재 단계: ${esc(step?.name || '완료')}</p>
+      <div class="service-run-actions">
+        <button type="button" class="mini-btn upload-step">사진첨부</button>
+        <button type="button" class="mini-btn approve-step">승인 / 다음 단계</button>
+        <button type="button" class="mini-btn danger delete-run">삭제</button>
+        <input type="file" class="step-file" accept="image/*" hidden>
+      </div>`;
+    const file = card.querySelector('.step-file');
+    card.querySelector('.upload-step').addEventListener('click', () => file.click());
+    file.addEventListener('change', async e => {
+      const arr = store.get('pm-service-runs', []);
+      const target = arr[i];
+      const current = target.steps[target.currentStep];
+      current.photoKeys = [...(current.photoKeys || []), ...(await saveFiles(e.target.files, 'service', 5))];
+      store.set('pm-service-runs', arr);
+      renderAdmProd();
+    });
+    card.querySelector('.approve-step').addEventListener('click', () => {
+      const arr = store.get('pm-service-runs', []);
+      const target = arr[i];
+      const current = target.steps[target.currentStep];
+      if (!current?.photoKeys?.length) {
+        alert('사진을 첨부해야 다음 단계로 이동할 수 있습니다.');
+        return;
+      }
+      current.approved = true;
+      current.approvedAt = new Date().toISOString();
+      if (target.currentStep < target.steps.length - 1) target.currentStep += 1;
+      else target.status = '출고 완료';
+      store.set('pm-service-runs', arr);
+      renderAdmProd();
+    });
+    card.querySelector('.delete-run').addEventListener('click', () => {
+      if (!confirm('실시간 서비스 기록을 삭제할까요?')) return;
+      const arr = store.get('pm-service-runs', []);
+      arr.splice(i, 1);
+      store.set('pm-service-runs', arr);
+      renderAdmProd();
+    });
+    list.append(card);
+  });
+
+  panel.querySelector('#service-run-form')?.addEventListener('submit', e => {
+    e.preventDefault();
+    const memberKey = panel.querySelector('#sr-member').value;
+    const product = products[Number(panel.querySelector('#sr-product').value)];
+    const customer = members.find(m => (m.id || m.car) === memberKey);
+    if (!customer || !product) return;
+    const arr = store.get('pm-service-runs', []);
+    arr.unshift({
+      id: `run-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+      memberId: customer.id || customer.car,
+      car: customer.car,
+      name: customer.name,
+      phone: customer.phone,
+      model: customer.model,
+      service: product.name,
+      reason: panel.querySelector('#sr-reason').value.trim(),
+      steps: workflowSteps(product.workflow).map(name => ({ name, photoKeys: [], approved: false })),
+      currentStep: 0,
+      status: '진행중',
+      createdAt: new Date().toISOString()
+    });
+    store.set('pm-service-runs', arr);
+    renderAdmProd();
   });
 }
 
