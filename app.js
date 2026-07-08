@@ -133,7 +133,9 @@ const SUPABASE_DATA_KEYS = [
   'pm-customers',
   'pm-bookings',
   'pm-members',
-  'pm-blog-settings'
+  'pm-blog-settings',
+  'pm-intro-slides',
+  'pm-service-runs'
 ];
 let isHydratingSupabase = false;
 
@@ -264,14 +266,15 @@ $$('.tab').forEach(t => t.addEventListener('click', () => activateTab(t.dataset.
 const modal = $('#modal');
 const modalCard = $('#modal-card');
 
-function openModal(html, wide) {
+function openModal(html, wide, full) {
   modalCard.classList.toggle('wide', !!wide);
+  modalCard.classList.toggle('full', !!full);
   modalCard.innerHTML = html;
   modal.hidden = false;
-  const first = modalCard.querySelector('input, textarea');
+  const first = modalCard.querySelector('input, textarea, [contenteditable="true"]');
   if (first) first.focus();
 }
-function closeModal() { modal.hidden = true; modalCard.innerHTML = ''; }
+function closeModal() { modal.hidden = true; modalCard.classList.remove('full'); modalCard.innerHTML = ''; }
 modal.addEventListener('click', e => { if (e.target === modal) closeModal(); });
 document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
 
@@ -286,7 +289,7 @@ function applyAuthUI() {
   if (isAdmin) {
     bar.append(span('auth-user', '관리자 모드'), authBtn('로그아웃', logout));
   } else if (member) {
-    bar.append(authBtn('로그아웃', logout));
+    bar.append(authBtn('내 예약', openMyPageModal), authBtn('로그아웃', logout));
   } else {
     const btn = authBtn('로그인', null);
     let timer = null;
@@ -333,6 +336,10 @@ function logout() {
 }
 
 /* ---------- 회원 로그인 / 가입 모달 ---------- */
+function validMemberPassword(value) {
+  return value.length >= 8 && /[가-힣]/.test(value) && /\d/.test(value);
+}
+
 function openMemberModal(tab) {
   openModal(`
     <h3>회원 ${tab === 'login' ? '로그인' : '가입'}</h3>
@@ -341,10 +348,20 @@ function openMemberModal(tab) {
       <button type="button" class="mtab ${tab === 'signup' ? 'active' : ''}" data-t="signup">회원가입</button>
     </div>
     <form id="member-form">
-      <input type="text" id="m-car" placeholder="차량번호 (예: 12가3456)" required>
-      ${tab === 'signup' ? '<input type="text" id="m-name" placeholder="이름" required>' : ''}
-      ${tab === 'signup' ? '<input type="text" id="m-model" placeholder="차량명 (예: BMW 520d)" required>' : ''}
-      <input type="tel" id="m-phone" placeholder="핸드폰번호 (예: 010-1234-5678)" required>
+      <input type="text" id="m-id" placeholder="아이디" required>
+      <div class="password-field">
+        <input type="password" id="m-password" placeholder="비밀번호" required>
+        <button type="button" id="m-eye" aria-label="비밀번호 보기">보기</button>
+      </div>
+      ${tab === 'signup' ? `
+        <input type="text" id="m-name" placeholder="이름" required>
+        <input type="text" id="m-model" placeholder="차량명 (예: BMW 520d M Sport)" required>
+        <input type="text" id="m-car" placeholder="차량번호 (예: 12가3456)" required>
+        <input type="tel" id="m-phone" placeholder="핸드폰번호 (예: 010-1234-5678)" required>
+        <input type="email" id="m-email" placeholder="이메일" required>
+        <input type="text" id="m-address" placeholder="주소" required>
+        <p class="hint">비밀번호는 한글과 숫자를 포함해 8자 이상이어야 합니다.</p>
+      ` : ''}
       <p class="form-error" id="m-error"></p>
       <div class="modal-actions">
         <button type="submit" class="modal-submit">${tab === 'login' ? '로그인' : '가입하기'}</button>
@@ -356,28 +373,79 @@ function openMemberModal(tab) {
   modalCard.querySelectorAll('.mtab').forEach(b =>
     b.addEventListener('click', () => openMemberModal(b.dataset.t)));
 
+  $('#m-eye').addEventListener('click', () => {
+    const pw = $('#m-password');
+    pw.type = pw.type === 'password' ? 'text' : 'password';
+    $('#m-eye').textContent = pw.type === 'password' ? '보기' : '숨김';
+    pw.focus();
+  });
+
   $('#member-form').addEventListener('submit', e => {
     e.preventDefault();
-    const car = $('#m-car').value.trim();
-    const phone = $('#m-phone').value.trim();
+    const id = $('#m-id').value.trim();
+    const password = $('#m-password').value;
     const members = store.get('pm-members', []);
     const err = $('#m-error');
 
     if (tab === 'signup') {
       const name = $('#m-name').value.trim();
       const model = $('#m-model').value.trim();
+      const car = $('#m-car').value.trim();
+      const phone = $('#m-phone').value.trim();
+      const email = $('#m-email').value.trim();
+      const address = $('#m-address').value.trim();
+      if (!validMemberPassword(password)) { err.textContent = '비밀번호는 한글과 숫자를 포함해 8자 이상이어야 합니다.'; return; }
+      if (members.some(m => m.id === id)) { err.textContent = '이미 가입된 아이디입니다.'; return; }
       if (members.some(m => m.car === car)) { err.textContent = '이미 가입된 차량번호입니다.'; return; }
-      members.push({ car, name, phone, model });
+      members.push({ id, password, car, name, phone, model, email, address, role: 'customer' });
       store.set('pm-members', members);
-      member = { car, name, phone, model };
+      member = { id, password, car, name, phone, model, email, address, role: 'customer' };
     } else {
-      const found = members.find(m => m.car === car && m.phone === phone);
-      if (!found) { err.textContent = '일치하는 회원 정보가 없습니다. 차량번호와 핸드폰번호를 확인해주세요.'; return; }
+      const found = members.find(m => (m.id === id && m.password === password) || (!m.id && m.car === id && m.phone === password));
+      if (!found) { err.textContent = '아이디 또는 비밀번호가 일치하지 않습니다.'; return; }
       member = found;
     }
     store.set('pm-member', member);
     closeModal();
     applyAuthUI();
+  });
+}
+
+function openMyPageModal() {
+  if (!member) return openMemberModal('login');
+  const bookings = getBookings().filter(b => b.car === member.car || b.memberId === member.id);
+  const customer = getCustomers()[member.car] || { records: [], memo: '' };
+  const serviceRuns = store.get('pm-service-runs', []).filter(r => r.car === member.car || r.memberId === member.id);
+  const bookingRows = bookings.length ? bookings.map(b => `
+    <tr><td>${esc(b.date)} ${esc(b.time)}</td><td>${esc(b.branch)}</td><td>${esc((b.services || []).join(', ') || '서비스 미선택')}</td><td>${esc(b.memo || '-')}</td></tr>
+  `).join('') : '<tr><td colspan="4">예약 기록이 없습니다.</td></tr>';
+  const recordRows = (customer.records || []).length ? customer.records.map(r => `
+    <tr><td>${esc(r.date)}</td><td>${esc(r.service)}</td><td>${r.amount ? Number(r.amount).toLocaleString() + '원' : '-'}</td><td>${esc(r.payType || (r.paid ? '정산완료' : '미정산'))}</td></tr>
+  `).join('') : '<tr><td colspan="4">정비/결제 기록이 없습니다.</td></tr>';
+  const runRows = serviceRuns.length ? serviceRuns.map(r => `
+    <li><strong>${esc(r.service || '실시간 정비')}</strong><span>${esc(r.stage || '진행 대기')} · ${esc(r.memo || '')}</span></li>
+  `).join('') : '<li>실시간 정비 기록이 없습니다.</li>';
+  openModal(`
+    <h3>내 예약</h3>
+    <section class="mypage-section">
+      <h4>예약 기록</h4>
+      <table class="rec-table"><thead><tr><th>일시</th><th>지점</th><th>서비스</th><th>메모</th></tr></thead><tbody>${bookingRows}</tbody></table>
+    </section>
+    <section class="mypage-section">
+      <h4>결제 / 서비스 기록</h4>
+      <table class="rec-table"><thead><tr><th>날짜</th><th>서비스</th><th>금액</th><th>정산</th></tr></thead><tbody>${recordRows}</tbody></table>
+    </section>
+    <section class="mypage-section">
+      <h4>실시간 정비 현황</h4>
+      <ul class="service-run-list">${runRows}</ul>
+    </section>
+    <div class="modal-actions">
+      <button type="button" class="modal-submit" id="customer-help">고객센터</button>
+      <button type="button" class="modal-cancel" onclick="document.getElementById('modal').hidden=true">닫기</button>
+    </div>
+  `, true);
+  $('#customer-help').addEventListener('click', () => {
+    alert('고객센터 채팅은 다음 단계에서 Supabase 실시간 메시지 테이블과 연결합니다. 급한 문의는 지점 전화번호를 눌러 연락해주세요.');
   });
 }
 
@@ -472,9 +540,10 @@ async function renderBranches() {
   const current = branches[selectedBranchIndex];
   preview.innerHTML = '';
   if (current) {
-    const imgSrc = await assetSrc(current.imageKey);
+    const branchImageKeys = current.imageKeys?.length ? current.imageKeys : (current.imageKey ? [current.imageKey] : []);
+    const imageHtml = await renderImageStrip(branchImageKeys, current.name);
     preview.innerHTML = `
-      <div class="branch-preview-media ${imgSrc ? '' : 'empty'}">${imgSrc ? `<img src="${imgSrc}" alt="${esc(current.name)} 이미지">` : '이미지 준비중'}</div>
+      <div class="branch-preview-media ${imageHtml ? '' : 'empty'}">${imageHtml || '이미지 준비중'}</div>
       <div class="branch-preview-body">
         <h3>${esc(current.name)}</h3>
         <a class="preview-phone" href="${phoneHref(current.tel)}">${esc(current.tel || '매장전화 미입력')}</a>
@@ -507,7 +576,7 @@ async function renderBranches() {
 }
 
 function openBranchModal(index) {
-  const b = index != null ? getBranches()[index] : { name: '', tel: '', mobile: '', addr: '', map: '', url: '', imageKey: '' };
+  const b = index != null ? getBranches()[index] : { name: '', tel: '', mobile: '', addr: '', map: '', url: '', imageKey: '', imageKeys: [] };
   openModal(`
     <h3>${index != null ? '지점 수정' : '지점 추가'}</h3>
     <form id="branch-form">
@@ -517,9 +586,10 @@ function openBranchModal(index) {
       <input type="text" id="b-addr" placeholder="주소" required>
       <input type="url" id="b-map" placeholder="네이버 플레이스/지도 링크 (선택)">
       <input type="url" id="b-url" placeholder="지점 상세 URL (선택)">
-      <label class="file-label">지점 이미지
-        <input type="file" id="b-img" accept="image/*">
-      </label>
+      <div>
+        <p class="field-title">지점 이미지 (최대 10장)</p>
+        <div class="album-manager" id="branch-img-manager"></div>
+      </div>
       <div class="modal-actions">
         <button type="submit" class="modal-submit">저장</button>
         <button type="button" class="modal-cancel" onclick="document.getElementById('modal').hidden=true">취소</button>
@@ -529,11 +599,12 @@ function openBranchModal(index) {
   $('#b-name').value = b.name; $('#b-tel').value = b.tel;
   $('#b-mobile').value = b.mobile || ''; $('#b-addr').value = b.addr;
   $('#b-map').value = b.map; $('#b-url').value = b.url || '';
-  let imageKey = b.imageKey || '';
+  let imageKeys = b.imageKeys?.length ? [...b.imageKeys] : (b.imageKey ? [b.imageKey] : []);
 
-  $('#b-img').addEventListener('change', async e => {
-    if (!e.target.files[0]) return;
-    imageKey = (await saveFiles(e.target.files, 'branch', 1))[0];
+  mountAlbumGrid($('#branch-img-manager'), imageKeys, {
+    prefix: 'branch',
+    limit: 10,
+    onChange: keys => { imageKeys = keys; }
   });
 
   $('#branch-form').addEventListener('submit', async e => {
@@ -542,7 +613,7 @@ function openBranchModal(index) {
     const data = {
       name: $('#b-name').value.trim(), tel: $('#b-tel').value.trim(),
       mobile: $('#b-mobile').value.trim(), addr: $('#b-addr').value.trim(),
-      map: $('#b-map').value.trim(), url: $('#b-url').value.trim(), imageKey
+      map: $('#b-map').value.trim(), url: $('#b-url').value.trim(), imageKey: imageKeys[0] || '', imageKeys
     };
     if (index != null) arr[index] = data; else arr.push(data);
     store.set('pm-branches', arr);
@@ -568,7 +639,27 @@ async function renderImageStrip(keys = [], alt = '') {
 function applyEditorToolbar(toolbar, editor) {
   toolbar.querySelectorAll('[data-cmd]').forEach(btn => {
     btn.addEventListener('click', () => {
-      document.execCommand(btn.dataset.cmd, false, null);
+      const value = btn.dataset.value || null;
+      document.execCommand(btn.dataset.cmd, false, value);
+      editor.focus();
+    });
+  });
+  toolbar.querySelectorAll('[data-font]').forEach(select => {
+    select.addEventListener('change', () => {
+      document.execCommand('fontName', false, select.value);
+      editor.focus();
+    });
+  });
+  toolbar.querySelectorAll('[data-size]').forEach(select => {
+    select.addEventListener('change', () => {
+      document.execCommand('fontSize', false, select.value);
+      editor.focus();
+    });
+  });
+  toolbar.querySelectorAll('[data-link]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const url = normalizeUrl(prompt('연결할 URL을 입력하세요.') || '');
+      if (url) document.execCommand('createLink', false, url);
       editor.focus();
     });
   });
@@ -578,12 +669,133 @@ function editorHtml(id, value = '') {
   return `
     <div class="editor-wrap">
       <div class="editor-toolbar">
+        <select data-font aria-label="글꼴">
+          <option value="Pretendard, Arial, sans-serif">기본</option>
+          <option value="Noto Sans KR, sans-serif">Noto Sans KR</option>
+          <option value="Malgun Gothic, sans-serif">맑은 고딕</option>
+          <option value="serif">명조</option>
+        </select>
+        <select data-size aria-label="글씨 크기">
+          <option value="3">본문</option>
+          <option value="4">크게</option>
+          <option value="5">제목</option>
+          <option value="6">강조</option>
+        </select>
         <button type="button" data-cmd="bold">B</button>
+        <button type="button" data-cmd="formatBlock" data-value="h3">제목</button>
+        <button type="button" data-cmd="formatBlock" data-value="p">본문</button>
         <button type="button" data-cmd="insertUnorderedList">목록</button>
-        <button type="button" data-cmd="formatBlock">본문</button>
+        <button type="button" data-link>URL</button>
       </div>
       <div class="rich-editor" id="${id}" contenteditable="true">${value}</div>
     </div>`;
+}
+
+async function hydrateInlineImages(root = document) {
+  const imgs = [...root.querySelectorAll('img[data-asset-key]')];
+  await Promise.all(imgs.map(async img => {
+    const src = await assetSrc(img.dataset.assetKey);
+    if (src) img.src = src;
+  }));
+}
+
+async function insertImagesIntoEditor(editor, keys) {
+  for (const key of keys) {
+    const src = await assetSrc(key);
+    if (!src) continue;
+    const wrap = document.createElement('figure');
+    wrap.className = 'editor-image';
+    wrap.innerHTML = `<img data-asset-key="${esc(key)}" src="${src}" alt=""><figcaption contenteditable="true">사진 설명 또는 URL 메모</figcaption>`;
+    editor.append(wrap);
+  }
+  editor.focus();
+}
+
+async function mountAlbumGrid(wrap, keys, options) {
+  const limit = options.limit || 10;
+  let current = [...keys].slice(0, limit);
+  const commit = async () => {
+    await options.onChange([...current]);
+    await draw();
+  };
+
+  async function draw() {
+    wrap.innerHTML = '';
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/*';
+    input.multiple = true;
+    input.hidden = true;
+    input.addEventListener('change', async e => {
+      const room = limit - current.length;
+      if (room <= 0) {
+        alert(`이미지는 최대 ${limit}장까지 등록할 수 있습니다.`);
+        e.target.value = '';
+        return;
+      }
+      const added = await saveFiles(e.target.files, options.prefix || 'album', room);
+      current = [...current, ...added].slice(0, limit);
+      if (options.editor) await insertImagesIntoEditor(options.editor, added);
+      e.target.value = '';
+      await commit();
+    });
+    wrap.append(input);
+
+    const grid = document.createElement('div');
+    grid.className = 'album-slots';
+    wrap.append(grid);
+
+    for (let i = 0; i < limit; i++) {
+      const key = current[i];
+      const slot = document.createElement('button');
+      slot.type = 'button';
+      slot.className = 'album-slot' + (key ? ' filled' : ' empty');
+      slot.dataset.index = i;
+      slot.draggable = !!key;
+      if (key) {
+        slot.innerHTML = `
+          <img src="${await assetSrc(key)}" alt="">
+          <span>${i + 1}</span>
+          <i aria-hidden="true">×</i>`;
+      } else {
+        slot.innerHTML = `<b>+</b><span>${i + 1}</span>`;
+      }
+      slot.addEventListener('click', e => {
+        if (e.target.tagName === 'I') {
+          current.splice(i, 1);
+          commit();
+          return;
+        }
+        input.click();
+      });
+      slot.addEventListener('dragstart', e => {
+        if (!key) return;
+        e.dataTransfer.setData('text/plain', String(i));
+        e.dataTransfer.effectAllowed = 'move';
+        slot.classList.add('dragging');
+      });
+      slot.addEventListener('dragend', () => slot.classList.remove('dragging'));
+      slot.addEventListener('dragover', e => {
+        e.preventDefault();
+        slot.classList.add('drop-target');
+      });
+      slot.addEventListener('dragleave', () => slot.classList.remove('drop-target'));
+      slot.addEventListener('drop', e => {
+        e.preventDefault();
+        slot.classList.remove('drop-target');
+        const from = Number(e.dataTransfer.getData('text/plain'));
+        const to = key ? i : current.length - 1;
+        if (!Number.isInteger(from) || from < 0 || from >= current.length || from === to) return;
+        const [moved] = current.splice(from, 1);
+        current.splice(Math.max(0, Math.min(to, current.length)), 0, moved);
+        commit();
+      });
+      grid.append(slot);
+    }
+  }
+
+  await draw();
+  return { getKeys: () => [...current] };
 }
 
 function renderBlogFeed() {
@@ -645,6 +857,11 @@ function renderBlogFeed() {
     });
 }
 
+function isPublished(item) {
+  if (isAdmin || !item?.scheduledAt) return true;
+  return new Date(item.scheduledAt).getTime() <= Date.now();
+}
+
 function openBlogSettings() {
   const s = getBlogSettings();
   const supa = store.get('pm-supabase', { url: '', anon: '' });
@@ -687,7 +904,8 @@ function openBlogSettings() {
 }
 
 async function renderNotices() {
-  const notices = getNotices();
+  const allNotices = getNotices();
+  const notices = allNotices.filter(isPublished);
   const album = $('#album');
   album.innerHTML = '';
 
@@ -714,39 +932,48 @@ async function renderNotices() {
       if (!e.target.closest('button, a')) openPostView(n);
     });
     if (isAdmin) card.append(cardActions(
-      () => openNoticeModal(i),
-      () => { if (confirm('이 공지를 삭제할까요?')) { const arr = getNotices(); arr.splice(i, 1); store.set('pm-notices', arr); renderNotices(); } }
+      () => openNoticeModal(allNotices.indexOf(n)),
+      () => { if (confirm('이 공지를 삭제할까요?')) { const arr = getNotices(); arr.splice(allNotices.indexOf(n), 1); store.set('pm-notices', arr); renderNotices(); } }
     ));
     album.append(card);
   }
 }
 
 function openNoticeModal(index) {
-  const n = index != null ? getNotices()[index] : { date: today(), title: '', bodyHtml: '', imageKeys: [] };
+  const n = index != null ? getNotices()[index] : { date: today(), title: '', bodyHtml: '', imageKeys: [], postUrl: '', scheduledAt: '' };
   openModal(`
     <h3>${index != null ? '공지 수정' : '새 공지 작성'}</h3>
     <form id="notice-form">
       <input type="text" id="n-title" placeholder="제목" required>
       <input type="text" id="n-date" placeholder="날짜 (예: 2026.07.08)" required>
-      ${editorHtml('n-editor', cleanHtml(n.bodyHtml || n.body || ''))}
-      <label class="file-label">사진 추가
-        <input type="file" id="n-img" accept="image/*" multiple>
+      <input type="url" id="n-url" placeholder="게시글 URL (선택)">
+      <label class="field-title">예약발행 시간
+        <input type="datetime-local" id="n-scheduled">
       </label>
-      <p class="hint">사진은 여러 장 등록할 수 있고 큰 파일은 브라우저 저장소에 보관됩니다.</p>
+      ${editorHtml('n-editor', cleanHtml(n.bodyHtml || n.body || ''))}
+      <div>
+        <p class="field-title">본문 사진 (최대 10장, 드래그로 순서 변경)</p>
+        <div class="album-manager" id="n-img-manager"></div>
+      </div>
       <div class="modal-actions">
         <button type="submit" class="modal-submit">저장</button>
         <button type="button" class="modal-cancel" onclick="document.getElementById('modal').hidden=true">취소</button>
       </div>
     </form>
-  `, true);
+  `, true, true);
   $('#n-title').value = n.title || '';
   $('#n-date').value = n.date || today();
+  $('#n-url').value = n.postUrl || '';
+  $('#n-scheduled').value = n.scheduledAt || '';
   let imageKeys = [...(n.imageKeys || [])];
-  applyEditorToolbar(modalCard.querySelector('.editor-toolbar'), $('#n-editor'));
-
-  $('#n-img').addEventListener('change', async e => {
-    imageKeys = [...imageKeys, ...(await saveFiles(e.target.files, 'notice', 20))];
-    e.target.value = '';
+  const editor = $('#n-editor');
+  applyEditorToolbar(modalCard.querySelector('.editor-toolbar'), editor);
+  hydrateInlineImages(editor);
+  mountAlbumGrid($('#n-img-manager'), imageKeys, {
+    prefix: 'notice',
+    limit: 10,
+    editor,
+    onChange: keys => { imageKeys = keys; }
   });
 
   $('#notice-form').addEventListener('submit', e => {
@@ -755,6 +982,8 @@ function openNoticeModal(index) {
     const data = {
       date: $('#n-date').value.trim(),
       title: $('#n-title').value.trim(),
+      postUrl: $('#n-url').value.trim(),
+      scheduledAt: $('#n-scheduled').value,
       bodyHtml: cleanHtml($('#n-editor').innerHTML),
       imageKeys
     };
@@ -782,14 +1011,15 @@ function renderCaseFilters() {
 async function renderCases() {
   renderCaseFilters();
   renderBlogFeed();
-  const cases = getCases();
+  const cases = getCases().filter(isPublished);
+  const allCases = getCases();
   const filtered = selectedCaseBrand === '전체' ? cases : cases.filter(c => c.brand === selectedCaseBrand);
   const list = $('#case-list');
   list.innerHTML = '';
   $('#case-empty').style.display = filtered.length ? 'none' : '';
 
   for (const c of filtered) {
-    const realIndex = cases.indexOf(c);
+    const realIndex = allCases.indexOf(c);
     const card = document.createElement('article');
     card.className = 'post-card case-card';
     const imageHtml = await renderImageStrip(c.imageKeys || [], c.title);
@@ -812,33 +1042,42 @@ async function renderCases() {
 }
 
 function openCaseModal(index = null) {
-  const c = index != null ? getCases()[index] : { date: today(), title: '', brand: 'BMW', bodyHtml: '', imageKeys: [] };
+  const c = index != null ? getCases()[index] : { date: today(), title: '', brand: 'BMW', bodyHtml: '', imageKeys: [], postUrl: '', scheduledAt: '' };
   openModal(`
     <h3>${index != null ? '정비사례 수정' : '정비사례 작성'}</h3>
     <form id="case-edit-form">
       <input type="text" id="ce-title" placeholder="제목" required>
       <select id="ce-brand">${BRANDS.filter(b => b !== '전체').map(b => `<option>${esc(b)}</option>`).join('')}</select>
       <input type="text" id="ce-date" placeholder="날짜" required>
-      ${editorHtml('ce-editor', cleanHtml(c.bodyHtml || c.body || ''))}
-      <label class="file-label">사진 추가
-        <input type="file" id="ce-img" accept="image/*" multiple>
+      <input type="url" id="ce-url" placeholder="게시글 URL (선택)">
+      <label class="field-title">예약발행 시간
+        <input type="datetime-local" id="ce-scheduled">
       </label>
-      <p class="hint">브랜드를 선택하면 실제 정비사례 탭에서 브랜드별로 필터링됩니다.</p>
+      ${editorHtml('ce-editor', cleanHtml(c.bodyHtml || c.body || ''))}
+      <div>
+        <p class="field-title">본문 사진 (최대 10장, 드래그로 순서 변경)</p>
+        <div class="album-manager" id="ce-img-manager"></div>
+      </div>
       <div class="modal-actions">
         <button type="submit" class="modal-submit">저장</button>
         <button type="button" class="modal-cancel" onclick="document.getElementById('modal').hidden=true">취소</button>
       </div>
     </form>
-  `, true);
+  `, true, true);
   $('#ce-title').value = c.title || '';
   $('#ce-brand').value = c.brand || '기타';
   $('#ce-date').value = c.date || today();
+  $('#ce-url').value = c.postUrl || '';
+  $('#ce-scheduled').value = c.scheduledAt || '';
   let imageKeys = [...(c.imageKeys || [])];
-  applyEditorToolbar(modalCard.querySelector('.editor-toolbar'), $('#ce-editor'));
-
-  $('#ce-img').addEventListener('change', async e => {
-    imageKeys = [...imageKeys, ...(await saveFiles(e.target.files, 'case', 30))];
-    e.target.value = '';
+  const editor = $('#ce-editor');
+  applyEditorToolbar(modalCard.querySelector('.editor-toolbar'), editor);
+  hydrateInlineImages(editor);
+  mountAlbumGrid($('#ce-img-manager'), imageKeys, {
+    prefix: 'case',
+    limit: 10,
+    editor,
+    onChange: keys => { imageKeys = keys; }
   });
 
   $('#case-edit-form').addEventListener('submit', e => {
@@ -848,6 +1087,8 @@ function openCaseModal(index = null) {
       title: $('#ce-title').value.trim(),
       brand: $('#ce-brand').value,
       date: $('#ce-date').value.trim(),
+      postUrl: $('#ce-url').value.trim(),
+      scheduledAt: $('#ce-scheduled').value,
       bodyHtml: cleanHtml($('#ce-editor').innerHTML),
       imageKeys
     };
@@ -872,10 +1113,12 @@ async function openPostView(post) {
       <script type="application/ld+json">${JSON.stringify(articleSchema).replace(/</g, '\\u003c')}</script>
       <h3>${esc(post.title || '')}</h3>
       <p class="post-meta-line">${esc(post.date || '')}${post.brand ? ' · ' + esc(post.brand) : ''}</p>
+      ${post.postUrl ? `<a class="post-link" href="${esc(normalizeUrl(post.postUrl))}" target="_blank" rel="noopener">원문/관련 URL 열기</a>` : ''}
       <div class="post-images detail ${images ? '' : 'empty'}">${images || '<span>사진 준비중</span>'}</div>
       <div class="post-content">${cleanHtml(post.bodyHtml || post.body || '')}</div>
     </article>
   `, true);
+  hydrateInlineImages(modalCard);
 }
 
 /* ---------- 수정/삭제 버튼 묶음 ---------- */
@@ -926,7 +1169,7 @@ async function renderIntroSlides() {
   }
 
   if (slides.length > 1) {
-    introTimer = setInterval(() => moveIntroSlide(1), 3000);
+    introTimer = setInterval(() => moveIntroSlide(1), 6000);
   }
 }
 
@@ -942,71 +1185,19 @@ async function openIntroAlbumModal() {
   openModal(`
     <h3>소개 이미지 관리</h3>
     <div class="album-manager" id="intro-manager"></div>
-    <label class="file-label">이미지 추가 (최대 10장)
-      <input type="file" id="intro-add-files" accept="image/*" multiple>
-    </label>
     <div class="modal-actions">
       <button type="button" class="modal-submit" id="intro-save">닫기</button>
     </div>
   `, true);
-
-  async function draw() {
-    const wrap = $('#intro-manager');
-    const current = getIntroSlides();
-    wrap.innerHTML = current.length ? '' : '<p class="hint">등록된 소개 이미지가 없습니다.</p>';
-    for (const [i, slide] of current.entries()) {
-      const row = document.createElement('div');
-      row.className = 'album-row';
-      row.innerHTML = `
-        <img src="${await assetSrc(slide.key)}" alt="">
-        <span>${i + 1}</span>
-        <button type="button" data-act="up">위로</button>
-        <button type="button" data-act="down">아래로</button>
-        <button type="button" data-act="del">삭제</button>`;
-      row.querySelector('[data-act="up"]').disabled = i === 0;
-      row.querySelector('[data-act="down"]').disabled = i === current.length - 1;
-      row.querySelector('[data-act="up"]').addEventListener('click', () => {
-        const arr = getIntroSlides();
-        [arr[i - 1], arr[i]] = [arr[i], arr[i - 1]];
-        store.set('pm-intro-slides', arr);
-        draw();
-      });
-      row.querySelector('[data-act="down"]').addEventListener('click', () => {
-        const arr = getIntroSlides();
-        [arr[i + 1], arr[i]] = [arr[i], arr[i + 1]];
-        store.set('pm-intro-slides', arr);
-        draw();
-      });
-      row.querySelector('[data-act="del"]').addEventListener('click', async () => {
-        const arr = getIntroSlides();
-        const [removed] = arr.splice(i, 1);
-        store.set('pm-intro-slides', arr);
-        if (removed?.key) assetDb.del(removed.key).catch(() => {});
-        draw();
-      });
-      wrap.append(row);
+  await mountAlbumGrid($('#intro-manager'), slides.map(s => s.key), {
+    prefix: 'intro',
+    limit: 10,
+    onChange: keys => {
+      store.set('pm-intro-slides', keys.map((key, i) => ({ key, alt: `프로모터스 소개 이미지 ${i + 1}` })));
+      renderIntroSlides();
     }
-    renderIntroSlides();
-  }
-
-  $('#intro-add-files').addEventListener('change', async e => {
-    const current = getIntroSlides();
-    const room = 10 - current.length;
-    if (room <= 0) {
-      alert('소개 이미지는 최대 10장까지 등록할 수 있습니다.');
-      e.target.value = '';
-      return;
-    }
-    const keys = await saveFiles(e.target.files, 'intro', room);
-    store.set('pm-intro-slides', [
-      ...current,
-      ...keys.map((key, i) => ({ key, alt: `프로모터스 소개 이미지 ${current.length + i + 1}` }))
-    ]);
-    e.target.value = '';
-    draw();
   });
   $('#intro-save').addEventListener('click', closeModal);
-  await draw();
 }
 
 async function initShopImage() {
@@ -1166,9 +1357,10 @@ function renderSlots(branchBookings) {
     const taken = dayBookings.find(b => b.time === t);
 
     if (blockedTimes.includes(t)) {
+      el.textContent = 'X';
       el.disabled = true;
       el.classList.add('blocked');
-      el.title = '예약 불가';
+      el.title = '이 시간에는 예약이 있습니다. 전화로 문의해주세요.';
     } else if (taken && taken.car === member.car) {
       el.classList.add('mine');
       el.title = '내 예약 - 누르면 취소';
@@ -1229,6 +1421,7 @@ function renderServiceStep() {
       renderCalendar('죄송합니다. 방금 다른 고객이 해당 시간을 예약했습니다.'); return;
     }
     arr.push({ branch: cal.branch, date: cal.selDate, time: cal.selTime,
+               memberId: member.id || '',
                car: member.car, name: member.name, phone: member.phone, model: member.model || '',
                services, memo });
     store.set('pm-bookings', arr);
@@ -1300,7 +1493,7 @@ function renderAdmBook() {
     if (cnt || blk) {
       const c = document.createElement('span');
       c.className = 'cnt';
-      c.textContent = (cnt ? '예약 ' + cnt : '') + (cnt && blk ? ' · ' : '') + (blk ? '금지 ' + blk : '');
+      c.textContent = (cnt ? '예약 ' + cnt : '') + (cnt && blk ? ' · ' : '') + (blk ? '완료 ' + blk : '');
       el.append(c);
     }
     if (adm.selDate === key) el.classList.add('sel');
@@ -1341,14 +1534,14 @@ function renderAdmDay() {
                    const arr = getBookings(); arr.splice(bIdx, 1); store.set('pm-bookings', arr); renderAdmBook();
                  }, true));
     } else if (blkIdx > -1) {
-      info.textContent = '예약금지';
+      info.textContent = '예약완료';
       info.classList.add('blocked-text');
-      row.append(miniBtn('금지 해제', () => {
+      row.append(miniBtn('완료 해제', () => {
         const arr = getBlocked(); arr.splice(blkIdx, 1); store.set('pm-blocked', arr); renderAdmBook();
       }));
     } else {
       info.textContent = '비어있음';
-      row.append(miniBtn('예약금지', () => {
+      row.append(miniBtn('예약완료', () => {
         const arr = getBlocked(); arr.push({ branch: adm.branch, date: adm.selDate, time: t }); store.set('pm-blocked', arr); renderAdmBook();
       }));
     }
@@ -1390,7 +1583,7 @@ function openMoveBooking(idx) {
       $('#mv-error').textContent = '해당 시간에 이미 예약이 있습니다.'; return;
     }
     if (getBlocked().some(x => x.branch === b.branch && x.date === nd && x.time === nt)) {
-      $('#mv-error').textContent = '해당 시간은 예약금지 상태입니다.'; return;
+      $('#mv-error').textContent = '해당 시간은 예약완료 상태입니다.'; return;
     }
     all[idx] = { ...b, date: nd, time: nt };
     store.set('pm-bookings', all);
@@ -1423,24 +1616,31 @@ function renderAdmCust() {
   members.forEach(m => {
     const c = customers[m.car] || { memo: '', records: [] };
     const bookCnt = getBookings().filter(b => b.car === m.car).length;
+    const total = (c.records || []).reduce((sum, r) => sum + Number(r.amount || 0), 0);
+    const unpaid = (c.records || []).filter(r => !r.paid).reduce((sum, r) => sum + Number(r.amount || 0), 0);
     const card = document.createElement('article');
     card.className = 'cust-card';
     card.innerHTML = `
       <div class="cust-head">
         <strong>${esc(m.name)}</strong>
-        <span>${esc(m.car)} · ${esc(m.model || '-')} · ${esc(m.phone)}</span>
-        <em>예약 ${bookCnt}건</em>
+        <span>${esc(m.car)} · ${esc(m.model || '-')} · <a href="${phoneHref(m.phone)}">${esc(m.phone)}</a></span>
+        <em>예약 ${bookCnt}건 · 합계 ${total.toLocaleString()}원 · 미수 ${unpaid.toLocaleString()}원</em>
       </div>
-      <textarea class="cust-memo" rows="2" placeholder="고객 메모 (성향, 주의사항 등)">${esc(c.memo)}</textarea>
+      <div class="cust-actions">
+        <button type="button" class="mini-btn detail-view">상세보기</button>
+        <button type="button" class="mini-btn customer-chat">고객센터</button>
+      </div>
+      <textarea class="cust-memo postit" rows="2" placeholder="고객 메모 (날짜/시간별 포스트잇처럼 남겨두세요)">${esc(c.memo)}</textarea>
       <button type="button" class="mini-btn memo-save">메모 저장</button>
-      <table class="rec-table">
-        <thead><tr><th>날짜</th><th>서비스</th><th>금액</th><th>정산</th><th></th></tr></thead>
+      <table class="rec-table spreadsheet">
+        <thead><tr><th>날짜</th><th>서비스</th><th>금액</th><th>결제수단</th><th>정산</th><th></th></tr></thead>
         <tbody></tbody>
       </table>
       <form class="rec-form">
         <input type="date" class="rec-date" required>
         <input type="text" class="rec-svc" placeholder="받은 서비스" required>
         <input type="number" class="rec-amt" placeholder="금액(원)" min="0">
+        <select class="rec-paytype"><option>현금</option><option>카드</option><option>계좌이체</option></select>
         <label class="rec-paid-label"><input type="checkbox" class="rec-paid"> 정산완료</label>
         <button type="submit" class="mini-btn add">추가</button>
       </form>`;
@@ -1448,7 +1648,7 @@ function renderAdmCust() {
     const tbody = card.querySelector('tbody');
     c.records.forEach((r, ri) => {
       const tr = document.createElement('tr');
-      tr.innerHTML = `<td>${esc(r.date)}</td><td>${esc(r.service)}</td><td>${r.amount ? Number(r.amount).toLocaleString() + '원' : '-'}</td>`;
+      tr.innerHTML = `<td>${esc(r.date)}</td><td>${esc(r.service)}</td><td>${r.amount ? Number(r.amount).toLocaleString() + '원' : '-'}</td><td>${esc(r.payType || '-')}</td>`;
       const tdPaid = document.createElement('td');
       const pill = document.createElement('button');
       pill.type = 'button';
@@ -1464,6 +1664,10 @@ function renderAdmCust() {
 
     card.querySelector('.memo-save').addEventListener('click', () =>
       mutateCust(m.car, cc => { cc.memo = card.querySelector('.cust-memo').value; }));
+    card.querySelector('.detail-view').addEventListener('click', () => openCustomerDetail(m));
+    card.querySelector('.customer-chat').addEventListener('click', () => {
+      alert(`${m.name} 고객센터 대화는 다음 단계에서 메시지 테이블과 연결합니다.\n차량번호: ${m.car}\n차량명: ${m.model || '-'}\n전화: ${m.phone}`);
+    });
 
     const form = card.querySelector('.rec-form');
     form.querySelector('.rec-date').value = new Date().toISOString().slice(0, 10);
@@ -1473,12 +1677,35 @@ function renderAdmCust() {
         date: form.querySelector('.rec-date').value.replaceAll('-', '.'),
         service: form.querySelector('.rec-svc').value.trim(),
         amount: form.querySelector('.rec-amt').value,
+        payType: form.querySelector('.rec-paytype').value,
         paid: form.querySelector('.rec-paid').checked
       }));
     });
 
     body.append(card);
   });
+}
+
+function openCustomerDetail(m) {
+  const bookings = getBookings().filter(b => b.car === m.car);
+  const bookingRows = bookings.length ? bookings.map(b => `
+    <tr><td>${esc(b.date)} ${esc(b.time)}</td><td>${esc(b.branch)}</td><td>${esc((b.services || []).join(', ') || '-')}</td><td>${esc(b.memo || '-')}</td></tr>
+  `).join('') : '<tr><td colspan="4">예약 기록이 없습니다.</td></tr>';
+  openModal(`
+    <h3>고객 상세정보</h3>
+    <dl class="detail-list">
+      <dt>아이디</dt><dd>${esc(m.id || '-')}</dd>
+      <dt>이름</dt><dd>${esc(m.name || '-')}</dd>
+      <dt>차량명</dt><dd>${esc(m.model || '-')}</dd>
+      <dt>차량번호</dt><dd>${esc(m.car || '-')}</dd>
+      <dt>핸드폰번호</dt><dd><a href="${phoneHref(m.phone)}">${esc(m.phone || '-')}</a></dd>
+      <dt>이메일</dt><dd>${esc(m.email || '-')}</dd>
+      <dt>주소</dt><dd>${esc(m.address || '-')}</dd>
+    </dl>
+    <h4 class="modal-subtitle">예약 일정</h4>
+    <table class="rec-table"><thead><tr><th>일시</th><th>지점</th><th>서비스</th><th>메모</th></tr></thead><tbody>${bookingRows}</tbody></table>
+    <div class="modal-actions"><button type="button" class="modal-submit" onclick="document.getElementById('modal').hidden=true">닫기</button></div>
+  `, true);
 }
 
 /* ============================================================
@@ -1497,6 +1724,7 @@ function renderAdmProd() {
     main.className = 'prod-main';
     main.innerHTML = `<strong>${esc(p.name)}</strong>${p.price ? `<span class="prod-price">${esc(p.price)}</span>` : ''}
       ${p.desc ? `<p>${esc(p.desc)}</p>` : ''}
+      ${p.workflow ? `<p>실시간 단계: ${esc(p.workflow)}</p>` : ''}
       ${p.link ? `<a href="${esc(p.link)}" target="_blank" rel="noopener">참고 링크 열기</a>` : ''}`;
     const actions = document.createElement('div');
     actions.className = 'card-actions';
@@ -1511,13 +1739,14 @@ function renderAdmProd() {
 }
 
 function openProductModal(index) {
-  const p = index != null ? getProducts()[index] : { name: '', price: '', desc: '', link: '' };
+  const p = index != null ? getProducts()[index] : { name: '', price: '', desc: '', link: '', workflow: '입고 > 작업 > 출고' };
   openModal(`
     <h3>${index != null ? '상품 수정' : '상품 추가'}</h3>
     <form id="prod-form">
       <input type="text" id="p-name" placeholder="상품명 (예: 엔진오일 교환)" required>
       <input type="text" id="p-price" placeholder="가격 표시 (예: 80,000원~ / 선택)">
       <textarea id="p-desc" rows="3" placeholder="설명 (선택)"></textarea>
+      <textarea id="p-workflow" rows="2" placeholder="실시간 서비스 단계 (예: 입고 > 오일빼기 > 넣기 > 출고)"></textarea>
       <input type="url" id="p-link" placeholder="참고 링크 URL (선택)">
       <div class="modal-actions">
         <button type="submit" class="modal-submit">저장</button>
@@ -1525,12 +1754,12 @@ function openProductModal(index) {
       </div>
     </form>`);
   $('#p-name').value = p.name; $('#p-price').value = p.price || '';
-  $('#p-desc').value = p.desc || ''; $('#p-link').value = p.link || '';
+  $('#p-desc').value = p.desc || ''; $('#p-workflow').value = p.workflow || ''; $('#p-link').value = p.link || '';
   $('#prod-form').addEventListener('submit', e => {
     e.preventDefault();
     const arr = getProducts();
     const data = { name: $('#p-name').value.trim(), price: $('#p-price').value.trim(),
-                   desc: $('#p-desc').value.trim(), link: $('#p-link').value.trim() };
+                   desc: $('#p-desc').value.trim(), workflow: $('#p-workflow').value.trim(), link: $('#p-link').value.trim() };
     if (index != null) arr[index] = data; else arr.push(data);
     store.set('pm-products', arr);
     closeModal();
