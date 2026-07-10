@@ -17,6 +17,7 @@
 
 <!-- 검색엔진 소유권 확인 태그 -->
 <meta name="naver-site-verification" content="7d6911db9f944373d6e8527f127f107d2d1423de">
+<meta name="naver-site-verification" content="086aa238d7ee781940f9bd7db7049dfb8dda0a03">
 <meta name="google-site-verification" content="SotOZtgI14Wszwoj3Bn60rEhg_DZNzoKcxFK7TlYPjU">
 <!-- 빙: <meta name="msvalidate.01" content="발급코드"> -->
 
@@ -40,7 +41,7 @@
 }
 </script>
 <link rel="icon" type="image/png" href="images/logo-icon.png">
-<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="style.css?v=20260710-0900">
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700;900&display=swap" rel="stylesheet">
 </head>
 <body>
@@ -61,7 +62,7 @@
 
     <h1 class="title">정비예약</h1>
 
-    <p class="desc">소중한 내 차량,<br>차별화된 맞춤 컨설팅을 받아보세요</p>
+    <p class="desc">사진으로 확인하고, 기록으로 관리하세요.<br>소중한 내 차를 위한 맞춤형 프리미엄 케어 서비스.</p>
 
     <a href="#reserve" class="btn-reserve">
       <span>예약하기</span>
@@ -72,6 +73,8 @@
       <img class="bw" src="images/brands-bw.png" alt="취급 브랜드: 메르세데스-벤츠, BMW, 아우디, 폭스바겐, 페라리, 람보르기니, 마세라티, 재규어, 벤틀리, 롤스로이스, 미니, 볼보, 렉서스, 지프, 랜드로버, 포르쉐">
       <img class="color" src="images/brands-color.png" alt="" aria-hidden="true">
     </div>
+
+    <span class="scroll-cue" aria-hidden="true"></span>
   </section>
 
   <!-- ===== 오른쪽 패널 (내부 스크롤, 카테고리별 전환) ===== -->
@@ -94,8 +97,8 @@
         <li>
           <button class="nav-btn" data-view="cases">정비사례</button>
           <div class="dropdown">
-            <button data-view="cases" data-tab="tab-blog">네이버 공식블로그</button>
-            <button data-view="cases" data-tab="tab-web">실제 정비사례</button>
+            <button data-view="cases" data-tab="tab-blog">실제 정비사례</button>
+            <button data-view="cases" data-tab="tab-web">브랜드별 매거진</button>
           </div>
         </li>
         <li>
@@ -105,8 +108,12 @@
           <button class="nav-btn" data-view="adm-book">설정</button>
           <div class="dropdown">
             <button data-view="adm-book">예약관리</button>
-            <button data-view="adm-cust">고객관리</button>
-            <button data-view="adm-prod">상품관리</button>
+            <button data-view="adm-work">작업현황</button>
+            <button class="main-admin-only" data-view="adm-approval">작업승인</button>
+            <button class="main-admin-only" data-view="adm-cust">고객관리</button>
+            <button class="main-admin-only" data-view="adm-prod">상품관리</button>
+            <button class="main-admin-only" data-view="adm-inquiry">고객문의</button>
+            <button class="main-admin-only" data-view="adm-settings">보안</button>
           </div>
         </li>
       </ul>
@@ -130,19 +137,15 @@
           <p class="ph-tel">안산점 031.831.9738</p>
           <p class="ph-note">관리자 로그인 후 소개 이미지를 최대 10장까지 등록하세요</p>
         </div>
-        <button type="button" class="mini-btn photo-edit admin-only" id="btn-shop-img">소개 이미지 관리</button>
+        <button type="button" class="mini-btn photo-edit admin-only main-admin-only" id="btn-shop-img">소개 이미지 관리</button>
         <input type="file" id="shop-img-input" accept="image/*" multiple hidden>
       </figure>
     </div>
 
     <!-- ② 오시는길 -->
     <div class="view" id="view-location">
-      <header class="intro">
-        <h2>오시는길</h2>
-        <p class="intro-sub"><span class="line"></span>프로모터스 지점 안내<span class="line"></span></p>
-      </header>
-
-      <div class="admin-tools admin-only">
+      <p class="section-kicker"><span class="line"></span>프로모터스 지점 안내<span class="line"></span></p>
+      <div class="admin-tools admin-only main-admin-only">
         <button type="button" class="mini-btn add" id="btn-add-branch">+ 지점 추가</button>
       </div>
       <div class="location-layout">
@@ -153,26 +156,18 @@
 
     <!-- ③ 정비사례 -->
     <div class="view" id="view-cases">
-      <header class="intro">
-        <h2>정비사례</h2>
-        <p class="intro-sub"><span class="line"></span>프로모터스의 작업 기록<span class="line"></span></p>
-      </header>
-
+      <p class="section-kicker case-kicker"><span class="line"></span><strong>프로모터스의 작업 기록</strong><span class="line"></span></p>
       <div class="tabs" role="tablist">
-        <button class="tab active" data-tab="tab-blog">네이버 공식블로그</button>
-        <button class="tab" data-tab="tab-web">실제 정비사례</button>
+        <button class="tab active" data-tab="tab-blog">실제 정비사례</button>
+        <button class="tab" data-tab="tab-web">브랜드별 매거진</button>
       </div>
 
       <div class="tab-panel active" id="tab-blog">
-        <p class="panel-desc">네이버 공식블로그 게시글을 연결해 홈페이지에서 함께 확인합니다.</p>
-        <div class="admin-tools admin-only">
-          <button type="button" class="mini-btn add" id="btn-blog-settings">블로그 연동 설정</button>
-        </div>
         <div class="blog-feed" id="blog-feed"></div>
       </div>
 
       <div class="tab-panel" id="tab-web">
-        <div class="admin-tools admin-only">
+        <div class="admin-tools admin-only main-admin-only">
           <button type="button" class="mini-btn add" id="btn-add-case">+ 정비사례 작성</button>
         </div>
         <div class="brand-filter" id="case-brand-filter"></div>
@@ -183,12 +178,8 @@
 
     <!-- ④ 공지사항 -->
     <div class="view" id="view-notice">
-      <header class="intro">
-        <h2>공지사항</h2>
-        <p class="intro-sub"><span class="line"></span>프로모터스 소식<span class="line"></span></p>
-      </header>
-
-      <div class="admin-tools admin-only">
+      <p class="section-kicker"><span class="line"></span>프로모터스 소식<span class="line"></span></p>
+      <div class="admin-tools admin-only main-admin-only">
         <button type="button" class="mini-btn add" id="btn-add-notice">+ 공지 작성</button>
       </div>
       <div class="album" id="album"></div>
@@ -203,7 +194,25 @@
       <div class="adm-body" id="adm-book-body"></div>
     </div>
 
-    <!-- ⑥ 관리자: 고객관리 -->
+    <!-- ⑥ 관리자: 작업현황 -->
+    <div class="view" id="view-adm-work">
+      <header class="intro">
+        <h2>작업현황</h2>
+        <p class="intro-sub"><span class="line"></span>오늘 예약 · 입고 · 작업 · 출고<span class="line"></span></p>
+      </header>
+      <div class="adm-body" id="adm-work-body"></div>
+    </div>
+
+    <!-- ⑦ 관리자: 작업승인 -->
+    <div class="view" id="view-adm-approval">
+      <header class="intro">
+        <h2>작업승인</h2>
+        <p class="intro-sub"><span class="line"></span>실시간 서비스 단계 승인<span class="line"></span></p>
+      </header>
+      <div class="adm-body" id="adm-approval-body"></div>
+    </div>
+
+    <!-- ⑧ 관리자: 고객관리 -->
     <div class="view" id="view-adm-cust">
       <header class="intro">
         <h2>고객관리</h2>
@@ -212,7 +221,7 @@
       <div class="adm-body" id="adm-cust-body"></div>
     </div>
 
-    <!-- ⑦ 관리자: 상품관리 -->
+    <!-- ⑨ 관리자: 상품관리 -->
     <div class="view" id="view-adm-prod">
       <header class="intro">
         <h2>상품관리</h2>
@@ -224,6 +233,24 @@
       <div class="adm-body" id="adm-prod-body"></div>
     </div>
 
+    <!-- ⑩ 관리자: 고객문의 -->
+    <div class="view" id="view-adm-inquiry">
+      <header class="intro">
+        <h2>고객문의</h2>
+        <p class="intro-sub"><span class="line"></span>고객과 실시간 채팅<span class="line"></span></p>
+      </header>
+      <div class="adm-body" id="adm-inquiry-body"></div>
+    </div>
+
+    <!-- ⑪ 관리자: 보안 -->
+    <div class="view" id="view-adm-settings">
+      <header class="intro">
+        <h2>보안</h2>
+        <p class="intro-sub"><span class="line"></span>관리자 비밀번호 관리<span class="line"></span></p>
+      </header>
+      <div class="adm-body" id="adm-settings-body"></div>
+    </div>
+
   </section>
 
 </main>
@@ -233,6 +260,7 @@
   <div class="modal-card" id="modal-card" role="dialog" aria-modal="true"></div>
 </div>
 
-<script src="app.js"></script>
+<script src="config.js?v=20260710-0900"></script>
+<script src="app.js?v=20260710-0900"></script>
 </body>
 </html>

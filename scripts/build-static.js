@@ -3,7 +3,7 @@ const path = require('path');
 
 const root = path.resolve(__dirname, '..');
 const outDir = path.join(root, 'dist');
-const files = ['index.html', 'style.css', 'app.js', 'robots.txt', 'sitemap.xml'];
+const files = ['index.html', 'style.css', 'config.js', 'app.js', 'robots.txt', 'sitemap.xml'];
 const dirs = ['images'];
 
 fs.rmSync(outDir, { recursive: true, force: true });
@@ -21,4 +21,3 @@ for (const dir of dirs) {
 }
 
 console.log(`Built static site in ${outDir}`);
-
