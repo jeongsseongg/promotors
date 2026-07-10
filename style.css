@@ -3237,26 +3237,74 @@ button.step-photo-slot {
 .wd-empty p { color: #111827; font-size: 16px; font-weight: 900; margin: 0; }
 .wd-empty span { color: #8a94a0; font-size: 13px; font-weight: 700; line-height: 1.6; }
 
-/* ===== 데스크톱: 세로가 짧은/넓은 창에서도 잘리지 않게 vh 상한 적용 ===== */
-/* (821px 이하 높이는 기존 축소 규칙이 담당 — 여기는 그보다 큰 창 대상) */
-@media (min-width: 901px) and (min-height: 821px) {
-  .logo img { width: min(505px, 100%, 58vh); }
-  .title { font-size: min(clamp(72px, 6.5vw, 125px), 11.5vh); }
-  .desc { font-size: min(clamp(18px, 1.45vw, 28px), 2.7vh); }
+/* ============================================================
+   데스크톱 왼쪽 패널 구도 통일 (모든 해상도 공통)
+   로고 → 노란바 → 정비예약 → 설명 → 예약하기 → (남는 공간) → 브랜드(하단 고정)
+   음수 마진 없이 화면 높이에 비례한 여백으로 구성한다.
+   이 블록이 위의 해상도별 규칙들을 최종 덮어쓴다.
+   ============================================================ */
+@media (min-width: 901px) {
+  .left-panel {
+    height: 100vh;
+    padding: clamp(24px, 4vh, 48px) clamp(32px, 3vw, 64px) clamp(20px, 3.5vh, 40px) clamp(28px, 2.5vw, 48px);
+    overflow: hidden;
+  }
+  .logo { margin: 0; }
+  .logo img { width: min(480px, 100%, 55vh); }
+  .yellow-bar {
+    width: clamp(64px, 4.8vw, 92px);
+    height: clamp(6px, .75vh, 8px);
+    margin: clamp(28px, 5.5vh, 64px) 0 clamp(16px, 3vh, 32px) 2px;
+  }
+  .title {
+    font-size: min(clamp(64px, 6vw, 118px), 11vh);
+    line-height: 1.05;
+  }
+  .desc {
+    margin-top: clamp(14px, 2.2vh, 24px);
+    font-size: min(clamp(17px, 1.4vw, 26px), 2.6vh);
+    line-height: 1.5;
+  }
   .btn-reserve {
-    font-size: min(clamp(22px, 1.875vw, 36px), 3.4vh);
-    padding: clamp(14px, 2.4vh, 30px) clamp(28px, 2.3vw, 44px);
+    margin-top: clamp(20px, 3.4vh, 36px);
+    margin-bottom: clamp(18px, 3vh, 36px);
+    max-width: min(560px, 100%);
+    min-height: 0;
+    padding: clamp(16px, 2.4vh, 26px) clamp(28px, 2.3vw, 44px);
+    font-size: min(clamp(22px, 1.8vw, 34px), 3.2vh);
   }
   .brands {
-    margin-top: clamp(14px, 3.4vh, 1.5cm);
-    margin-bottom: clamp(10px, 2.6vh, 2cm);
-    max-width: min(560px, 100%, 58vh);
+    margin-top: auto;      /* 남는 공간을 흡수해 항상 맨 아래 고정 */
+    margin-bottom: 0;
+    margin-left: 0;
+    padding-top: 0;
+    max-width: min(560px, 100%, 60vh);
   }
-  .intro h2 { font-size: min(clamp(44px, 3.75vw, 72px), 7vh); }
-  .intro-sub { font-size: min(clamp(18px, 1.45vw, 28px), 2.6vh); }
-  .nav-row { margin-bottom: clamp(18px, 3.4vh, 1.5cm); }
-  .shop-photo { min-height: 0; }
-  body[data-view="intro"] .view.active { padding-bottom: 10px; }
+  .brands img.bw { top: 0; }
+
+  /* 오른쪽 소개 화면: 사진이 잘리지 않게 남는 높이에 맞춰 크기 계산 */
+  .nav-row { margin-bottom: clamp(18px, 3vh, 40px); }
+  .intro h2 { font-size: min(clamp(40px, 3.4vw, 64px), 6.5vh); }
+  .intro-sub {
+    margin-top: clamp(10px, 1.6vh, 18px);
+    font-size: min(clamp(16px, 1.3vw, 24px), 2.4vh);
+  }
+  .shop-photo {
+    flex: 0 1 auto;
+    min-height: 0;
+    margin-top: clamp(16px, 2.8vh, 32px);
+    margin-inline: auto;
+    aspect-ratio: 16 / 9;
+    width: min(100%, calc((100vh - 300px) * 1.78));
+    background: #fff;
+  }
+  /* 소개 이미지는 잘리지 않게 전체를 보여준다 */
+  .intro-slider img,
+  .shop-photo > img {
+    object-fit: contain;
+    background: #fff;
+  }
+  body[data-view="intro"] .view.active { padding-bottom: 0; }
 }
 
 /* ===== 모바일: 첫 화면은 정비예약 히어로만, 아래는 스크롤해야 보이게 ===== */
