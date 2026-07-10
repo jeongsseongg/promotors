@@ -494,7 +494,8 @@ body[data-view="intro"] .view.active { overflow: hidden; }
 .branch-large > h3 { margin-top: 18px; }
 .branch-large > .card-actions { margin-bottom: 20px; }
 .branch-large-media {
-  aspect-ratio: 16 / 20;
+  /* 원본 사진 비율을 JS에서 읽어 덮어쓴다. 로드 전에는 지점 카드 기본 비율을 유지한다. */
+  aspect-ratio: 4 / 5;
   position: relative;
   overflow: hidden;
   background: #fff;
@@ -2413,6 +2414,17 @@ button.step-photo-slot {
 }
 
 /* 예약 - 서비스 선택 단계 */
+.svc-mileage-field {
+  display: grid;
+  gap: 8px;
+  margin: 20px 0 24px;
+}
+.svc-mileage-field label {
+  color: var(--navy);
+  font-size: 15px;
+  font-weight: 800;
+}
+.svc-mileage-field input { margin: 0; }
 .svc-list { display: grid; gap: 8px; margin-bottom: 12px; }
 .svc-item {
   display: flex;
@@ -2799,11 +2811,21 @@ button.step-photo-slot {
   .top-nav li .dropdown {
     display: none !important;
   }
+  .top-nav li.admin-only.admin-menu-open > .dropdown {
+    display: block !important;
+    left: auto;
+    right: 0;
+    width: min(220px, calc(100vw - 24px));
+    min-width: 0;
+    opacity: 1;
+    visibility: visible;
+    transform: translateY(0);
+  }
   .dropdown button {
     min-height: 30px;
     padding: 8px 10px;
     text-align: left;
-    font-size: 11px;
+    font-size: 14px;
     line-height: 1.2;
     color: var(--navy);
     word-break: keep-all;
@@ -3119,3 +3141,108 @@ button.step-photo-slot {
   font-weight: 800;
   cursor: pointer;
 }
+
+/* ===== 내 정보 수정 폼 ===== */
+.mypage-form { display: grid; gap: 10px; margin-bottom: 8px; }
+.mypage-form label {
+  display: grid;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 800;
+  color: #5d6672;
+}
+.mypage-form input {
+  min-height: 46px;
+  padding: 0 14px;
+  border: 1px solid #dfe5ec;
+  border-radius: 12px;
+  font-family: inherit;
+  font-size: 15px;
+  color: #1f2933;
+  background: #fff;
+}
+.mypage-form input:disabled { background: #f4f6f9; color: #8a94a0; }
+.mypage-form .address-field { display: grid; grid-template-columns: 1fr auto; gap: 8px; }
+.mypage-form .address-field button {
+  min-height: 46px;
+  padding: 0 14px;
+  border: 1px solid #dfe5ec;
+  border-radius: 12px;
+  background: #f4f6f9;
+  color: #1f2933;
+  font-family: inherit;
+  font-weight: 800;
+  cursor: pointer;
+}
+.mypage-form .modal-submit { min-height: 48px; }
+.form-ok { font-size: 13px; color: #1f9d55; min-height: 16px; margin: 0; }
+.modal-submit.danger { background: var(--red); }
+
+/* ===== 작업현황 상세 (입고/작업/검수/확인) ===== */
+.wd-service { margin: -6px 0 14px; color: #5d6672; font-size: 14px; font-weight: 800; }
+.wd-service strong { color: #111827; font-size: 15px; }
+.work-detail { display: grid; gap: 10px; }
+.wd-stage {
+  border: 1px solid #eef1f5;
+  border-radius: 16px;
+  background: #fff;
+  padding: 16px;
+  box-shadow: 0 6px 18px rgba(15,23,42,.05);
+}
+.wd-stage header {
+  display: grid;
+  grid-template-columns: 34px 1fr auto;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+.wd-stage .wd-icon {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: #f1f4f8;
+  color: #9aa7b6;
+}
+.wd-stage .wd-icon svg { width: 18px; height: 18px; }
+.wd-stage strong { color: #111827; font-size: 16px; font-weight: 900; }
+.wd-stage em {
+  font-style: normal;
+  font-size: 12px;
+  font-weight: 900;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: #f1f4f8;
+  color: #9aa7b6;
+}
+.wd-stage p { color: #5d6672; font-size: 14px; font-weight: 700; margin: 0; word-break: keep-all; }
+.wd-stage.done .wd-icon { background: var(--blue-soft); color: var(--blue); }
+.wd-stage.done em { background: var(--blue-soft); color: var(--blue-dark); }
+.wd-stage.now { border-color: var(--blue); box-shadow: 0 8px 22px rgba(47,111,228,.16); }
+.wd-stage.now .wd-icon { background: var(--blue); color: #fff; }
+.wd-stage.now em { background: var(--blue); color: #fff; }
+.wd-stage.now p { color: #1f2933; }
+.wd-photos { margin-top: 12px; }
+.wd-hint { margin-top: 10px !important; font-size: 13px !important; color: #8a94a0 !important; font-weight: 700 !important; }
+.wd-empty {
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  padding: 44px 16px;
+  border-radius: 16px;
+  background: #f8fafc;
+  text-align: center;
+}
+.wd-empty-icon {
+  width: 52px;
+  height: 52px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--blue-soft);
+  color: var(--blue);
+}
+.wd-empty-icon svg { width: 26px; height: 26px; }
+.wd-empty p { color: #111827; font-size: 16px; font-weight: 900; margin: 0; }
+.wd-empty span { color: #8a94a0; font-size: 13px; font-weight: 700; line-height: 1.6; }

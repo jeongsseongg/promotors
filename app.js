@@ -463,8 +463,15 @@ function scrollMobilePublicView(name) {
 
 function wireNav() {
   $$('.top-nav [data-view]').forEach(btn => {
-    btn.addEventListener('click', () => {
+    btn.addEventListener('click', e => {
+      const adminMenuTrigger = btn.classList.contains('nav-btn') && btn.closest('li.admin-only');
+      if (adminMenuTrigger && window.matchMedia('(max-width: 900px)').matches) {
+        e.preventDefault();
+        btn.closest('li.admin-only').classList.toggle('admin-menu-open');
+        return;
+      }
       if (btn.dataset.view?.startsWith('adm-') && !canUseAdminView(btn.dataset.view)) return;
+      $$('.top-nav li.admin-menu-open').forEach(item => item.classList.remove('admin-menu-open'));
       showView(btn.dataset.view);
       if (btn.dataset.view === 'adm-book') initAdmBook();
       if (btn.dataset.view === 'adm-work') renderAdmWork();
@@ -771,6 +778,7 @@ const MYPAGE_ICONS = {
   check: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6L9 17l-5-5"/></svg>',
   search: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.35-4.35"/></svg>',
   flag: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M8.5 12.2l2.4 2.4 4.6-4.8"/></svg>',
+  car: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 11l1.5-4.5A2 2 0 0 1 8.4 5h7.2a2 2 0 0 1 1.9 1.5L19 11"/><path d="M3 17v-4a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v4"/><circle cx="7.5" cy="16.5" r="1.5"/><circle cx="16.5" cy="16.5" r="1.5"/></svg>',
   carArt: '<svg class="car-art" viewBox="0 0 140 60" aria-hidden="true"><path d="M10 40c0-7 5-11 14-12l10-9c3-2 6-3 10-3h26c7 0 13 3 17 7l5 5c9 1 16 4 16 11v7h-10a9 9 0 0 1-18 0H48a9 9 0 0 1-18 0H10v-6z" fill="rgba(255,255,255,.92)"/><circle cx="39" cy="46" r="6" fill="rgba(13,42,102,.85)"/><circle cx="101" cy="46" r="6" fill="rgba(13,42,102,.85)"/></svg>'
 };
 const WORK_STAGES = [
@@ -817,7 +825,7 @@ async function openMyPageModal() {
   const carMeta = [member.year, member.car].filter(Boolean).join(' · ');
 
   openModal(`
-    <h3>마이페이지</h3>
+    <h3>내예약</h3>
     <button type="button" class="mypage-profile" id="mypage-info">
       <span class="profile-avatar" aria-hidden="true">${MYPAGE_ICONS.user}</span>
       <span class="profile-text"><strong>${esc(member.name || '고객')}님</strong><span>안녕하세요!</span></span>
@@ -830,7 +838,7 @@ async function openMyPageModal() {
       </div>
       ${MYPAGE_ICONS.carArt}
     </section>
-    <nav class="mypage-quick" aria-label="마이페이지 바로가기">
+    <nav class="mypage-quick" aria-label="내예약 바로가기">
       <button type="button" id="quick-work"><span class="quick-icon">${MYPAGE_ICONS.wrench}</span><strong>작업현황</strong></button>
       <button type="button" id="mypage-alerts"><span class="quick-icon">${MYPAGE_ICONS.bell}</span><strong>알림</strong>${notices.length ? `<em>${notices.length}</em>` : ''}</button>
       <button type="button" id="mypage-bookings"><span class="quick-icon">${MYPAGE_ICONS.calendar}</span><strong>예약 내역</strong></button>
@@ -854,7 +862,7 @@ async function openMyPageModal() {
   $('#mypage-info').addEventListener('click', openMyInfoPage);
   $('#mypage-bookings').addEventListener('click', openMyBookingsPage);
   $('#mypage-center').addEventListener('click', () => openCustomerCenterModal(member));
-  $('#quick-work').addEventListener('click', () => $('#work-status-card')?.scrollIntoView({ behavior: 'smooth', block: 'center' }));
+  $('#quick-work').addEventListener('click', openWorkStatusPage);
   modalCard.querySelectorAll('.view-run-photos').forEach(btn => {
     btn.addEventListener('click', () => openRunPhotosModal(btn.dataset.run));
   });
@@ -862,6 +870,104 @@ async function openMyPageModal() {
 
 function myPageBackActions() {
   $('#back-my-page')?.addEventListener('click', openMyPageModal);
+}
+
+/* 고객 예약취소 공용: 예약 삭제 + 관리자 알림 */
+function cancelMemberBooking(booking) {
+  if (!booking) return false;
+  if (!confirm(`${booking.date} ${booking.time} ${booking.branch} 예약을 취소할까요?`)) return false;
+  const arr = getBookings();
+  const key = bookingKey(booking);
+  const idx = arr.findIndex(b => bookingKey(b) === key);
+  if (idx === -1) return false;
+  arr.splice(idx, 1);
+  store.set('pm-bookings', arr);
+  pushAdminNotification(`${booking.name || booking.car || '고객'}님이 ${booking.date} ${booking.time} ${booking.branch} 예약을 취소했습니다.`, { type: 'booking-cancel', car: booking.car || '' });
+  logEvent('booking_cancel', { branch: booking.branch, date: booking.date, time: booking.time });
+  return true;
+}
+
+/* 작업현황 상세: 입고 → 작업 → 검수 → 확인 4단계 + 단계별 사진 */
+async function openWorkStatusPage() {
+  if (!member) return openMemberModal('login');
+  const serviceRuns = store.get('pm-service-runs', []).filter(r => r.car === member.car || r.memberId === member.id);
+  const run = serviceRuns.slice().sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0))[0];
+
+  if (!run) {
+    openModal(`
+      <h3>작업현황</h3>
+      <div class="wd-empty">
+        <span class="wd-empty-icon">${MYPAGE_ICONS.wrench}</span>
+        <p>지금은 진행 중인 작업이 없어요</p>
+        <span>예약 후 차량이 입고되면 여기에서<br>작업 과정을 사진으로 확인할 수 있어요.</span>
+      </div>
+      <div class="modal-actions"><button type="button" class="modal-submit" id="back-my-page">내예약</button></div>
+    `, true, false, openMyPageModal);
+    modalCard.classList.add('mypage-card');
+    myPageBackActions();
+    return;
+  }
+
+  const steps = run.steps || [];
+  const curIdx = run.currentStep || 0;
+  const cur = steps[curIdx] || {};
+  const runDone = !!run.completedAt || /완료/.test(run.status || '');
+  const inspecting = !!cur.submitted && !cur.approved;
+  const serviceName = run.serviceName || '정비';
+
+  /* 데이터 스텝(입고/작업/출고 등)을 표시 4단계로 분류 */
+  const groupOf = s => (s.name || '').includes('입고') ? 0 : (s.name || '').includes('출고') ? 3 : 1;
+  const groups = [[], [], [], []];
+  steps.forEach((s, i) => groups[groupOf(s)].push({ ...s, idx: i }));
+
+  const groupState = gi => {
+    if (runDone) return 'done';
+    const g = groups[gi];
+    if (gi === 2) return inspecting ? 'now' : 'wait';
+    if (!g.length) return 'wait';
+    if (g.every(s => s.approved)) return 'done';
+    if (g.some(s => s.idx === curIdx)) return gi === 2 ? 'now' : (inspecting ? 'done' : 'now');
+    return g[0].idx < curIdx ? 'done' : 'wait';
+  };
+
+  const STAGE_META = [
+    { label: '입고', icon: 'car', text: { done: '차량이 입고되었어요', now: '차량 입고 처리 중이에요', wait: '차량 입고를 기다리고 있어요' } },
+    { label: '작업', icon: 'wrench', text: { done: `${serviceName} 작업을 마쳤어요`, now: `지금 ${serviceName} 작업 중이에요`, wait: '작업 대기 중이에요' } },
+    { label: '검수', icon: 'search', text: { done: '검수를 마쳤어요', now: '작업 결과를 검수하고 있어요', wait: '검수 대기 중이에요' } },
+    { label: '확인', icon: 'flag', text: { done: '작업이 완료되었어요. 차량을 확인해주세요', now: '출고 준비 중이에요', wait: '출고 대기 중이에요' } }
+  ];
+  const STATE_LABEL = { done: '완료', now: '진행중', wait: '대기' };
+
+  const stageCards = await Promise.all(STAGE_META.map(async (meta, gi) => {
+    const state = groupState(gi);
+    const approvedKeys = groups[gi].filter(s => s.approved).flatMap(s => s.photoKeys || []);
+    const pendingCount = groups[gi].filter(s => s.submitted && !s.approved).flatMap(s => s.photoKeys || []).length;
+    const photos = (await Promise.all(approvedKeys.map(async k => ({ src: await assetSrc(k) })))).filter(p => p.src);
+    const photoHtml = photos.length
+      ? `<div class="run-photo-grid wd-photos">${photos.map(p => `<figure><img src="${esc(p.src)}" alt="${esc(meta.label)} 사진"></figure>`).join('')}</div>`
+      : pendingCount
+        ? `<p class="wd-hint">사진 ${pendingCount}장 검수 중 — 확인이 끝나면 공개돼요</p>`
+        : groups[gi].length ? '<p class="wd-hint">등록된 사진이 없어요</p>' : '';
+    return `
+    <article class="wd-stage ${state}">
+      <header>
+        <span class="wd-icon">${MYPAGE_ICONS[meta.icon]}</span>
+        <strong>${meta.label}</strong>
+        <em>${STATE_LABEL[state]}</em>
+      </header>
+      <p>${esc(meta.text[state])}</p>
+      ${photoHtml}
+    </article>`;
+  }));
+
+  openModal(`
+    <h3>작업현황</h3>
+    <p class="wd-service"><strong>${esc(serviceName)}</strong>${run.branch ? ` · ${esc(run.branch)}` : ''}</p>
+    <section class="work-detail">${stageCards.join('')}</section>
+    <div class="modal-actions"><button type="button" class="modal-submit" id="back-my-page">내예약</button></div>
+  `, true, false, openMyPageModal);
+  modalCard.classList.add('mypage-card');
+  myPageBackActions();
 }
 
 function openMyAlertsPage() {
@@ -872,7 +978,7 @@ function openMyAlertsPage() {
     <section class="mypage-section">
       <ul class="service-run-list alert-list">${notices.length ? notices.slice(-12).reverse().map(n => `<li><strong>${esc(new Date(n.createdAt).toLocaleString('ko-KR'))}</strong><span>${esc(n.message)}</span><button type="button" class="mini-btn delete-alert" data-id="${esc(n.id)}">알림삭제</button></li>`).join('') : '<li>새 알림이 없습니다.</li>'}</ul>
     </section>
-    <div class="modal-actions"><button type="button" class="modal-submit" id="back-my-page">마이페이지</button></div>
+    <div class="modal-actions"><button type="button" class="modal-submit" id="back-my-page">내예약</button></div>
   `, true, false, openMyPageModal);
   modalCard.classList.add('mypage-card');
   myPageBackActions();
@@ -888,34 +994,115 @@ function openMyInfoPage() {
   if (!member) return openMemberModal('login');
   openModal(`
     <h3>내 정보</h3>
-    <section class="mypage-section">
-      <div class="my-car-head">
-        <strong>${esc(member.name || '-')}</strong>
-        <span>${esc(member.phone || '-')}</span>
-        <em>${esc(member.car || '-')} · ${esc(member.model || '-')}</em>
-      </div>
-    </section>
-    <div class="modal-actions"><button type="button" class="modal-submit" id="back-my-page">마이페이지</button></div>
+    <form id="my-info-form" class="mypage-form">
+      <label>아이디<input type="text" value="${esc(member.id || '')}" disabled></label>
+      <label>이름<input type="text" id="mi-name" value="${esc(member.name || '')}" required></label>
+      <label>차량명<input type="text" id="mi-model" value="${esc(member.model || '')}" placeholder="예: BMW 520d M Sport"></label>
+      <label>차량번호<input type="text" id="mi-car" value="${esc(member.car || '')}" required placeholder="예: 12가3456"></label>
+      <label>핸드폰번호<input type="tel" id="mi-phone" value="${esc(member.phone || '')}" placeholder="예: 010-1234-5678"></label>
+      <label>이메일<input type="email" id="mi-email" value="${esc(member.email || '')}" placeholder="이메일 (선택)"></label>
+      <label>주소
+        <div class="address-field">
+          <input type="text" id="mi-address" value="${esc(member.address || '')}" placeholder="주소 (선택)">
+          <button type="button" id="mi-address-find">주소찾기</button>
+        </div>
+      </label>
+      <p class="form-error" id="mi-error"></p>
+      <p class="form-ok" id="mi-ok"></p>
+      <button type="submit" class="modal-submit">정보 저장</button>
+    </form>
+    <h4 class="mypage-sec-title">비밀번호 변경</h4>
+    <form id="my-pw-form" class="mypage-form">
+      <input type="password" id="pw-current" placeholder="현재 비밀번호" required autocomplete="current-password">
+      <input type="password" id="pw-new" placeholder="새 비밀번호" required autocomplete="new-password">
+      <input type="password" id="pw-new2" placeholder="새 비밀번호 확인" required autocomplete="new-password">
+      <p class="hint">비밀번호는 영어 또는 한글과 숫자를 포함해 8자 이상이어야 합니다.</p>
+      <p class="form-error" id="pw-error"></p>
+      <p class="form-ok" id="pw-ok"></p>
+      <button type="submit" class="modal-submit">비밀번호 변경</button>
+    </form>
+    <div class="modal-actions"><button type="button" class="modal-submit" id="back-my-page">내예약</button></div>
   `, true, false, openMyPageModal);
   modalCard.classList.add('mypage-card');
   myPageBackActions();
+  $('#mi-address-find').addEventListener('click', () => openAddressSearch($('#mi-address')));
+
+  const saveMemberEverywhere = () => {
+    const members = store.get('pm-members', []);
+    const idx = members.findIndex(m => m.id === member.id);
+    if (idx > -1) {
+      members[idx] = { ...members[idx], ...member };
+      store.set('pm-members', members);
+    }
+    store.set('pm-member', member);
+    if (store.get('pm-auto-login', false)) store.setLocal('pm-auto-member', member);
+  };
+
+  $('#my-info-form').addEventListener('submit', e => {
+    e.preventDefault();
+    const err = $('#mi-error'), ok = $('#mi-ok');
+    err.textContent = ''; ok.textContent = '';
+    const name = $('#mi-name').value.trim();
+    const model = $('#mi-model').value.trim();
+    const car = $('#mi-car').value.trim();
+    const phone = $('#mi-phone').value.trim();
+    const email = $('#mi-email').value.trim();
+    const address = $('#mi-address').value.trim();
+    if (!name || !car) { err.textContent = '이름과 차량번호는 필수입니다.'; return; }
+    const members = store.get('pm-members', []);
+    if (members.some(m => m.car === car && m.id !== member.id)) { err.textContent = '이미 등록된 차량번호입니다.'; return; }
+    member = { ...member, name, model, car, phone, email, address };
+    saveMemberEverywhere();
+    ok.textContent = '저장되었습니다.';
+  });
+
+  $('#my-pw-form').addEventListener('submit', e => {
+    e.preventDefault();
+    const err = $('#pw-error'), ok = $('#pw-ok');
+    err.textContent = ''; ok.textContent = '';
+    const current = $('#pw-current').value;
+    const next = $('#pw-new').value;
+    const next2 = $('#pw-new2').value;
+    if (current !== (member.password || '')) { err.textContent = '현재 비밀번호가 일치하지 않습니다.'; return; }
+    if (!validMemberPassword(next)) { err.textContent = '비밀번호는 영어 또는 한글과 숫자를 포함해 8자 이상이어야 합니다.'; return; }
+    if (next !== next2) { err.textContent = '새 비밀번호 확인이 일치하지 않습니다.'; return; }
+    if (next === current) { err.textContent = '현재 비밀번호와 다른 비밀번호를 입력해주세요.'; return; }
+    member = { ...member, password: next };
+    saveMemberEverywhere();
+    $('#pw-current').value = $('#pw-new').value = $('#pw-new2').value = '';
+    ok.textContent = '비밀번호가 변경되었습니다.';
+  });
 }
 
 function openMyBookingsPage() {
   if (!member) return openMemberModal('login');
-  const bookings = getBookings().filter(b => b.car === member.car || b.memberId === member.id);
-  const bookingRows = bookings.length ? bookings.map(b => `
-    <tr><td>${esc(b.date)} ${esc(b.time)}</td><td>${esc(b.branch)}</td><td>${esc((b.services || []).join(', ') || '서비스 미선택')}</td><td>${esc(b.memo || '-')}</td></tr>
+  const bookings = getBookings()
+    .filter(b => b.car === member.car || b.memberId === member.id)
+    .sort((a, b) => bookingTimestamp(b) - bookingTimestamp(a));
+  const canCancel = b => b.status !== '취소' && String(b.date || '') >= todayKey() && !runForBooking(b);
+  const bookingRows = bookings.length ? bookings.map((b, i) => `
+    <tr>
+      <td>${esc(b.date)} ${esc(b.time)}</td>
+      <td>${esc(b.branch)}</td>
+      <td>${esc((b.services || []).join(', ') || '서비스 미선택')}</td>
+      <td>${canCancel(b) ? `<button type="button" class="mini-btn danger cancel-booking" data-i="${i}">예약취소</button>` : esc(b.status || '-')}</td>
+    </tr>
   `).join('') : '<tr><td colspan="4">예약 기록이 없습니다.</td></tr>';
   openModal(`
     <h3>예약 내역</h3>
     <section class="mypage-section">
-      <table class="rec-table"><thead><tr><th>일시</th><th>지점</th><th>서비스</th><th>메모</th></tr></thead><tbody>${bookingRows}</tbody></table>
+      <table class="rec-table"><thead><tr><th>일시</th><th>지점</th><th>서비스</th><th>상태</th></tr></thead><tbody>${bookingRows}</tbody></table>
     </section>
-    <div class="modal-actions"><button type="button" class="modal-submit" id="back-my-page">마이페이지</button></div>
+    <div class="modal-actions"><button type="button" class="modal-submit" id="back-my-page">내예약</button></div>
   `, true, false, openMyPageModal);
   modalCard.classList.add('mypage-card');
   myPageBackActions();
+  modalCard.querySelectorAll('.cancel-booking').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const booking = bookings[Number(btn.dataset.i)];
+      if (cancelMemberBooking(booking)) openMyBookingsPage();
+    });
+  });
 }
 
 async function openCustomerHistoryModal() {
@@ -948,7 +1135,7 @@ async function openCustomerHistoryModal() {
       <h4>결제 / 서비스 기록</h4>
       <table class="rec-table"><thead><tr><th>날짜</th><th>서비스</th><th>금액</th><th>정산</th></tr></thead><tbody>${recordRows}</tbody></table>
     </section>
-    <div class="modal-actions"><button type="button" class="modal-submit" id="back-my-page">마이페이지로</button></div>
+    <div class="modal-actions"><button type="button" class="modal-submit" id="back-my-page">내예약으로</button></div>
   `, true, false, openMyPageModal);
   $('#back-my-page').addEventListener('click', openMyPageModal);
 }
@@ -961,7 +1148,7 @@ async function openRunPhotosModal(runId) {
     <h3>작업사진</h3>
     <div class="run-photo-grid">${items.filter(p => p.src).map(p => `<figure><img src="${p.src}" alt="${esc(p.name)}"><figcaption>${esc(p.name)}</figcaption></figure>`).join('') || '<p class="hint">작업사진이 없습니다.</p>'}</div>
     <div class="modal-actions">
-      <button type="button" class="modal-submit" id="back-my-page">마이페이지로</button>
+      <button type="button" class="modal-submit" id="back-my-page">내예약으로</button>
     </div>
   `, true, false, openMyPageModal);
   $('#back-my-page').addEventListener('click', openMyPageModal);
@@ -1043,7 +1230,7 @@ function openCustomerCenterModal(customer = member) {
       <textarea id="message-body" rows="1" placeholder="메시지를 입력하세요" required></textarea>
       <button type="submit" class="chat-send">전송</button>
     </form>
-    ${isAdmin ? '' : '<button type="button" class="chat-back" id="back-from-chat">‹ 마이페이지로</button>'}
+    ${isAdmin ? '' : '<button type="button" class="chat-back" id="back-from-chat">‹ 내예약으로</button>'}
   `, true, false, isAdmin ? null : openMyPageModal);
   modalCard.classList.add('mypage-card');
   updateChatList(true);
@@ -1217,6 +1404,11 @@ async function createImageCarousel(keys = [], alt = '', className = '', branch =
     const img = document.createElement('img');
     img.src = url;
     img.alt = alt;
+    img.addEventListener('load', () => {
+      if (url === valid[0] && img.naturalWidth && img.naturalHeight) {
+        media.style.aspectRatio = `${img.naturalWidth} / ${img.naturalHeight}`;
+      }
+    }, { once: true });
     img.addEventListener('click', e => {
       e.stopPropagation();
       if (branch) openBranchPhotoModal(branch, url);
@@ -2018,7 +2210,21 @@ function openReserveFlow() {
     String(b.date || '') >= todayKey()
   );
   if (activeBooking) {
-    alert(`${activeBooking.date} ${activeBooking.time} 예약된 날짜가 있습니다. 취소 후 신청해주세요.`);
+    const cancellable = !runForBooking(activeBooking);
+    openModal(`
+      <h3>정비예약</h3>
+      <p class="confirm-copy">이미 예약이 있습니다.<br>
+        <strong>${esc(activeBooking.date)} ${esc(activeBooking.time)} · ${esc(activeBooking.branch)}</strong><br>
+        ${esc((activeBooking.services || []).join(', ') || '')}</p>
+      <p class="cal-msg">${cancellable ? '예약을 취소하면 새 예약을 진행할 수 있습니다.' : '이미 작업이 시작되어 취소할 수 없습니다. 지점으로 문의해주세요.'}</p>
+      <div class="modal-actions">
+        ${cancellable ? '<button type="button" class="modal-submit danger" id="cancel-active-booking">예약 취소</button>' : ''}
+        <button type="button" class="modal-cancel" onclick="closeModal()">닫기</button>
+      </div>
+    `);
+    $('#cancel-active-booking')?.addEventListener('click', () => {
+      if (cancelMemberBooking(activeBooking)) openBranchSelect();
+    });
     return;
   }
   openBranchSelect();
@@ -2146,11 +2352,7 @@ function renderSlots(branchBookings) {
       el.classList.add('mine');
       el.title = '내 예약 - 누르면 취소';
       el.addEventListener('click', () => {
-        if (!confirm(t + ' 예약을 취소할까요?')) return;
-        const arr = getBookings();
-        const idx = arr.findIndex(b => b.branch === cal.branch && b.date === cal.selDate && b.time === t && b.car === member.car);
-        if (idx > -1) { arr.splice(idx, 1); store.set('pm-bookings', arr); }
-        renderCalendar('예약이 취소되었습니다.');
+        if (cancelMemberBooking(taken)) renderCalendar('예약이 취소되었습니다.');
       });
     } else if (taken) {
       el.disabled = true; /* 해당 시간만 차단 - 다른 시간은 예약 가능 */
@@ -2172,7 +2374,10 @@ function renderServiceStep() {
   openModal(`
     <h3>어떤 서비스가 필요하세요?</h3>
     <p class="cal-msg">${cal.branch} · ${cal.selDate} ${cal.selTime} · ${member.car}</p>
-    <input type="number" id="svc-mileage" min="0" placeholder="현재 주행거리(km)" required>
+    <div class="svc-mileage-field">
+      <label for="svc-mileage">현재 주행거리</label>
+      <input type="number" id="svc-mileage" min="0" placeholder="현재 주행거리(km)" required>
+    </div>
     <div class="svc-list" id="svc-list"></div>
     <textarea id="svc-memo" rows="3" placeholder="요청사항 메모 (기타 선택 시 내용을 적어주세요)"></textarea>
     <div class="modal-actions">
