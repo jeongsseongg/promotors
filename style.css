@@ -1378,7 +1378,7 @@ body:not(.main-admin) .main-admin-only { display: none !important; }
 .mypage-car-text {
   position: relative;
   z-index: 2;
-  max-width: calc(100% - 120px);
+  max-width: 100%;
 }
 .mypage-car-text strong {
   display: block;
@@ -2946,16 +2946,6 @@ button.step-photo-slot {
 .profile-text span { color: #8a94a0; font-size: 13px; font-weight: 700; }
 .mypage-profile b { color: #b7c0ca; font-size: 24px; line-height: 1; }
 
-.car-art {
-  position: absolute;
-  right: 18px;
-  bottom: 14px;
-  width: min(140px, 38%);
-  height: auto;
-  z-index: 1;
-  filter: drop-shadow(0 8px 14px rgba(13,42,102,.4));
-}
-
 .mypage-quick {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
@@ -3246,3 +3236,38 @@ button.step-photo-slot {
 .wd-empty-icon svg { width: 26px; height: 26px; }
 .wd-empty p { color: #111827; font-size: 16px; font-weight: 900; margin: 0; }
 .wd-empty span { color: #8a94a0; font-size: 13px; font-weight: 700; line-height: 1.6; }
+
+/* ===== 데스크톱: 세로가 짧은/넓은 창에서도 잘리지 않게 vh 상한 적용 ===== */
+/* (821px 이하 높이는 기존 축소 규칙이 담당 — 여기는 그보다 큰 창 대상) */
+@media (min-width: 901px) and (min-height: 821px) {
+  .logo img { width: min(505px, 100%, 58vh); }
+  .title { font-size: min(clamp(72px, 6.5vw, 125px), 11.5vh); }
+  .desc { font-size: min(clamp(18px, 1.45vw, 28px), 2.7vh); }
+  .btn-reserve {
+    font-size: min(clamp(22px, 1.875vw, 36px), 3.4vh);
+    padding: clamp(14px, 2.4vh, 30px) clamp(28px, 2.3vw, 44px);
+  }
+  .brands {
+    margin-top: clamp(14px, 3.4vh, 1.5cm);
+    margin-bottom: clamp(10px, 2.6vh, 2cm);
+    max-width: min(560px, 100%, 58vh);
+  }
+  .intro h2 { font-size: min(clamp(44px, 3.75vw, 72px), 7vh); }
+  .intro-sub { font-size: min(clamp(18px, 1.45vw, 28px), 2.6vh); }
+  .nav-row { margin-bottom: clamp(18px, 3.4vh, 1.5cm); }
+  .shop-photo { min-height: 0; }
+  body[data-view="intro"] .view.active { padding-bottom: 10px; }
+}
+
+/* ===== 모바일: 첫 화면은 정비예약 히어로만, 아래는 스크롤해야 보이게 ===== */
+@media (max-width: 900px) {
+  .left-panel {
+    min-height: 100vh;
+    min-height: 100svh;
+    justify-content: flex-start;
+  }
+  .left-panel .scroll-cue { margin-top: auto; margin-bottom: 6px; }
+  /* 카테고리와 본문 사이 여백 축소 (약 10pt) */
+  .right-panel { gap: 0; }
+  .nav-row { margin-bottom: 13px; }
+}

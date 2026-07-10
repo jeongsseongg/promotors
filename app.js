@@ -778,8 +778,7 @@ const MYPAGE_ICONS = {
   check: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6L9 17l-5-5"/></svg>',
   search: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.35-4.35"/></svg>',
   flag: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M8.5 12.2l2.4 2.4 4.6-4.8"/></svg>',
-  car: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 11l1.5-4.5A2 2 0 0 1 8.4 5h7.2a2 2 0 0 1 1.9 1.5L19 11"/><path d="M3 17v-4a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v4"/><circle cx="7.5" cy="16.5" r="1.5"/><circle cx="16.5" cy="16.5" r="1.5"/></svg>',
-  carArt: '<svg class="car-art" viewBox="0 0 140 60" aria-hidden="true"><path d="M10 40c0-7 5-11 14-12l10-9c3-2 6-3 10-3h26c7 0 13 3 17 7l5 5c9 1 16 4 16 11v7h-10a9 9 0 0 1-18 0H48a9 9 0 0 1-18 0H10v-6z" fill="rgba(255,255,255,.92)"/><circle cx="39" cy="46" r="6" fill="rgba(13,42,102,.85)"/><circle cx="101" cy="46" r="6" fill="rgba(13,42,102,.85)"/></svg>'
+  car: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 11l1.5-4.5A2 2 0 0 1 8.4 5h7.2a2 2 0 0 1 1.9 1.5L19 11"/><path d="M3 17v-4a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v4"/><circle cx="7.5" cy="16.5" r="1.5"/><circle cx="16.5" cy="16.5" r="1.5"/></svg>'
 };
 const WORK_STAGES = [
   { label: '접수완료', icon: 'check' },
@@ -836,7 +835,6 @@ async function openMyPageModal() {
         <strong>${esc(member.model || '차량 정보를 등록해주세요')}</strong>
         <span>${esc(carMeta || '-')}</span>
       </div>
-      ${MYPAGE_ICONS.carArt}
     </section>
     <nav class="mypage-quick" aria-label="내예약 바로가기">
       <button type="button" id="quick-work"><span class="quick-icon">${MYPAGE_ICONS.wrench}</span><strong>작업현황</strong></button>
