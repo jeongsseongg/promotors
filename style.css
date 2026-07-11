@@ -1667,20 +1667,23 @@ body:not(.main-admin) .main-admin-only { display: none !important; }
   overflow: hidden;
 }
 .cust-card.open { border-color: #c9d2dd; box-shadow: 0 10px 24px rgba(15, 23, 42, .08); }
-.cust-search {
+/* 메모 검색(날짜·내용) + 접기펴기 버튼: 저장된 메모 상단에 배치 */
+.memo-tools {
   display: grid;
-  grid-template-columns: 180px minmax(0, 1fr);
+  grid-template-columns: 150px minmax(0, 1fr) auto;
   gap: 8px;
-  margin-bottom: 14px;
+  align-items: center;
+  margin-bottom: 8px;
 }
-.cust-search input {
+.memo-tools input {
   font-family: inherit;
-  font-size: 14px;
-  padding: 10px 12px;
+  font-size: 13px;
+  padding: 8px 10px;
   border: 1px solid #d6dbe1;
   border-radius: 8px;
   background: #fff;
 }
+.memo-tools .fold-toggle { margin: 0; justify-self: end; }
 .cust-summary {
   width: 100%;
   display: grid;
@@ -1921,9 +1924,14 @@ body:not(.main-admin) .main-admin-only { display: none !important; }
   padding: 8px 10px;
   border: 1px solid #d6dbe1;
   border-radius: 6px;
+  min-width: 0;
 }
-.rec-form .rec-svc { flex: 1; min-width: 160px; }
-.rec-form .rec-amt { width: 110px; }
+.rec-form .rec-date { width: 140px; }
+.rec-form .rec-svc { flex: 1 1 110px; min-width: 110px; }
+.rec-form .rec-note { flex: 1 1 110px; min-width: 110px; }
+.rec-form .rec-amt { width: 96px; }
+/* 추가 버튼은 항상 줄의 오른쪽 끝에 */
+.rec-form .rec-add { margin-left: auto; }
 .rec-paid-label { font-size: 13px; color: #555f6b; display: flex; gap: 4px; align-items: center; }
 
 /* 상품관리 */
@@ -2900,7 +2908,8 @@ button.step-photo-slot {
   .sub-admin-list time {
     grid-column: 2 / -1;
   }
-  .cust-search { grid-template-columns: 1fr; }
+  .memo-tools { grid-template-columns: 130px minmax(0, 1fr); }
+  .memo-tools .fold-toggle { grid-column: 1 / -1; }
   .cust-summary {
     grid-template-columns: 1fr;
     gap: 5px;
@@ -3537,7 +3546,7 @@ button.step-photo-slot {
 .audit-list em { font-style: normal; font-size: 12px; color: #8a94a0; }
 
 /* ===== 고객관리: 메모 폼(제목/금액/내용) · 접기/펴기 · 작업 내역 연동 ===== */
-.memo-form { display: grid; gap: 8px; }
+.memo-form { display: grid; gap: 8px; margin-top: 4px; }
 .memo-form-row { display: grid; grid-template-columns: 1fr 220px; gap: 8px; }
 .memo-form input,
 .memo-form textarea {
@@ -3550,11 +3559,115 @@ button.step-photo-slot {
   color: #2b2f33;
 }
 .memo-form textarea { resize: vertical; min-height: 64px; }
-.memo-form-foot { display: flex; justify-content: flex-end; }
-.memo-entry strong { display: block; color: var(--navy); font-size: 15px; margin-top: 2px; }
-.memo-entry em { font-style: normal; color: #a07400; font-weight: 800; font-size: 14px; margin-left: 6px; }
+/* 내용 포스트잇 오른쪽에 저장 버튼 (정비내역 추가처럼) */
+.memo-form-main { display: flex; gap: 8px; align-items: stretch; }
+.memo-form-main textarea { flex: 1; min-width: 0; }
+.memo-form-side { display: grid; gap: 6px; align-content: start; }
+.memo-form-side .mini-btn { white-space: nowrap; }
+
+/* 메모 항목: 제목/금액/내용 구분 표기 + 수정/삭제 */
+.memo-entry-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.memo-entry-head time { margin-bottom: 0; }
+.memo-entry-head time i { font-style: normal; color: #b0a25e; font-weight: 700; }
+.memo-entry-actions { display: flex; gap: 4px; }
+.memo-entry-actions button {
+  border: 1px solid #e3d489;
+  background: #fff;
+  border-radius: 6px;
+  padding: 3px 9px;
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  color: #8a6a00;
+  cursor: pointer;
+}
+.memo-entry-actions button:hover { border-color: #a07400; }
+.memo-entry-actions .memo-del:hover { border-color: var(--red); color: var(--red); }
+.memo-line { display: flex; gap: 8px; align-items: baseline; margin: 3px 0 0; }
+.memo-line .memo-label {
+  flex: 0 0 auto;
+  font-size: 11px;
+  font-weight: 800;
+  color: #a08a2e;
+  background: #fdf3d7;
+  border-radius: 4px;
+  padding: 2px 6px;
+}
+.memo-line strong { color: var(--navy); font-size: 15px; }
+.memo-line em { font-style: normal; color: #a07400; font-weight: 800; font-size: 14px; }
+.memo-line .memo-text {
+  color: #2b2f33;
+  font-size: 14px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+}
 .fold-rest { display: grid; gap: 8px; }
-.fold-toggle { justify-self: start; margin-top: 6px; }
+/* display:grid가 hidden 속성을 덮어써 접기가 동작하지 않던 문제 방지 */
+.fold-rest[hidden] { display: none; }
+
+/* 접기/펴기: 작은 글씨 + 화살표, 오른쪽 끝 배치 */
+.fold-toggle {
+  display: block;
+  margin: 6px 0 0 auto;
+  justify-self: end;
+  border: none;
+  background: none;
+  padding: 4px 2px;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 800;
+  color: #6b7684;
+  cursor: pointer;
+}
+.fold-toggle:hover { color: var(--navy); text-decoration: underline; }
+
+/* 고객 차단/삭제: 카드 제일 하단 */
+.cust-danger {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px dashed #e2e6ea;
+}
+.cust-danger-note { margin-right: auto; font-size: 12px; color: #8a94a0; }
+.mini-btn.danger { color: #c0392b; border-color: #ecc8c3; }
+
+/* 보안: 차단·삭제 회원 목록 */
+.banned-list { display: grid; gap: 8px; list-style: none; }
+.banned-list li {
+  display: grid;
+  grid-template-columns: auto auto 1fr auto;
+  gap: 6px 10px;
+  align-items: center;
+  padding: 10px 12px;
+  border: 1px solid #e9edf2;
+  border-radius: 10px;
+  background: #fff;
+}
+.banned-list li.empty { display: block; color: #8a94a0; }
+.banned-list strong { color: var(--navy); }
+.banned-list span { font-size: 13px; color: #555f6b; }
+.banned-list time { font-size: 12px; color: #8a94a0; grid-column: 2 / -2; }
+.banned-list .ban-actions { display: flex; gap: 6px; grid-column: -2 / -1; grid-row: 1 / 3; }
+.ban-chip {
+  font-style: normal;
+  font-size: 11px;
+  font-weight: 800;
+  padding: 3px 10px;
+  border-radius: 999px;
+  grid-row: 1 / 3;
+}
+.ban-chip.blocked { background: #fdecea; color: #c0392b; }
+.ban-chip.deleted { background: #f0f2f5; color: #6b7684; }
 
 .cust-sec-title { margin: 14px 0 8px; color: var(--navy); font-weight: 900; }
 .cust-sec-title span { color: #8a94a0; font-size: 12px; font-weight: 700; margin-left: 6px; }
@@ -3589,4 +3702,64 @@ button.step-photo-slot {
   .memo-form-row { grid-template-columns: 1fr; }
   .cust-run-row { grid-template-columns: 1fr auto; }
   .cust-run-row time { grid-column: 1 / -1; }
+}
+
+/* ============================================================
+   모바일 하단 탭바: 소개 · 매장안내 · 정비사례 · 게시판 · 마이
+   ============================================================ */
+.mobile-tabbar { display: none; }
+@media (max-width: 900px) {
+  .mobile-tabbar {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 120;
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    background: #fff;
+    border-top: 1px solid #e5e8ec;
+    padding: 6px 4px calc(6px + env(safe-area-inset-bottom));
+    box-shadow: 0 -6px 18px rgba(15, 23, 42, .08);
+  }
+  .mobile-tabbar button {
+    display: grid;
+    justify-items: center;
+    gap: 3px;
+    padding: 4px 0 2px;
+    border: none;
+    background: none;
+    font-family: inherit;
+    font-size: 11px;
+    font-weight: 700;
+    color: #8a94a0;
+    cursor: pointer;
+  }
+  .mobile-tabbar button svg { width: 22px; height: 22px; }
+  .mobile-tabbar button.active { color: var(--blue); }
+  /* 탭바에 내용이 가리지 않도록 하단 여백 확보 */
+  .right-panel { padding-bottom: calc(96px + env(safe-area-inset-bottom)); }
+  .left-panel { padding-bottom: calc(80px + env(safe-area-inset-bottom)); }
+
+  /* 마이(내예약/설정)와 로그인·회원가입은 팝업이 아닌 전체화면 페이지로 */
+  .modal-card.mypage-card,
+  .modal-card.mobile-full {
+    position: fixed;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    max-height: none;
+    border-radius: 0;
+    padding: 20px 16px calc(80px + env(safe-area-inset-bottom));
+  }
+  /* 일반 모달도 탭바에 가리지 않게 살짝 위로 */
+  .modal-backdrop { padding-bottom: calc(70px + env(safe-area-inset-bottom)); }
+  .modal-backdrop:has(.mypage-card), .modal-backdrop:has(.mobile-full) { padding: 0; }
+}
+
+/* 관리자 설정(마이) 페이지: 내예약과 같은 구성 */
+.mypage-account-card .admin-profile { cursor: default; }
+.admin-settings-quick { grid-template-columns: repeat(4, 1fr); }
+@media (max-width: 520px) {
+  .admin-settings-quick { grid-template-columns: repeat(3, 1fr); }
 }
