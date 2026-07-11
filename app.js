@@ -6,10 +6,12 @@
 const $ = s => document.querySelector(s);
 const $$ = s => [...document.querySelectorAll(s)];
 
+const locallyModifiedKeys = new Set();
 const store = {
   get(k, d) { try { return JSON.parse(localStorage.getItem(k)) ?? d; } catch { return d; } },
   set(k, v) {
     localStorage.setItem(k, JSON.stringify(v));
+    locallyModifiedKeys.add(k);
     if (k !== 'pm-logs') syncSupabaseData(k, v);
   },
   setLocal(k, v) { localStorage.setItem(k, JSON.stringify(v)); },
@@ -289,7 +291,8 @@ async function hydrateSupabaseData() {
     if (!res.ok) throw new Error(`Supabase ${res.status}`);
     const rows = await res.json();
     isHydratingSupabase = true;
-    rows.forEach(row => store.setLocal(row.data_key, row.payload));
+    /* 원격 데이터를 백그라운드로 받는 동안 사용자가 수정한 키는 덮어쓰지 않는다 */
+    rows.forEach(row => { if (!locallyModifiedKeys.has(row.data_key)) store.setLocal(row.data_key, row.payload); });
     isHydratingSupabase = false;
     return { ok: true, count: rows.length };
   } catch (err) {
@@ -372,7 +375,12 @@ const getBlogSettings = () => {
 const getSubAdmin = () => normalizeSubAdmin(store.get('pm-sub-admin', { password: '', accounts: [] }));
 const getMainAdmin = () => store.get('pm-main-admin', { password: ADMIN_PW });
 const getSecuritySettings = () => store.get('pm-security-settings', { password: 'tmdgus123' });
-const getHomeView = () => store.get('pm-home-view', 'intro');
+const getHomeView = () => {
+  const saved = store.get('pm-home-view', null);
+  /* 구버전(문자열) 설정은 무시한다 — 첫 화면은 항상 프로모터스 소개가 기본 */
+  if (saved && typeof saved === 'object' && saved.view) return saved.view;
+  return 'intro';
+};
 const today = () => new Date().toLocaleDateString('ko-KR').replace(/\. /g, '.').replace(/\.$/, '');
 const todayKey = () => {
   const now = new Date();
@@ -442,6 +450,7 @@ const BRANDS = ['전체','Mercedes-Benz','BMW','Audi','Volkswagen','Ferrari','La
 let selectedCaseBrand = '전체';
 let selectedBranchIndex = 0;
 let introSlideIndex = 0;
+let introDataReady = false; /* 원격 데이터 확인 전에는 "이미지 없음" 안내를 띄우지 않는다 */
 let introTimer = null;
 let introLastActivity = Date.now();
 let chatTimer = null;
@@ -566,7 +575,7 @@ function openHomeViewConfirm(view, label) {
     </div>
   `);
   $('#confirm-home-view').addEventListener('click', () => {
-    store.set('pm-home-view', view);
+    store.set('pm-home-view', { view, setAt: new Date().toISOString() });
     closeModal();
     showView(view);
     renderAdmSettings();
@@ -1377,12 +1386,14 @@ async function renderBranches() {
   preview.innerHTML = '';
   if (!branches[selectedBranchIndex]) selectedBranchIndex = 0;
 
+  const mediaBoxes = [];
   for (const [i, b] of branches.entries()) {
     const card = document.createElement('article');
     card.className = 'branch branch-large' + (i === selectedBranchIndex ? ' focus' : '');
     card.id = 'branch-' + i;
     const branchImageKeys = b.imageKeys?.length ? b.imageKeys : (b.imageKey ? [b.imageKey] : []);
     const media = await createImageCarousel(branchImageKeys, b.name, 'branch-large-media', b);
+    mediaBoxes.push({ media, key: branchImageKeys[0] || '' });
     card.append(media);
 
     const h3 = document.createElement('h3'); h3.textContent = b.name;
@@ -1437,6 +1448,28 @@ async function renderBranches() {
     });
     dd.append(btn);
   });
+
+  applyUniformBranchMediaRatio(mediaBoxes);
+}
+
+/* 모든 지점 카드의 이미지 영역을 같은 비율(가장 세로가 긴 이미지 기준)로 맞춘다.
+   지점을 새로 만들어도 자동으로 같은 규격이 적용된다. */
+async function applyUniformBranchMediaRatio(items) {
+  const ratios = [];
+  for (const { key } of items) {
+    const url = key ? await assetSrc(key) : '';
+    if (!url) continue;
+    const ratio = await new Promise(resolve => {
+      const probe = new Image();
+      probe.onload = () => resolve(probe.naturalHeight ? probe.naturalWidth / probe.naturalHeight : 0);
+      probe.onerror = () => resolve(0);
+      probe.src = url;
+    });
+    if (ratio > 0) ratios.push(ratio);
+  }
+  if (!ratios.length) return;
+  const uniform = Math.min(...ratios);
+  items.forEach(({ media }) => { media.style.aspectRatio = String(uniform); });
 }
 
 async function createImageCarousel(keys = [], alt = '', className = '', branch = null) {
@@ -1455,11 +1488,6 @@ async function createImageCarousel(keys = [], alt = '', className = '', branch =
     const img = document.createElement('img');
     img.src = url;
     img.alt = alt;
-    img.addEventListener('load', () => {
-      if (url === valid[0] && img.naturalWidth && img.naturalHeight) {
-        media.style.aspectRatio = `${img.naturalWidth} / ${img.naturalHeight}`;
-      }
-    }, { once: true });
     img.addEventListener('click', e => {
       e.stopPropagation();
       if (branch) openBranchPhotoModal(branch, url);
@@ -2156,7 +2184,7 @@ async function renderIntroSlides() {
   clearInterval(introTimer);
   frame.innerHTML = '';
   dots.innerHTML = '';
-  photo.classList.toggle('no-img', !slides.length);
+  photo.classList.toggle('no-img', !slides.length && introDataReady);
   photo.classList.toggle('has-multiple', slides.length > 1);
   introSlideIndex = Math.max(0, Math.min(introSlideIndex, slides.length - 1));
 
@@ -4360,8 +4388,8 @@ fitStage();
 document.body.dataset.view = document.querySelector('.view.active')?.id.replace('view-', '') || 'intro';
 
 async function startApp() {
-  await hydrateSupabaseData();
-  await migrateLocalAssetsToSupabase();
+  /* 로컬 캐시로 즉시 화면을 그리고, 원격 데이터는 백그라운드에서 갱신한다.
+     첫 진입 화면이 나왔다가 다른 화면으로 튀는 현상을 막는다. */
   wireNav();
   initMobileTabbar();
   initShopImage();
@@ -4381,9 +4409,16 @@ async function startApp() {
   });
   initRealtimeChat();
   applyAuthUI();
-  const initialView = window.matchMedia('(max-width: 900px)').matches ? 'cases' : getHomeView();
+  const initialView = getHomeView();
   showView(initialView);
   if (initialView === 'cases') activateTab('tab-blog');
+
+  /* 원격 데이터 수신 후 화면 전환 없이 내용만 다시 그린다 */
+  await hydrateSupabaseData();
+  introDataReady = true;
+  await migrateLocalAssetsToSupabase();
+  applyAuthUI();
+  renderIntroSlides();
 }
 
 startApp();
