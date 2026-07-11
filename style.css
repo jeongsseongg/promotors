@@ -3851,12 +3851,63 @@ button.step-photo-slot {
 .mini-btn { white-space: nowrap; writing-mode: horizontal-tb; }
 .settings-card .field-help { margin: 10px 0 4px; }
 .settings-form { row-gap: 10px; }
+.sub-admin-actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+/* 담당 지점 복수 선택 체크칩 */
+.branch-check-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 12px 0 4px;
+}
+.branch-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 42px;
+  padding: 8px 14px;
+  border: 1px solid #d6dbe1;
+  border-radius: 999px;
+  background: #fff;
+  color: #444d57;
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
+  word-break: keep-all;
+}
+.branch-check:has(input:checked) {
+  border-color: var(--navy);
+  background: #eef2ff;
+  color: var(--navy);
+}
+/* 작업 기록 요약 행: 누르면 상세 팝업 */
+.audit-summary {
+  display: grid;
+  gap: 3px;
+  width: 100%;
+  padding: 0;
+  border: none;
+  background: none;
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.audit-summary time { color: #8a94a0; font-size: 12px; font-weight: 800; }
+.audit-summary strong { color: var(--navy); font-size: 14px; }
+.audit-summary span { color: #555f6b; font-size: 13px; }
+.audit-summary em { color: #8a94a0; font-size: 12px; font-style: normal; font-weight: 700; }
+.audit-summary em b { color: var(--blue); font-weight: 900; }
 @media (max-width: 900px) {
-  .sub-admin-list li .sub-admin-delete {
+  .sub-admin-list li .sub-admin-actions {
     grid-column: 2 / -1;
     justify-self: start;
+  }
+  .sub-admin-actions .mini-btn {
     min-height: 40px;
-    padding: 8px 18px;
+    padding: 8px 16px;
   }
   .settings-form input,
   .settings-form select { min-width: 0; flex: 1 1 100%; }
@@ -3886,47 +3937,61 @@ button.step-photo-slot {
 .event-track::-webkit-scrollbar { display: none; }
 .event-slide {
   scroll-snap-align: start;
-  min-height: 132px;
+  min-height: 148px;
   display: grid;
 }
-.event-slide img { width: 100%; height: 132px; object-fit: cover; display: block; }
+.event-slide img { width: 100%; height: 148px; object-fit: cover; display: block; }
+/* 앱 설치 슬라이드: 마이/설정 카드와 같은 블루 그라데이션 배너 */
 .event-slide.install-slide {
   grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
-  gap: 14px;
-  padding: 18px 20px;
-  background: linear-gradient(135deg, #10163f 0%, var(--navy) 60%, #2a317e 100%);
+  gap: 16px;
+  padding: 14px 18px;
+  background:
+    radial-gradient(circle at 85% 0%, rgba(255,255,255,.2), transparent 45%),
+    linear-gradient(135deg, var(--blue) 0%, var(--blue-dark) 100%);
   color: #fff;
   cursor: pointer;
 }
 .event-slide .event-logo {
-  width: 64px;
-  height: 64px;
-  border-radius: 14px;
+  width: 96px;
+  height: 96px;
+  border-radius: 22px;
   object-fit: cover;
   background: #fff;
+  box-shadow: 0 8px 20px rgba(9, 24, 60, .35);
 }
-.event-slide .event-copy { display: grid; gap: 4px; min-width: 0; }
+.event-slide .event-copy { display: grid; gap: 6px; min-width: 0; }
 .event-slide .event-copy strong {
-  font-size: 16px;
-  letter-spacing: .14em;
+  font-size: 21px;
+  letter-spacing: .12em;
   color: #fff;
+  white-space: nowrap;
 }
 .event-slide .event-copy span {
-  color: #c9d2ff;
-  font-size: 13px;
-  font-weight: 700;
+  color: #dbe7ff;
+  font-size: 14px;
+  font-weight: 800;
   word-break: keep-all;
 }
+/* 설치 버튼: 노란 원형 배지로 눈에 띄게 */
 .event-install-mark {
   display: grid;
   justify-items: center;
-  gap: 2px;
+  gap: 5px;
   color: var(--yellow);
   font-weight: 900;
 }
-.event-install-mark svg { width: 22px; height: 22px; }
-.event-install-mark em { font-style: normal; font-size: 12px; }
+.event-install-mark svg {
+  width: 54px;
+  height: 54px;
+  padding: 13px;
+  border-radius: 50%;
+  background: var(--yellow);
+  color: #10254d;
+  box-shadow: 0 6px 16px rgba(9, 24, 60, .35);
+}
+.event-install-mark em { font-style: normal; font-size: 13px; }
 .event-dots {
   position: absolute;
   left: 0;

@@ -310,7 +310,13 @@ const DEFAULT_STEP_NAMES = ['입고', '작업', '출고'];
 /* ---------- 상태 ---------- */
 let isAdmin = sessionStorage.getItem('pm-admin') === '1';
 let adminRole = sessionStorage.getItem('pm-admin-role') || '';
-let adminBranch = sessionStorage.getItem('pm-admin-branch') || '';
+let adminBranches = (() => {
+  try { return JSON.parse(sessionStorage.getItem('pm-admin-branches')) || []; } catch { return []; }
+})();
+/* 구버전 단일 지점 세션 호환 */
+if (!adminBranches.length && sessionStorage.getItem('pm-admin-branch')) {
+  adminBranches = [sessionStorage.getItem('pm-admin-branch')];
+}
 if (isAdmin && !adminRole) {
   adminRole = 'main';
   sessionStorage.setItem('pm-admin-role', 'main');
@@ -391,8 +397,9 @@ const todayKey = () => {
 };
 const isMainAdmin = () => isAdmin && adminRole === 'main';
 const isGeneralAdmin = () => isAdmin && adminRole === 'general';
-const currentAdminBranches = () => isGeneralAdmin() && adminBranch ? getBranches().filter(b => b.name === adminBranch) : getBranches();
-const canAccessBranch = branch => isMainAdmin() || !adminBranch || branch === adminBranch;
+const currentAdminBranches = () => isGeneralAdmin() && adminBranches.length ? getBranches().filter(b => adminBranches.includes(b.name)) : getBranches();
+const canAccessBranch = branch => isMainAdmin() || !adminBranches.length || adminBranches.includes(branch);
+const adminBranchLabel = () => adminBranches.length ? `${adminBranches.join(' · ')} 관리자` : '';
 const canUseAdminView = name => {
   if (!isAdmin) return false;
   if (isMainAdmin()) return true;
@@ -435,17 +442,21 @@ function normalizeProducts(products) {
 function normalizeSubAdmin(value) {
   const raw = value || {};
   const accounts = Array.isArray(raw.accounts) ? raw.accounts : [];
+  /* 지점은 복수 선택 가능 — 구버전 단일 branch 문자열도 배열로 변환 */
+  const toBranches = account => Array.isArray(account.branches)
+    ? account.branches.map(b => String(b).trim()).filter(Boolean)
+    : String(account.branch || '').trim() ? [String(account.branch).trim()] : [];
   const normalized = accounts
     .map((account, i) => ({
       id: account.id || `sub-${i}-${String(account.password || '').slice(0, 4)}`,
       password: String(account.password || '').trim(),
-      branch: String(account.branch || '').trim(),
+      branches: toBranches(account),
       createdAt: account.createdAt || ''
     }))
     .filter(account => account.password);
   const legacy = String(raw.password || '').trim();
   if (legacy && !normalized.some(account => account.password === legacy)) {
-    normalized.unshift({ id: 'sub-legacy', password: legacy, branch: raw.branch || '', createdAt: raw.createdAt || '' });
+    normalized.unshift({ id: 'sub-legacy', password: legacy, branches: toBranches(raw), createdAt: raw.createdAt || '' });
   }
   return { password: legacy, accounts: normalized };
 }
@@ -641,7 +652,7 @@ function applyAuthUI() {
   bar.innerHTML = '';
 
   if (isAdmin) {
-    bar.append(span('auth-user', isGeneralAdmin() && adminBranch ? `${adminBranch} 관리자` : '관리자 모드'), authBtn('로그아웃', logout));
+    bar.append(span('auth-user', isGeneralAdmin() && adminBranches.length ? adminBranchLabel() : '관리자 모드'), authBtn('로그아웃', logout));
   } else if (member) {
     bar.append(authBtn('내 예약', openMyPageModal), authBtn('로그아웃', logout));
   } else {
@@ -690,11 +701,12 @@ function authBtn(text, onClick) {
 function logout() {
   isAdmin = false;
   adminRole = '';
-  adminBranch = '';
+  adminBranches = [];
   member = null;
   sessionStorage.removeItem('pm-admin');
   sessionStorage.removeItem('pm-admin-role');
   sessionStorage.removeItem('pm-admin-branch');
+  sessionStorage.removeItem('pm-admin-branches');
   store.del('pm-member');
   store.del('pm-auto-login');
   store.del('pm-auto-member');
@@ -1413,11 +1425,12 @@ function openAdminModal() {
     if (inputPw === main.password || subAccount) {
       isAdmin = true;
       adminRole = inputPw === main.password ? 'main' : 'general';
-      adminBranch = inputPw === main.password ? '' : (subAccount.branch || '');
+      adminBranches = inputPw === main.password ? [] : (subAccount.branches || []);
       sessionStorage.setItem('pm-admin', '1');
       sessionStorage.setItem('pm-admin-role', adminRole);
-      if (adminBranch) sessionStorage.setItem('pm-admin-branch', adminBranch);
-      else sessionStorage.removeItem('pm-admin-branch');
+      sessionStorage.removeItem('pm-admin-branch');
+      if (adminBranches.length) sessionStorage.setItem('pm-admin-branches', JSON.stringify(adminBranches));
+      else sessionStorage.removeItem('pm-admin-branches');
       closeModal();
       applyAuthUI();
     } else {
@@ -2596,7 +2609,7 @@ function initAdmBook() {
   const now = new Date();
   const branches = currentAdminBranches();
   if (!adm) adm = { branch: branches[0]?.name, y: now.getFullYear(), m: now.getMonth(), selDate: null };
-  if (isGeneralAdmin() && adminBranch) adm.branch = adminBranch;
+  if (isGeneralAdmin() && adminBranches.length && !adminBranches.includes(adm.branch)) adm.branch = adminBranches[0];
   renderAdmBook();
 }
 
@@ -2630,7 +2643,7 @@ function renderAdmBook() {
     t.type = 'button';
     t.className = 'tab' + (b.name === adm.branch ? ' active' : '');
     t.textContent = b.name;
-    t.disabled = isGeneralAdmin() && adminBranch && b.name !== adminBranch;
+    t.disabled = !canAccessBranch(b.name);
     t.addEventListener('click', () => { if (!canAccessBranch(b.name)) return; adm.branch = b.name; adm.selDate = null; renderAdmBook(); });
     tabs.append(t);
   });
@@ -3497,7 +3510,7 @@ function pushAdminNotification(message, payload = {}) {
 /* ---------- 작업 감사 기록 (보안 화면에서 날짜·시간과 함께 열람) ---------- */
 function adminActorLabel() {
   if (isMainAdmin()) return '메인관리자';
-  if (isGeneralAdmin()) return adminBranch ? `${adminBranch} 관리자` : '일반관리자';
+  if (isGeneralAdmin()) return adminBranches.length ? adminBranchLabel() : '일반관리자';
   return '시스템';
 }
 
@@ -3509,6 +3522,7 @@ function logWorkAudit(action, run, stepName = '', detail = '', actor = '') {
     at: new Date().toISOString(),
     by: actor || adminActorLabel(),
     action,
+    runId: run?.id || '',
     car: run?.car || '',
     customer: run?.name || '',
     phone: run?.phone || '',
@@ -4163,6 +4177,67 @@ async function rejectServiceStep(runId) {
   renderAdmWork();
 }
 
+/* ---------- 작업 기록: 작업(차량·예약)별로 묶고, 상세는 팝업에서 ---------- */
+function auditGroupKey(a) {
+  if (a.bookingDate) return `bk|${a.car || ''}|${a.bookingDate}|${a.bookingTime || ''}`;
+  if (a.runId) return `run|${a.runId}`;
+  return `car|${a.car || a.customer || a.id}`;
+}
+
+function groupWorkAudit() {
+  const map = new Map();
+  store.get('pm-work-audit', []).forEach(a => {
+    const k = auditGroupKey(a);
+    if (!map.has(k)) map.set(k, { key: k, entries: [] });
+    map.get(k).entries.push(a);
+  });
+  return [...map.values()];
+}
+
+async function openWorkAuditDetail(key) {
+  const group = groupWorkAudit().find(g => g.key === key);
+  if (!group) return;
+  const head = group.entries.find(a => a.customer || a.car) || group.entries[0];
+  const runId = group.entries.find(a => a.runId)?.runId || '';
+  const run = runId ? getServiceRuns().find(r => r.id === runId) : null;
+  let photosHtml = '';
+  if (run) {
+    const sections = await Promise.all((run.steps || []).map(async step => {
+      const items = (await Promise.all((step.photoKeys || []).map(k => assetSrc(k)))).filter(Boolean);
+      const deleted = isMainAdmin()
+        ? (await Promise.all((step.deletedPhotos || []).map(async d => ({ ...d, src: await assetSrc(d.key) })))).filter(d => d.src)
+        : [];
+      if (!items.length && !deleted.length) return '';
+      return `
+        <section class="album-step">
+          <h4>${esc(step.name)} <span>${items.length}장</span></h4>
+          ${items.length ? `<div class="album-grid">${items.map(src => `<figure class="album-item"><img src="${esc(src)}" alt="${esc(step.name)} 사진"></figure>`).join('')}</div>` : ''}
+          ${deleted.length ? `<p class="album-deleted-title">삭제된 사진 (메인관리자만 표시)</p><div class="album-grid">${deleted.map(d => `<figure class="album-item deleted"><img src="${esc(d.src)}" alt="삭제된 사진"><figcaption>${esc(d.by || '-')} 삭제 · ${esc(new Date(d.at).toLocaleString('ko-KR'))}</figcaption></figure>`).join('')}</div>` : ''}
+        </section>`;
+    }));
+    photosHtml = sections.join('');
+  }
+  const timeline = group.entries.map(a => `
+    <li>
+      <time>${esc(new Date(a.at).toLocaleString('ko-KR'))}</time>
+      <strong>${esc(a.action)}</strong>
+      <span>${esc(a.by || '-')}${a.step ? ` · ${esc(a.step)} 단계` : ''}${a.photos ? ` · 사진 ${a.photos}장` : ''}</span>
+      ${a.memo ? `<em>작업메모: ${esc(a.memo)}</em>` : ''}
+      ${a.detail ? `<em>${esc(a.detail)}</em>` : ''}
+    </li>`).join('');
+  openModal(`
+    <h3>작업 기록 상세</h3>
+    <div class="customer-context">
+      <strong>${esc(head.customer || '-')} · ${esc(head.car || '-')}</strong>
+      <span>${esc(head.model || '-')} · ${esc(head.phone || '-')} · ${esc(head.branch || '-')}${head.bookingDate ? ` · ${esc(head.bookingDate)} ${esc(head.bookingTime || '')}` : ''} · ${esc(head.service || '-')}</span>
+    </div>
+    ${photosHtml ? `<h4 class="modal-subtitle">작업 사진</h4><div class="album-wrap">${photosHtml}</div>` : '<p class="hint">등록된 작업 사진이 없습니다.</p>'}
+    <h4 class="modal-subtitle">작업 과정 기록 ${group.entries.length}건</h4>
+    <ul class="audit-list">${timeline}</ul>
+    <div class="modal-actions"><button type="button" class="modal-cancel" onclick="closeModal()">닫기</button></div>
+  `, true);
+}
+
 function renderAdmSettings() {
   const body = $('#adm-settings-body');
   if (!isMainAdmin()) { body.innerHTML = ''; return; }
@@ -4201,9 +4276,12 @@ function renderAdmSettings() {
       <li>
         <span>${i + 1}</span>
         <strong>${esc(account.password)}</strong>
-        <em>${account.branch ? esc(account.branch) : '전체 지점'}</em>
-        <time>${account.createdAt ? esc(new Date(account.createdAt).toLocaleString('ko-KR')) : '생성일 없음'}</time>
-        <button type="button" class="mini-btn danger sub-admin-delete" data-sub-admin="${esc(account.id)}">삭제</button>
+        <em>${account.branches.length ? esc(account.branches.join(' · ')) : '전체 지점'}</em>
+        <time>${account.createdAt ? esc(new Date(account.createdAt).toLocaleDateString('ko-KR')) : '생성일 없음'}</time>
+        <span class="sub-admin-actions">
+          <button type="button" class="mini-btn sub-admin-branch" data-sub-admin="${esc(account.id)}">지점변경</button>
+          <button type="button" class="mini-btn danger sub-admin-delete" data-sub-admin="${esc(account.id)}">삭제</button>
+        </span>
       </li>`).join('')
     : '<li class="empty">생성된 일반관리자가 없습니다.</li>';
   body.innerHTML = `
@@ -4211,14 +4289,13 @@ function renderAdmSettings() {
       <h3>일반 관리자 비밀번호 생성</h3>
       <form id="sub-admin-form" class="settings-form">
         <input type="text" id="sub-admin-password" placeholder="일반 관리자 비밀번호">
-        <select id="sub-admin-branch">
-          <option value="">전체 지점</option>
-          ${branches.map(b => `<option value="${esc(b.name)}">${esc(b.name)}</option>`).join('')}
-        </select>
         <button type="button" class="mini-btn" id="make-sub-pw">자동생성</button>
         <button type="submit" class="mini-btn add">생성</button>
       </form>
-      <p class="field-help">지점별 점주 계정은 담당 지점 예약관리와 작업현황만 볼 수 있습니다. 전체 지점은 보조 관리자용입니다.</p>
+      <div class="branch-check-list" id="sub-admin-branches">
+        ${branches.map(b => `<label class="branch-check"><input type="checkbox" value="${esc(b.name)}"> ${esc(b.name)}</label>`).join('')}
+      </div>
+      <p class="field-help">담당 지점을 체크하세요 — 여러 지점 선택 가능. 아무 지점도 체크하지 않으면 전체 지점 보조 관리자로 생성됩니다. 지점 계정은 담당 지점의 예약관리·작업현황·고객문의만 볼 수 있습니다.</p>
       <div class="sub-admin-summary">
         <strong>생성된 일반관리자 ${sub.accounts.length}개</strong>
         <ul class="sub-admin-list">${subRows}</ul>
@@ -4261,23 +4338,29 @@ function renderAdmSettings() {
     </section>
     <section class="settings-card">
       <h3>작업 기록</h3>
-      <p class="field-help">모든 작업 데이터(예약·입고·단계 처리·사진 삭제·승인·반려·수정)가 고객·차량 정보, 작업 메모, 사진 수, 날짜·시간과 함께 저장됩니다. 최근 100건 표시.</p>
-      <ul class="audit-list">${(() => {
-        const audit = store.get('pm-work-audit', []).slice(0, 100);
-        if (!audit.length) return '<li class="empty">작업 기록이 없습니다.</li>';
-        return audit.map(a => `
+      <p class="field-help">모든 작업 데이터(예약·입고·단계 처리·사진 삭제·승인·반려·수정)가 저장됩니다. 작업별로 묶어서 표시 — 누르면 사진과 전체 과정을 상세하게 볼 수 있습니다.</p>
+      <ul class="audit-list audit-summary-list">${(() => {
+        const groups = groupWorkAudit();
+        if (!groups.length) return '<li class="empty">작업 기록이 없습니다.</li>';
+        return groups.slice(0, 30).map(g => {
+          const a = g.entries[0];
+          return `
           <li>
-            <time>${esc(new Date(a.at).toLocaleString('ko-KR'))}</time>
-            <strong>${esc(a.action)}</strong>
-            <span>${esc(a.by || '-')} · ${esc(a.customer || '-')} ${esc(a.car || '')}${a.model ? ` · ${esc(a.model)}` : ''}${a.phone ? ` · ${esc(a.phone)}` : ''}</span>
-            <span>${esc(a.branch || '-')}${a.bookingDate ? ` · ${esc(a.bookingDate)} ${esc(a.bookingTime || '')}` : ''} · ${esc(a.service || '-')}${a.step ? ` · ${esc(a.step)}` : ''}${a.photos ? ` · 사진 ${a.photos}장` : ''}</span>
-            ${a.memo ? `<em>작업메모: ${esc(a.memo)}</em>` : ''}
-            ${a.detail ? `<em>${esc(a.detail)}</em>` : ''}
-          </li>`).join('');
+            <button type="button" class="audit-summary" data-audit="${esc(g.key)}">
+              <time>${esc(new Date(a.at).toLocaleString('ko-KR'))}</time>
+              <strong>${esc(a.customer || '-')} · ${esc(a.car || '-')}${a.model ? ` · ${esc(a.model)}` : ''}</strong>
+              <span>${esc(a.service || '-')}${a.branch ? ` · ${esc(a.branch)}` : ''}${a.bookingDate ? ` · ${esc(a.bookingDate)} ${esc(a.bookingTime || '')}` : ''}</span>
+              <em>최근: ${esc(a.action)} · 기록 ${g.entries.length}건 <b>상세보기 ›</b></em>
+            </button>
+          </li>`;
+        }).join('');
       })()}</ul>
     </section>
     <p class="form-error" id="security-save-msg"></p>`;
   wireEventBannerAdmin();
+  $$('.audit-summary').forEach(btn => {
+    btn.addEventListener('click', () => openWorkAuditDetail(btn.dataset.audit));
+  });
   $('#make-sub-pw').addEventListener('click', () => {
     $('#sub-admin-password').value = `pro${Math.random().toString(36).slice(2, 8)}!`;
   });
@@ -4290,10 +4373,11 @@ function renderAdmSettings() {
       $('#security-save-msg').textContent = '이미 생성된 일반 관리자 비밀번호입니다.';
       return;
     }
+    const selectedBranches = [...document.querySelectorAll('#sub-admin-branches input:checked')].map(el => el.value);
     current.accounts.push({
       id: `sub-${Date.now()}-${Math.random().toString(36).slice(2)}`,
       password,
-      branch: $('#sub-admin-branch').value,
+      branches: selectedBranches,
       createdAt: new Date().toISOString()
     });
     store.set('pm-sub-admin', { password: current.accounts[0]?.password || '', accounts: current.accounts });
@@ -4307,6 +4391,9 @@ function renderAdmSettings() {
       store.set('pm-sub-admin', { password: accounts[0]?.password || '', accounts });
       renderAdmSettings();
     });
+  });
+  $$('.sub-admin-branch').forEach(btn => {
+    btn.addEventListener('click', () => openSubAdminBranchModal(btn.dataset.subAdmin));
   });
   $('#main-admin-form').addEventListener('submit', e => {
     e.preventDefault();
@@ -4342,6 +4429,32 @@ function renderAdmSettings() {
       store.set('pm-banned-members', getBannedMembers().filter(b => b.id !== btn.dataset.ban));
       renderAdmSettings();
     });
+  });
+}
+
+/* 생성된 일반관리자의 담당 지점 변경 (복수 선택) */
+function openSubAdminBranchModal(accountId) {
+  const current = getSubAdmin();
+  const account = current.accounts.find(a => a.id === accountId);
+  if (!account) return;
+  const branches = getBranches();
+  openModal(`
+    <h3>담당 지점 변경</h3>
+    <p class="cal-msg">${esc(account.password)} · 현재: ${account.branches.length ? esc(account.branches.join(' · ')) : '전체 지점'}</p>
+    <div class="branch-check-list" id="edit-sub-branches">
+      ${branches.map(b => `<label class="branch-check"><input type="checkbox" value="${esc(b.name)}" ${account.branches.includes(b.name) ? 'checked' : ''}> ${esc(b.name)}</label>`).join('')}
+    </div>
+    <p class="field-help">여러 지점을 선택할 수 있습니다. 아무 지점도 체크하지 않으면 전체 지점 보조 관리자가 됩니다.</p>
+    <div class="modal-actions">
+      <button type="button" class="modal-submit" id="save-sub-branches">저장</button>
+      <button type="button" class="modal-cancel" onclick="closeModal()">취소</button>
+    </div>
+  `);
+  $('#save-sub-branches').addEventListener('click', () => {
+    account.branches = [...document.querySelectorAll('#edit-sub-branches input:checked')].map(el => el.value);
+    store.set('pm-sub-admin', { password: current.accounts[0]?.password || '', accounts: current.accounts });
+    closeModal();
+    renderAdmSettings();
   });
 }
 
@@ -4391,11 +4504,11 @@ async function wireEventBannerAdmin() {
 
 /* 지점 관리자: 담당 지점에 예약·작업 이력이 있는 고객의 문의만 노출 */
 function inquiryVisibleToAdmin(msg) {
-  if (!isGeneralAdmin() || !adminBranch) return true;
+  if (!isGeneralAdmin() || !adminBranches.length) return true;
   const car = String(msg.car || msg.customer?.car || '');
   const memberId = String(msg.memberId || msg.customer?.id || '');
   const matches = list => list.some(x =>
-    x.branch === adminBranch &&
+    adminBranches.includes(x.branch) &&
     ((car && String(x.car || '') === car) || (memberId && String(x.memberId || '') === memberId)));
   return matches(getBookings()) || matches(getServiceRuns());
 }
@@ -4458,7 +4571,14 @@ async function requestAppInstall() {
     pmAlert('이미 홈 화면에 추가된 앱으로 사용 중입니다.', '앱 설치');
     return;
   }
-  const guide = /iPhone|iPad|iPod/i.test(navigator.userAgent)
+  const ua = navigator.userAgent;
+  /* 네이버·카카오 등 인앱 브라우저(안드로이드)는 설치를 막으므로 Chrome으로 열어서 진행 */
+  const inAppBrowser = /NAVER|KAKAOTALK|Instagram|FBAN|FBAV|Line\/|DaumApps|; wv\)/i.test(ua);
+  if (/Android/i.test(ua) && inAppBrowser && location.protocol === 'https:') {
+    location.href = `intent://${location.host}${location.pathname}#Intent;scheme=https;package=com.android.chrome;S.browser_fallback_url=${encodeURIComponent(location.href)};end`;
+    return;
+  }
+  const guide = /iPhone|iPad|iPod/i.test(ua)
     ? 'Safari 하단의 공유 버튼을 누른 뒤 "홈 화면에 추가"를 선택해주세요.'
     : '브라우저 메뉴(⋮)에서 "홈 화면에 추가" 또는 "앱 설치"를 선택해주세요.';
   pmAlert(`이 브라우저에서는 바로 설치를 지원하지 않습니다.\n${guide}`, '앱 설치');
