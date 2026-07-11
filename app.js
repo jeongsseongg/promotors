@@ -452,6 +452,8 @@ function showView(name) {
   if (name.startsWith('adm-') && !canUseAdminView(name)) {
     name = isAdmin ? 'adm-book' : getHomeView();
   }
+  /* 보안 화면을 벗어나면 다시 비밀번호를 묻는다 (1시간 해제 체크 시 제외) */
+  if (name !== 'adm-settings') securityUnlocked = false;
   document.body.dataset.view = name;
   $$('.view').forEach(v => v.classList.toggle('active', v.id === 'view-' + name));
   $$('.top-nav .nav-btn').forEach(b => b.classList.toggle('active', b.dataset.view === name));
@@ -2774,6 +2776,33 @@ function memoEntriesFor(c) {
   return entries.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
 }
 
+/* 입력시간: 분까지만 표시 */
+function fmtMinute(iso) {
+  return new Date(iso || Date.now()).toLocaleString('ko-KR', { year: 'numeric', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+}
+
+function memoEntryHtml(entry) {
+  return `
+    <article class="memo-entry">
+      <time>${esc(fmtMinute(entry.createdAt))}</time>
+      ${entry.title ? `<strong>${esc(entry.title)}</strong>` : ''}
+      ${entry.amount ? `<em>${Number(entry.amount).toLocaleString()}원</em>` : ''}
+      ${entry.body ? `<p>${esc(entry.body)}</p>` : ''}
+    </article>`;
+}
+
+/* 고객관리: 예약과 자동 연동된 작업 행 (클릭 시 작업 데이터로 이동) */
+function custRunRowHtml(run) {
+  const photoCount = runAllPhotos(run).length;
+  return `
+    <button type="button" class="cust-run-row" data-run="${esc(run.id)}">
+      <time>${esc(run.bookingDate || '-')} ${esc(run.bookingTime || '')}</time>
+      <strong>${esc(run.service || run.serviceName || '-')}</strong>
+      <span>${esc(run.branch || '-')}${photoCount ? ` · 사진 ${photoCount}장` : ''}</span>
+      <em>${esc(run.status || '-')}</em>
+    </button>`;
+}
+
 function renderAdmCust() {
   const body = $('#adm-cust-body');
   if (!isMainAdmin()) { body.innerHTML = ''; return; }
@@ -2800,9 +2829,12 @@ function renderAdmCust() {
     const unpaid = (c.records || []).filter(r => !r.paid).reduce((sum, r) => sum + Number(r.amount || 0), 0);
     const memoEntries = memoEntriesFor(c).filter(entry => {
       const dateOk = !dateFilter || String(entry.createdAt || '').slice(0, 10) === dateFilter;
-      const textOk = !textFilter || String(entry.body || '').toLowerCase().includes(textFilter);
+      const textOk = !textFilter || `${entry.title || ''} ${entry.body || ''}`.toLowerCase().includes(textFilter);
       return dateOk && textOk;
     });
+    const memberRuns = getServiceRuns()
+      .filter(r => r.car === m.car || (m.id && r.memberId === m.id))
+      .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
     const latestText = m.latestBooking ? `${m.latestBooking.date} ${m.latestBooking.time}` : '예약 없음';
     const card = document.createElement('article');
     card.className = 'cust-card';
@@ -2824,23 +2856,43 @@ function renderAdmCust() {
           <button type="button" class="mini-btn detail-view">상세정보</button>
           <button type="button" class="mini-btn customer-chat">문의사항</button>
         </div>
-        <textarea class="cust-memo postit" rows="2" placeholder="새 메모를 입력하면 날짜/시간별 기록으로 저장됩니다."></textarea>
-        <button type="button" class="mini-btn memo-save">메모 저장</button>
+        <div class="memo-form postit">
+          <div class="memo-form-row">
+            <input type="text" class="memo-title" placeholder="제목">
+            <input type="number" class="memo-amount" placeholder="금액(원)" min="0">
+          </div>
+          <textarea class="cust-memo" rows="2" placeholder="내용을 입력하면 날짜/시간별 기록으로 저장됩니다."></textarea>
+          <div class="memo-form-foot">
+            <button type="button" class="mini-btn memo-save">메모 저장</button>
+          </div>
+        </div>
         <div class="memo-book">
-          ${memoEntries.length ? memoEntries.map(entry => `
-            <article class="memo-entry">
-              <time>${esc(new Date(entry.createdAt || Date.now()).toLocaleString('ko-KR'))}</time>
-              <p>${esc(entry.body || '')}</p>
-            </article>
-          `).join('') : '<p class="hint">저장된 메모가 없습니다.</p>'}
+          ${memoEntries.length ? `
+            ${memoEntryHtml(memoEntries[0])}
+            ${memoEntries.length > 1 ? `
+              <div class="fold-rest" data-fold-body="memo" hidden>${memoEntries.slice(1).map(memoEntryHtml).join('')}</div>
+              <button type="button" class="mini-btn fold-toggle" data-fold="memo" data-label="메모 ${memoEntries.length - 1}개 더보기">메모 ${memoEntries.length - 1}개 더보기</button>
+            ` : ''}
+          ` : '<p class="hint">저장된 메모가 없습니다.</p>'}
+        </div>
+        <p class="cust-sec-title">작업 내역 <span>예약 자동 연동 · 클릭하면 저장된 작업 데이터로 이동</span></p>
+        <div class="cust-runs">
+          ${memberRuns.length ? `
+            ${custRunRowHtml(memberRuns[0])}
+            ${memberRuns.length > 1 ? `
+              <div class="fold-rest" data-fold-body="runs" hidden>${memberRuns.slice(1).map(custRunRowHtml).join('')}</div>
+              <button type="button" class="mini-btn fold-toggle" data-fold="runs" data-label="작업 ${memberRuns.length - 1}개 더보기">작업 ${memberRuns.length - 1}개 더보기</button>
+            ` : ''}
+          ` : '<p class="hint">연동된 작업이 없습니다. 예약에서 입고를 시작하면 자동으로 표시됩니다.</p>'}
         </div>
         <table class="rec-table spreadsheet">
-          <thead><tr><th>날짜</th><th>서비스</th><th>금액</th><th>결제수단</th><th>정산</th><th></th></tr></thead>
+          <thead><tr><th>날짜</th><th>서비스</th><th>내용</th><th>금액</th><th>결제수단</th><th>정산</th><th></th></tr></thead>
           <tbody></tbody>
         </table>
         <form class="rec-form">
           <input type="date" class="rec-date" required>
           <input type="text" class="rec-svc" list="service-product-options" placeholder="받은 서비스" required>
+          <input type="text" class="rec-note" placeholder="내용 (선택)">
           <input type="number" class="rec-amt" placeholder="금액(원)" min="0">
           <select class="rec-paytype"><option>현금</option><option>카드</option><option>계좌이체</option></select>
           <label class="rec-paid-label"><input type="checkbox" class="rec-paid"> 정산완료</label>
@@ -2852,7 +2904,8 @@ function renderAdmCust() {
     const tbody = card.querySelector('tbody');
     (c.records || []).forEach((r, ri) => {
       const tr = document.createElement('tr');
-      tr.innerHTML = `<td>${esc(r.date)}</td><td>${esc(r.service)}</td><td>${r.amount ? Number(r.amount).toLocaleString() + '원' : '-'}</td><td>${esc(r.payType || '-')}</td>`;
+      if (ri > 0) { tr.classList.add('fold-rest-row'); tr.hidden = true; }
+      tr.innerHTML = `<td>${esc(r.date)}</td><td>${esc(r.service)}</td><td>${esc(r.note || '-')}</td><td>${r.amount ? Number(r.amount).toLocaleString() + '원' : '-'}</td><td>${esc(r.payType || '-')}</td>`;
       const tdPaid = document.createElement('td');
       const pill = document.createElement('button');
       pill.type = 'button';
@@ -2865,6 +2918,15 @@ function renderAdmCust() {
       tr.append(tdPaid, tdDel);
       tbody.append(tr);
     });
+    if ((c.records || []).length > 1) {
+      const recToggle = document.createElement('button');
+      recToggle.type = 'button';
+      recToggle.className = 'mini-btn fold-toggle';
+      recToggle.dataset.fold = 'rec';
+      recToggle.dataset.label = `기록 ${c.records.length - 1}개 더보기`;
+      recToggle.textContent = recToggle.dataset.label;
+      card.querySelector('.rec-table').after(recToggle);
+    }
 
     card.querySelector('[data-phone]').addEventListener('click', e => e.stopPropagation());
     card.querySelector('.cust-summary').addEventListener('click', e => {
@@ -2875,20 +2937,40 @@ function renderAdmCust() {
       card.classList.toggle('open', expanded);
     });
     card.querySelector('.memo-save').addEventListener('click', e => {
+      const title = card.querySelector('.memo-title').value.trim();
+      const amount = card.querySelector('.memo-amount').value.trim();
       const bodyText = card.querySelector('.cust-memo').value.trim();
-      if (!bodyText) return;
+      if (!bodyText && !title) return;
       const customers = getCustomers();
       const cNext = customers[m.car] || { memo: '', records: [] };
-      cNext.memo = bodyText;
+      cNext.memo = bodyText || title;
       cNext.memoUpdatedAt = new Date().toISOString();
       cNext.memoEntries = [
-        { id: `memo-${Date.now()}-${Math.random().toString(36).slice(2)}`, body: bodyText, createdAt: cNext.memoUpdatedAt },
+        { id: `memo-${Date.now()}-${Math.random().toString(36).slice(2)}`, title, amount, body: bodyText, createdAt: cNext.memoUpdatedAt },
         ...(Array.isArray(cNext.memoEntries) ? cNext.memoEntries : [])
       ].slice(0, 200);
       customers[m.car] = cNext;
       store.set('pm-customers', customers);
       e.currentTarget.textContent = '저장됨';
       setTimeout(renderAdmCust, 500);
+    });
+    card.querySelectorAll('.fold-toggle').forEach(btn => {
+      btn.addEventListener('click', () => {
+        if (btn.dataset.fold === 'rec') {
+          const rows = card.querySelectorAll('tr.fold-rest-row');
+          const show = rows[0]?.hidden;
+          rows.forEach(row => { row.hidden = !show; });
+          btn.textContent = show ? '접기' : btn.dataset.label;
+        } else {
+          const foldBody = card.querySelector(`[data-fold-body="${btn.dataset.fold}"]`);
+          if (!foldBody) return;
+          foldBody.hidden = !foldBody.hidden;
+          btn.textContent = foldBody.hidden ? btn.dataset.label : '접기';
+        }
+      });
+    });
+    card.querySelectorAll('.cust-run-row').forEach(btn => {
+      btn.addEventListener('click', () => openRunAlbumModal(btn.dataset.run, { allowDelete: true, onClose: renderAdmCust }));
     });
     card.querySelector('.detail-view').addEventListener('click', () => openCustomerDetail(m));
     card.querySelector('.customer-chat').addEventListener('click', () => openCustomerCenterModal(m));
@@ -2900,9 +2982,11 @@ function renderAdmCust() {
       mutateCust(m.car, cc => cc.records.unshift({
         date: form.querySelector('.rec-date').value.replaceAll('-', '.'),
         service: form.querySelector('.rec-svc').value.trim(),
+        note: form.querySelector('.rec-note').value.trim(),
         amount: form.querySelector('.rec-amt').value,
         payType: form.querySelector('.rec-paytype').value,
-        paid: form.querySelector('.rec-paid').checked
+        paid: form.querySelector('.rec-paid').checked,
+        createdAt: new Date().toISOString()
       }));
     });
 
@@ -3816,7 +3900,8 @@ function rejectServiceStep(runId) {
 function renderAdmSettings() {
   const body = $('#adm-settings-body');
   if (!isMainAdmin()) { body.innerHTML = ''; return; }
-  if (!securityUnlocked) {
+  const securityWindowActive = Date.now() < Number(sessionStorage.getItem('pm-security-until') || 0);
+  if (!securityUnlocked && !securityWindowActive) {
     body.innerHTML = `
       <section class="settings-card security-gate-card">
         <h3>보안 비밀번호</h3>
@@ -3824,6 +3909,8 @@ function renderAdmSettings() {
           <input type="password" id="security-pw-check" placeholder="보안 비밀번호" required>
           <button type="submit" class="mini-btn add">확인</button>
         </form>
+        <label class="check-line"><input type="checkbox" id="security-1h"> 1시간 동안 비밀번호 입력 해제</label>
+        <p class="field-help">체크하지 않으면 보안 화면에 들어올 때마다 비밀번호를 입력합니다.</p>
         <p class="form-error" id="security-error"></p>
       </section>`;
     $('#security-gate-inline').addEventListener('submit', e => {
@@ -3834,6 +3921,8 @@ function renderAdmSettings() {
         return;
       }
       securityUnlocked = true;
+      if ($('#security-1h').checked) sessionStorage.setItem('pm-security-until', String(Date.now() + 3600000));
+      else sessionStorage.removeItem('pm-security-until');
       renderAdmSettings();
     });
     return;

@@ -3535,3 +3535,58 @@ button.step-photo-slot {
 .audit-list strong { color: var(--navy); font-size: 14px; }
 .audit-list span { font-size: 13px; color: #555f6b; }
 .audit-list em { font-style: normal; font-size: 12px; color: #8a94a0; }
+
+/* ===== 고객관리: 메모 폼(제목/금액/내용) · 접기/펴기 · 작업 내역 연동 ===== */
+.memo-form { display: grid; gap: 8px; }
+.memo-form-row { display: grid; grid-template-columns: 1fr 220px; gap: 8px; }
+.memo-form input,
+.memo-form textarea {
+  border: 1px solid #ead45c;
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-family: inherit;
+  font-size: 15px;
+  background: #fffdf0;
+  color: #2b2f33;
+}
+.memo-form textarea { resize: vertical; min-height: 64px; }
+.memo-form-foot { display: flex; justify-content: flex-end; }
+.memo-entry strong { display: block; color: var(--navy); font-size: 15px; margin-top: 2px; }
+.memo-entry em { font-style: normal; color: #a07400; font-weight: 800; font-size: 14px; margin-left: 6px; }
+.fold-rest { display: grid; gap: 8px; }
+.fold-toggle { justify-self: start; margin-top: 6px; }
+
+.cust-sec-title { margin: 14px 0 8px; color: var(--navy); font-weight: 900; }
+.cust-sec-title span { color: #8a94a0; font-size: 12px; font-weight: 700; margin-left: 6px; }
+.cust-runs { display: grid; gap: 8px; }
+.cust-run-row {
+  display: grid;
+  grid-template-columns: auto 1fr auto auto;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  border: 1px solid #e2e6ea;
+  border-radius: 10px;
+  background: #fff;
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.cust-run-row:hover { border-color: var(--navy); }
+.cust-run-row time { font-size: 13px; color: #8a94a0; }
+.cust-run-row strong { color: var(--navy); font-size: 15px; }
+.cust-run-row span { font-size: 13px; color: #555f6b; }
+.cust-run-row em {
+  font-style: normal;
+  font-size: 12px;
+  font-weight: 800;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: #eaf2ff;
+  color: #2f74dd;
+}
+@media (max-width: 900px) {
+  .memo-form-row { grid-template-columns: 1fr; }
+  .cust-run-row { grid-template-columns: 1fr auto; }
+  .cust-run-row time { grid-column: 1 / -1; }
+}
