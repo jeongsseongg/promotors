@@ -377,9 +377,11 @@ const getMainAdmin = () => store.get('pm-main-admin', { password: ADMIN_PW });
 const getSecuritySettings = () => store.get('pm-security-settings', { password: 'tmdgus123' });
 const getHomeView = () => {
   const saved = store.get('pm-home-view', null);
-  /* 구버전(문자열) 설정은 무시한다 — 첫 화면은 항상 프로모터스 소개가 기본 */
+  /* 구버전(문자열) 설정은 무시한다 */
   if (saved && typeof saved === 'object' && saved.view) return saved.view;
-  return 'intro';
+  /* 모바일은 정비사례가 기본, PC는 소개가 기본 */
+  const isMobile = window.matchMedia('(max-width: 900px)').matches;
+  return isMobile ? 'cases' : 'intro';
 };
 const today = () => new Date().toLocaleDateString('ko-KR').replace(/\. /g, '.').replace(/\.$/, '');
 const todayKey = () => {
