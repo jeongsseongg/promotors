@@ -3791,7 +3791,7 @@ function renderAdmWork() {
         <a href="${phoneHref(source.phone)}">${esc(source.phone || '-')}</a>
       </div>
       <p>${esc(source.branch || '-')} · ${esc(source.model || '-')} · ${esc(booking ? ((booking.services || []).join(', ') || '서비스 미선택') : (run.service || '서비스 미선택'))}</p>
-      <p class="hint">${run ? esc(stepStateLabel(run)) : '작업 시작 전'} <button type="button" class="card-fold-btn">펴기 ▼</button></p>
+      <p class="hint">${run ? esc(stepStateLabel(run)) : '작업 시작 전'}</p>
       <div class="work-card-detail" hidden>
         ${run ? `<div class="service-steps">${run.steps.map((s, i) => `<span class="${s.approved ? 'done' : i === run.currentStep ? 'active' : ''}">${esc(s.name)}</span>`).join('')}</div>` : ''}
         ${run ? '<div class="album-cover-wrap" data-cover></div>' : ''}
@@ -3815,17 +3815,11 @@ function renderAdmWork() {
         });
       });
     }
-    const foldBtn = card.querySelector('.card-fold-btn');
-    const toggleCard = () => {
-      card.classList.toggle('open');
-      const open = card.classList.contains('open');
-      card.querySelector('.work-card-detail').hidden = !open;
-      foldBtn.textContent = open ? '접기 ▲' : '펴기 ▼';
-    };
-    foldBtn.addEventListener('click', toggleCard);
+    /* 카드 클릭 = 펼침, 다시 클릭 = 상태 줄까지만 표시 */
     card.addEventListener('click', e => {
       if (e.target.closest('button, a')) return;
-      toggleCard();
+      card.classList.toggle('open');
+      card.querySelector('.work-card-detail').hidden = !card.classList.contains('open');
     });
     list.append(card);
   });
@@ -3969,7 +3963,7 @@ function renderAdmApproval() {
         <a href="${phoneHref(run.phone)}">${esc(run.phone || '-')}</a>
       </div>
       <p>${esc(run.branch || '-')} · ${esc(run.bookingDate || '-')} ${esc(run.bookingTime || '')}</p>
-      <p class="hint">${esc(statusChip)} <button type="button" class="card-fold-btn">펴기 ▼</button></p>
+      <p class="hint">${esc(statusChip)}</p>
       <div class="work-card-detail" hidden>
         <div class="album-cover-wrap" data-cover></div>
         <div class="approval-steps" data-steps></div>
@@ -4006,17 +4000,11 @@ function renderAdmApproval() {
       }
       stepsWrap.append(row);
     });
-    const foldBtn = card.querySelector('.card-fold-btn');
-    const toggleCard = () => {
-      card.classList.toggle('open');
-      const open = card.classList.contains('open');
-      card.querySelector('.work-card-detail').hidden = !open;
-      foldBtn.textContent = open ? '접기 ▲' : '펴기 ▼';
-    };
-    foldBtn.addEventListener('click', toggleCard);
+    /* 카드 클릭 = 펼침, 다시 클릭 = 상태 줄까지만 표시 */
     card.addEventListener('click', e => {
       if (e.target.closest('button, a')) return;
-      toggleCard();
+      card.classList.toggle('open');
+      card.querySelector('.work-card-detail').hidden = !card.classList.contains('open');
     });
     list.append(card);
   });
@@ -4401,11 +4389,23 @@ async function wireEventBannerAdmin() {
   }
 }
 
+/* 지점 관리자: 담당 지점에 예약·작업 이력이 있는 고객의 문의만 노출 */
+function inquiryVisibleToAdmin(msg) {
+  if (!isGeneralAdmin() || !adminBranch) return true;
+  const car = String(msg.car || msg.customer?.car || '');
+  const memberId = String(msg.memberId || msg.customer?.id || '');
+  const matches = list => list.some(x =>
+    x.branch === adminBranch &&
+    ((car && String(x.car || '') === car) || (memberId && String(x.memberId || '') === memberId)));
+  return matches(getBookings()) || matches(getServiceRuns());
+}
+
 function renderAdmInquiry() {
   const body = $('#adm-inquiry-body');
   if (!isAdmin) { body.innerHTML = ''; return; }
   const messages = store.get('pm-messages', [])
     .filter(m => !m.serviceContext?.runId)
+    .filter(inquiryVisibleToAdmin)
     .slice()
     .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
   body.innerHTML = `<div class="inquiry-board" id="admin-inquiries">${messages.length ? '' : '<p class="hint">진행 중인 고객문의가 없습니다.</p>'}</div>`;
