@@ -252,7 +252,9 @@ values
   ('pm-security-settings', '{"password":"tmdgus123"}'::jsonb, 'https://www.promotors.kr/'),
   ('pm-home-view', '"intro"'::jsonb, 'https://www.promotors.kr/'),
   ('pm-admin-notifications', '[]'::jsonb, 'https://www.promotors.kr/'),
-  ('pm-work-audit', '[]'::jsonb, 'https://www.promotors.kr/')
+  ('pm-work-audit', '[]'::jsonb, 'https://www.promotors.kr/'),
+  ('pm-banned-members', '[]'::jsonb, 'https://www.promotors.kr/'),
+  ('pm-event-banners', '[]'::jsonb, 'https://www.promotors.kr/')
 on conflict (data_key) do nothing;
 
 drop policy if exists "public insert site logs" on public.site_logs;

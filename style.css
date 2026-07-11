@@ -3988,29 +3988,73 @@ button.step-photo-slot {
 }
 
 /* ============================================================
-   모바일 관리자 화면: 상단 ‹ 관리 메뉴 바 (앱 페이지처럼)
+   모바일 관리자 화면: 마이페이지를 벗어나지 않는 앱 페이지 구성
+   (데이터는 PC와 동일, UI만 모바일 전용)
    ============================================================ */
 .adm-mobile-bar { display: none; }
 @media (max-width: 900px) {
+  /* 관리자 화면에서는 브랜드 히어로·상단 웹 메뉴를 숨겨 마이 흐름을 유지 */
+  body[data-view^="adm-"] .left-panel,
+  body[data-view^="adm-"] .nav-row { display: none; }
+  body[data-view^="adm-"] .hero {
+    background: #f2f4f8;
+    min-height: 100vh;
+  }
+  body[data-view^="adm-"] .right-panel { padding-top: 0; }
+
+  /* 데스크톱용 제목 배너는 상단 앱 바와 중복이라 숨김 */
+  [id^="view-adm-"] > .intro { display: none; }
+
+  /* 상단 앱 바: ‹ 뒤로 + 화면 제목 (마이페이지 카드 톤) */
   .adm-mobile-bar {
     display: flex;
+    align-items: center;
+    gap: 10px;
     position: sticky;
     top: 0;
     z-index: 40;
-    margin: -4px -2px 10px;
-    padding: 8px 2px;
-    background: inherit;
+    margin: 0 -16px 14px;
+    padding: 12px 16px;
+    background: #fff;
+    border-bottom: 1px solid #e8edf2;
+  }
+  .adm-mobile-bar strong {
+    color: #111827;
+    font-size: 19px;
   }
   .adm-back {
-    min-height: 44px;
-    padding: 8px 16px;
-    border: 1px solid #d6dbe1;
-    border-radius: 999px;
+    display: grid;
+    place-items: center;
+    width: 40px;
+    height: 40px;
+    border: 1px solid #e8edf2;
+    border-radius: 50%;
     background: #fff;
     color: var(--navy);
     font-family: inherit;
-    font-size: 14px;
+    font-size: 22px;
     font-weight: 800;
+    line-height: 1;
     cursor: pointer;
   }
+
+  /* 카드형이 아닌 콘텐츠(캘린더·문의 목록·현황 헤더)를 마이페이지 카드로 감싼다 */
+  #adm-book-body,
+  #view-adm-inquiry .inquiry-board {
+    background: #fff;
+    border: 1px solid #eef1f5;
+    border-radius: 18px;
+    padding: 14px;
+  }
+  .work-head {
+    background: #fff;
+    border: 1px solid #eef1f5;
+    border-radius: 18px;
+    padding: 14px;
+    margin-bottom: 12px;
+  }
+  #view-adm-prod .admin-tools { margin-bottom: 12px; }
+  /* 터치 크기 보정 */
+  .cal-day { min-height: 44px; }
+  .adm-tabs .tab { min-height: 44px; }
 }

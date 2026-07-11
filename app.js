@@ -4508,7 +4508,8 @@ function wireEventBanner(scope = modalCard) {
    ============================================================ */
 function showAdminViewFromMenu(view) {
   showView(view);
-  if (view === 'adm-book') initAdmBook();
+  /* 설정 메뉴에서 진입 시 이전에 보던 지점/날짜 상태를 초기화해 새로 연 느낌을 준다 */
+  if (view === 'adm-book') { adm = null; initAdmBook(); }
   if (view === 'adm-work') renderAdmWork();
   if (view === 'adm-approval') renderAdmApproval();
   if (view === 'adm-cust') renderAdmCust();
@@ -4563,7 +4564,7 @@ async function openAdminSettingsPage() {
     btn.addEventListener('click', () => {
       closeModal();
       showAdminViewFromMenu(btn.dataset.admView);
-      $('.nav-row')?.scrollIntoView({ block: 'start' });
+      window.scrollTo(0, 0);
     });
   });
   $('#admin-settings-logout').addEventListener('click', () => {
