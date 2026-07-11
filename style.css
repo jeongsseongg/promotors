@@ -494,7 +494,7 @@ body[data-view="intro"] .view.active { overflow: hidden; }
 .branch-large > h3 { margin-top: 18px; }
 .branch-large > .card-actions { margin-bottom: 20px; }
 .branch-large-media {
-  /* 원본 사진 비율을 JS에서 읽어 덮어쓴다. 로드 전에는 지점 카드 기본 비율을 유지한다. */
+  /* 모든 지점 카드가 같은 비율로 보이도록 JS가 통일된 값으로 덮어쓴다. 로드 전 기본 비율. */
   aspect-ratio: 4 / 5;
   position: relative;
   overflow: hidden;
