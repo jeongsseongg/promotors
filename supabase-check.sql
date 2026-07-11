@@ -19,7 +19,8 @@ declare
   required_keys text[] := array[
     'pm-branches','pm-notices','promotors-cases','pm-products','pm-blocked','pm-customers',
     'pm-bookings','pm-members','pm-blog-settings','pm-intro-slides','pm-assets','pm-service-runs',
-    'pm-messages','pm-sub-admin','pm-main-admin','pm-security-settings','pm-home-view','pm-admin-notifications'
+    'pm-messages','pm-sub-admin','pm-main-admin','pm-security-settings','pm-home-view','pm-admin-notifications',
+    'pm-work-audit'
   ];
   required_settings text[] := array['home_view','realtime_service'];
   t text;

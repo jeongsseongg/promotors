@@ -244,7 +244,8 @@ const SUPABASE_DATA_KEYS = [
   'pm-main-admin',
   'pm-security-settings',
   'pm-home-view',
-  'pm-admin-notifications'
+  'pm-admin-notifications',
+  'pm-work-audit'
 ];
 let isHydratingSupabase = false;
 
@@ -800,7 +801,7 @@ async function openMyPageModal() {
   let statusText = '진행 중인 예약이 없어요';
   if (latestRun) {
     const current = (latestRun.steps || [])[latestRun.currentStep] || {};
-    const serviceName = latestRun.serviceName || (latestBooking?.services || [])[0] || '정비';
+    const serviceName = latestRun.serviceName || latestRun.service || (latestBooking?.services || [])[0] || '정비';
     if (latestRun.completedAt || /완료/.test(latestRun.status || '')) {
       stageIndex = 3;
       statusText = progressServiceText(serviceName, true);
@@ -825,13 +826,15 @@ async function openMyPageModal() {
 
   openModal(`
     <h3>내예약</h3>
-    <button type="button" class="mypage-profile" id="mypage-info">
-      <span class="profile-avatar" aria-hidden="true">${MYPAGE_ICONS.user}</span>
-      <span class="profile-text"><strong>${esc(member.name || '고객')}님</strong><span>안녕하세요!</span></span>
-      <b>›</b>
-    </button>
-    <section class="mypage-car-hero">
+    <section class="mypage-account-card">
+      <button type="button" class="mypage-profile" id="mypage-info">
+        <span class="profile-avatar" aria-hidden="true">${MYPAGE_ICONS.user}</span>
+        <span class="profile-text"><strong>${esc(member.name || '고객')}님</strong><span>안녕하세요!</span></span>
+        <b>›</b>
+      </button>
+      <div class="mypage-account-divider"></div>
       <div class="mypage-car-text">
+        <span class="mypage-car-label">내 차량</span>
         <strong>${esc(member.model || '차량 정보를 등록해주세요')}</strong>
         <span>${esc(carMeta || '-')}</span>
       </div>
@@ -870,6 +873,15 @@ function myPageBackActions() {
   $('#back-my-page')?.addEventListener('click', openMyPageModal);
 }
 
+function myPagePageHeader(title, icon = 'doc') {
+  if (!member) return '';
+  return `
+    <header class="mypage-page-header">
+      <span class="mypage-page-icon" aria-hidden="true">${MYPAGE_ICONS[icon] || MYPAGE_ICONS.doc}</span>
+      <span><strong>${esc(title)}</strong><em>${esc(member.name || '고객')}님 · ${esc(member.car || '차량번호 미등록')}</em></span>
+    </header>`;
+}
+
 /* 고객 예약취소 공용: 예약 삭제 + 관리자 알림 */
 function cancelMemberBooking(booking) {
   if (!booking) return false;
@@ -894,6 +906,7 @@ async function openWorkStatusPage() {
   if (!run) {
     openModal(`
       <h3>작업현황</h3>
+      ${myPagePageHeader('작업현황', 'wrench')}
       <div class="wd-empty">
         <span class="wd-empty-icon">${MYPAGE_ICONS.wrench}</span>
         <p>지금은 진행 중인 작업이 없어요</p>
@@ -911,7 +924,7 @@ async function openWorkStatusPage() {
   const cur = steps[curIdx] || {};
   const runDone = !!run.completedAt || /완료/.test(run.status || '');
   const inspecting = !!cur.submitted && !cur.approved;
-  const serviceName = run.serviceName || '정비';
+  const serviceName = run.serviceName || run.service || '정비';
 
   /* 데이터 스텝(입고/작업/출고 등)을 표시 4단계로 분류 */
   const groupOf = s => (s.name || '').includes('입고') ? 0 : (s.name || '').includes('출고') ? 3 : 1;
@@ -960,6 +973,7 @@ async function openWorkStatusPage() {
 
   openModal(`
     <h3>작업현황</h3>
+    ${myPagePageHeader('작업현황', 'wrench')}
     <p class="wd-service"><strong>${esc(serviceName)}</strong>${run.branch ? ` · ${esc(run.branch)}` : ''}</p>
     <section class="work-detail">${stageCards.join('')}</section>
     <div class="modal-actions"><button type="button" class="modal-submit" id="back-my-page">내예약</button></div>
@@ -973,6 +987,7 @@ function openMyAlertsPage() {
   const notices = getMessagesFor(member).filter(m => m.serviceContext?.runId);
   openModal(`
     <h3>알림</h3>
+    ${myPagePageHeader('알림', 'bell')}
     <section class="mypage-section">
       <ul class="service-run-list alert-list">${notices.length ? notices.slice(-12).reverse().map(n => `<li><strong>${esc(new Date(n.createdAt).toLocaleString('ko-KR'))}</strong><span>${esc(n.message)}</span><button type="button" class="mini-btn delete-alert" data-id="${esc(n.id)}">알림삭제</button></li>`).join('') : '<li>새 알림이 없습니다.</li>'}</ul>
     </section>
@@ -992,6 +1007,7 @@ function openMyInfoPage() {
   if (!member) return openMemberModal('login');
   openModal(`
     <h3>내 정보</h3>
+    ${myPagePageHeader('내 정보', 'user')}
     <form id="my-info-form" class="mypage-form">
       <label>아이디<input type="text" value="${esc(member.id || '')}" disabled></label>
       <label>이름<input type="text" id="mi-name" value="${esc(member.name || '')}" required></label>
@@ -1088,6 +1104,7 @@ function openMyBookingsPage() {
   `).join('') : '<tr><td colspan="4">예약 기록이 없습니다.</td></tr>';
   openModal(`
     <h3>예약 내역</h3>
+    ${myPagePageHeader('예약 내역', 'calendar')}
     <section class="mypage-section">
       <table class="rec-table"><thead><tr><th>일시</th><th>지점</th><th>서비스</th><th>상태</th></tr></thead><tbody>${bookingRows}</tbody></table>
     </section>
@@ -1121,6 +1138,7 @@ async function openCustomerHistoryModal() {
   `).join('') : '<tr><td colspan="4">정비/결제 기록이 없습니다.</td></tr>';
   openModal(`
     <h3>상세내역</h3>
+    ${myPagePageHeader('상세내역', 'doc')}
     <section class="mypage-section">
       <h4>작업 이미지</h4>
       ${photoGrid}
@@ -1144,6 +1162,7 @@ async function openRunPhotosModal(runId) {
   const items = await Promise.all(photos.map(async p => ({ ...p, src: await assetSrc(p.key) })));
   openModal(`
     <h3>작업사진</h3>
+    ${myPagePageHeader('작업사진', 'wrench')}
     <div class="run-photo-grid">${items.filter(p => p.src).map(p => `<figure><img src="${p.src}" alt="${esc(p.name)}"><figcaption>${esc(p.name)}</figcaption></figure>`).join('') || '<p class="hint">작업사진이 없습니다.</p>'}</div>
     <div class="modal-actions">
       <button type="button" class="modal-submit" id="back-my-page">내예약으로</button>
@@ -1219,6 +1238,7 @@ function openCustomerCenterModal(customer = member) {
   chatLastStamp = '';
   openModal(`
     <h3>고객센터</h3>
+    ${isAdmin ? '' : myPagePageHeader('고객센터', 'headset')}
     <div class="customer-context">
       <strong>${esc(target.name || '-')}</strong>
       <span>${esc(target.car || '-')} · ${esc(target.model || '-')} · ${esc(target.phone || '-')}</span>
@@ -3148,6 +3168,138 @@ function pushAdminNotification(message, payload = {}) {
   store.set('pm-admin-notifications', list.slice(0, 200));
 }
 
+/* ---------- 작업 감사 기록 (보안 화면에서 날짜·시간과 함께 열람) ---------- */
+function adminActorLabel() {
+  if (isMainAdmin()) return '메인관리자';
+  if (isGeneralAdmin()) return adminBranch ? `${adminBranch} 관리자` : '일반관리자';
+  return '시스템';
+}
+
+function logWorkAudit(action, run, stepName = '', detail = '') {
+  const list = store.get('pm-work-audit', []);
+  list.unshift({
+    id: `audit-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+    at: new Date().toISOString(),
+    by: adminActorLabel(),
+    action,
+    car: run?.car || '',
+    customer: run?.name || '',
+    service: run?.service || run?.serviceName || '',
+    step: stepName,
+    detail
+  });
+  store.set('pm-work-audit', list.slice(0, 500));
+}
+
+/* run의 모든 단계 사진 목록 (단계명 포함) */
+function runAllPhotos(run) {
+  return (run?.steps || []).flatMap((s, si) => (s.photoKeys || []).map(key => ({ key, step: s.name || `단계${si + 1}`, si })));
+}
+
+/* 앨범형 커버: 첫 장 바로 노출 + 장수, 클릭 시 전체 앨범 */
+async function renderRunAlbumCover(run) {
+  const photos = runAllPhotos(run);
+  if (!photos.length) return '<p class="hint">등록된 사진이 없습니다.</p>';
+  const src = await assetSrc(photos[0].key);
+  return `
+    <button type="button" class="album-cover" data-album="${esc(run.id)}">
+      ${src ? `<img src="${src}" alt="작업 사진">` : '<span class="album-cover-empty">사진</span>'}
+      <span class="album-cover-count">사진 ${photos.length}장 · 전체 보기</span>
+    </button>`;
+}
+
+/* 사진 소프트 삭제: 목록에서 빼고 삭제 이력에 보관 (메인관리자가 승인화면에서 열람) */
+function softDeleteRunPhoto(runId, stepIndex, key) {
+  const arr = getServiceRuns();
+  const run = arr.find(r => r.id === runId);
+  const step = run?.steps?.[stepIndex];
+  if (!run || !step) return false;
+  const idx = (step.photoKeys || []).indexOf(key);
+  if (idx === -1) return false;
+  step.photoKeys.splice(idx, 1);
+  step.deletedPhotos = step.deletedPhotos || [];
+  step.deletedPhotos.push({ key, at: new Date().toISOString(), by: adminActorLabel() });
+  store.set('pm-service-runs', arr);
+  logWorkAudit('사진 삭제', run, step.name, '사진 1장 삭제 (삭제 이력 보관)');
+  return true;
+}
+
+/* 전체 앨범 모달: 단계별 사진 + (권한 시) 삭제, 메인관리자는 삭제된 사진도 열람 */
+async function openRunAlbumModal(runId, { allowDelete = false, onClose = null } = {}) {
+  const run = getServiceRuns().find(r => r.id === runId);
+  if (!run) return;
+  const sections = await Promise.all((run.steps || []).map(async (step, si) => {
+    const items = await Promise.all((step.photoKeys || []).map(async key => ({ key, src: await assetSrc(key) })));
+    const photosHtml = items.filter(p => p.src).map(p => `
+      <figure class="album-item">
+        <img src="${esc(p.src)}" alt="${esc(step.name)} 사진">
+        ${allowDelete ? `<button type="button" class="album-del" data-run="${esc(run.id)}" data-si="${si}" data-key="${esc(p.key)}" aria-label="사진 삭제">×</button>` : ''}
+      </figure>`).join('');
+    const deleted = isMainAdmin() && (step.deletedPhotos || []).length
+      ? await Promise.all(step.deletedPhotos.map(async d => ({ ...d, src: await assetSrc(d.key) })))
+      : [];
+    const deletedHtml = deleted.filter(d => d.src).map(d => `
+      <figure class="album-item deleted">
+        <img src="${esc(d.src)}" alt="삭제된 사진">
+        <figcaption>${esc(d.by || '-')} 삭제 · ${esc(new Date(d.at).toLocaleString('ko-KR'))}</figcaption>
+      </figure>`).join('');
+    if (!photosHtml && !deletedHtml) return '';
+    return `
+      <section class="album-step">
+        <h4>${esc(step.name)} <span>${(step.photoKeys || []).length}장</span></h4>
+        <div class="album-grid">${photosHtml || '<p class="hint">사진 없음</p>'}</div>
+        ${deletedHtml ? `<p class="album-deleted-title">삭제된 사진 (메인관리자만 표시)</p><div class="album-grid">${deletedHtml}</div>` : ''}
+      </section>`;
+  }));
+  openModal(`
+    <h3>작업 사진</h3>
+    <p class="cal-msg">${esc(run.name || '-')} · ${esc(run.car || '-')} · ${esc(run.service || '-')}</p>
+    <div class="album-wrap">${sections.join('') || '<p class="hint">등록된 사진이 없습니다.</p>'}</div>
+    <div class="modal-actions"><button type="button" class="modal-cancel" onclick="document.getElementById('modal').hidden=true">닫기</button></div>
+  `, true);
+  modalCard.querySelectorAll('.album-del').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      if (!confirm('이 사진을 삭제할까요? 삭제 이력은 메인관리자에게 남습니다.')) return;
+      if (softDeleteRunPhoto(btn.dataset.run, Number(btn.dataset.si), btn.dataset.key)) {
+        await openRunAlbumModal(runId, { allowDelete, onClose });
+        if (onClose) onClose();
+      }
+    });
+  });
+}
+
+/* 단계 되돌리기: 제출 취소 또는 이전 단계로 (사진은 유지) */
+function revertServiceStep(runId) {
+  const arr = getServiceRuns();
+  const run = arr.find(r => r.id === runId);
+  if (!run) return;
+  const step = run.steps?.[run.currentStep];
+  if (!step) return;
+  if (step.submitted) {
+    if (!confirm(`${step.name} 단계 처리를 취소할까요? 사진은 유지됩니다.`)) return;
+    step.submitted = false;
+    step.approved = false;
+    run.completedAt = null;
+    run.status = `${step.name} 대기`;
+    logWorkAudit('단계 취소', run, step.name, '제출 취소 (사진 유지)');
+  } else if (run.currentStep > 0) {
+    const prev = run.steps[run.currentStep - 1];
+    if (!confirm(`${prev.name} 단계로 되돌릴까요? 사진은 유지됩니다.`)) return;
+    run.currentStep -= 1;
+    prev.submitted = false;
+    prev.approved = false;
+    run.completedAt = null;
+    run.status = `${prev.name} 대기`;
+    logWorkAudit('단계 되돌리기', run, prev.name, `${prev.name} 단계로 복귀`);
+  } else {
+    alert('되돌릴 단계가 없습니다.');
+    return;
+  }
+  store.set('pm-service-runs', arr);
+  renderAdmWork();
+  if (isMainAdmin()) renderAdmApproval();
+}
+
 function pushCustomerMessage(customer, message, payload = {}) {
   const all = store.get('pm-messages', []);
   all.push({
@@ -3286,25 +3438,42 @@ function renderAdmWork() {
     const dateLabel = booking ? booking.date : run.bookingDate;
     const timeLabel = booking ? booking.time : run.bookingTime;
     const card = document.createElement('article');
-    card.className = 'work-card';
+    card.className = 'work-card collapsible';
     card.innerHTML = `
       <div class="work-card-head">
         <strong>${carried ? '미출고 · ' : ''}${esc(dateLabel || today)} ${esc(timeLabel || '')} · ${esc(source.name || '-')} · ${esc(source.car || '-')}</strong>
         <a href="${phoneHref(source.phone)}">${esc(source.phone || '-')}</a>
       </div>
       <p>${esc(source.branch || '-')} · ${esc(source.model || '-')} · ${esc(booking ? ((booking.services || []).join(', ') || '서비스 미선택') : (run.service || '서비스 미선택'))}</p>
-      <p class="hint">${run ? esc(stepStateLabel(run)) : '작업 시작 전'}</p>
-      ${run ? `<div class="service-steps">${run.steps.map((s, i) => `<span class="${s.approved ? 'done' : i === run.currentStep ? 'active' : ''}">${esc(s.name)}</span>`).join('')}</div>` : ''}
-      <div class="service-run-actions"></div>`;
+      <p class="hint">${run ? esc(stepStateLabel(run)) : '작업 시작 전'} <span class="card-toggle-hint">클릭하여 상세보기</span></p>
+      <div class="work-card-detail" hidden>
+        ${run ? `<div class="service-steps">${run.steps.map((s, i) => `<span class="${s.approved ? 'done' : i === run.currentStep ? 'active' : ''}">${esc(s.name)}</span>`).join('')}</div>` : ''}
+        ${run ? '<div class="album-cover-wrap" data-cover></div>' : ''}
+        <div class="service-run-actions"></div>
+      </div>`;
     const actions = card.querySelector('.service-run-actions');
     if (!run) {
       actions.append(miniBtn('입고 시작', () => {
-        createRunFromBooking(booking);
+        const created = createRunFromBooking(booking);
+        logWorkAudit('입고 시작', created, created.steps?.[0]?.name || '', '예약에서 작업 생성');
         renderAdmWork();
       }));
     } else {
       actions.append(miniBtn('현재 단계 처리', () => openStepSubmitModal(run.id)));
+      actions.append(miniBtn('단계 취소', () => revertServiceStep(run.id), true));
+      renderRunAlbumCover(run).then(html => {
+        const cover = card.querySelector('[data-cover]');
+        if (cover) cover.innerHTML = html;
+        cover?.querySelector('.album-cover')?.addEventListener('click', () => {
+          openRunAlbumModal(run.id, { allowDelete: true, onClose: renderAdmWork });
+        });
+      });
     }
+    card.addEventListener('click', e => {
+      if (e.target.closest('button, a')) return;
+      card.classList.toggle('open');
+      card.querySelector('.work-card-detail').hidden = !card.classList.contains('open');
+    });
     list.append(card);
   });
 }
@@ -3391,10 +3560,17 @@ async function openStepSubmitModal(runId) {
       $('#step-error').textContent = '이 단계는 특이사항 입력이 필수입니다.';
       return;
     }
+    /* 업로드했다가 뺀 사진은 삭제 이력으로 보관 (메인관리자 열람용) */
+    const removed = (current.photoKeys || []).filter(k => !pendingPhotoKeys.includes(k));
+    if (removed.length) {
+      current.deletedPhotos = current.deletedPhotos || [];
+      removed.forEach(key => current.deletedPhotos.push({ key, at: new Date().toISOString(), by: adminActorLabel() }));
+    }
     current.photoKeys = [...pendingPhotoKeys].slice(0, 10);
     current.memo = memo;
     current.submitted = true;
     current.submittedAt = new Date().toISOString();
+    logWorkAudit('단계 처리', target, current.name, `사진 ${current.photoKeys.length}장${removed.length ? ` · 삭제 ${removed.length}장` : ''}${memo ? ' · 메모 있음' : ''}`);
     if (current.approvalRequired) {
       target.status = `${current.name} 승인대기`;
       pushAdminNotification(`${target.name} ${target.car} ${target.service} ${current.name} 승인 요청`, { runId, step: current.name });
@@ -3408,6 +3584,7 @@ async function openStepSubmitModal(runId) {
         target.status = '출고 완료';
         target.completedAt = new Date().toISOString();
       }
+      logWorkAudit('자동 승인', target, current.name, '승인 불필요 단계 - 고객에게 전송됨');
       pushCustomerMessage(target, `${target.service} ${current.name} 처리되었습니다. 사진 확인 가능합니다.`, { runId, approvedStep: current.name });
     }
     store.set('pm-service-runs', arr);
@@ -3420,31 +3597,177 @@ async function openStepSubmitModal(runId) {
 function renderAdmApproval() {
   const body = $('#adm-approval-body');
   if (!isMainAdmin()) { body.innerHTML = ''; return; }
-  const runs = getServiceRuns();
-  const pending = runs.filter(r => r.steps?.[r.currentStep]?.submitted && !r.steps?.[r.currentStep]?.approved);
-  body.innerHTML = pending.length ? '<div id="approval-list"></div>' : '<p class="hint">승인 대기 중인 작업이 없습니다.</p>';
+  /* 승인 필요 여부와 관계없이 제출된 단계가 있는 모든 작업 노출 */
+  const runs = getServiceRuns()
+    .filter(r => (r.steps || []).some(s => s.submitted || (s.deletedPhotos || []).length))
+    .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0))
+    .slice(0, 30);
+  body.innerHTML = runs.length ? '<div id="approval-list"></div>' : '<p class="hint">제출된 작업이 없습니다.</p>';
   const list = $('#approval-list');
-  pending.forEach(run => {
-    const step = run.steps[run.currentStep];
+  runs.forEach(run => {
+    const pendingStep = run.steps?.[run.currentStep];
+    const isPending = pendingStep?.submitted && !pendingStep?.approved;
+    const statusChip = isRunCompleted(run) ? '출고완료' : isPending ? `${pendingStep.name} 승인대기` : '진행중';
     const card = document.createElement('article');
-    card.className = 'work-card';
+    card.className = 'work-card collapsible';
     card.innerHTML = `
       <div class="work-card-head">
-        <strong>${esc(run.name)} · ${esc(run.car)} · ${esc(run.service)}</strong>
+        <strong>${esc(run.name || '-')} · ${esc(run.car || '-')} · ${esc(run.service || '-')}</strong>
         <a href="${phoneHref(run.phone)}">${esc(run.phone || '-')}</a>
       </div>
-      <p>${esc(run.bookingDate)} ${esc(run.bookingTime)} · ${esc(step.name)} 승인 요청</p>
-      <p>${esc(step.memo || '특이사항 없음')}</p>
-      <div class="step-photo-preview small" data-photos></div>
-      <div class="service-run-actions"></div>`;
-    renderStepPhotos(step).then(html => {
-      const target = card.querySelector('[data-photos]');
-      if (target) target.innerHTML = html || '<span>사진 없음</span>';
+      <p>${esc(run.branch || '-')} · ${esc(run.bookingDate || '-')} ${esc(run.bookingTime || '')}</p>
+      <p class="hint">${esc(statusChip)} <span class="card-toggle-hint">클릭하여 상세보기</span></p>
+      <div class="work-card-detail" hidden>
+        <div class="album-cover-wrap" data-cover></div>
+        <div class="approval-steps" data-steps></div>
+      </div>`;
+    renderRunAlbumCover(run).then(html => {
+      const cover = card.querySelector('[data-cover]');
+      if (cover) cover.innerHTML = html;
+      cover?.querySelector('.album-cover')?.addEventListener('click', () => {
+        openRunAlbumModal(run.id, { allowDelete: true, onClose: renderAdmApproval });
+      });
     });
-    const actions = card.querySelector('.service-run-actions');
-    actions.append(miniBtn('승인', () => approveServiceStep(run.id)),
-                   miniBtn('반려', () => rejectServiceStep(run.id), true));
+    const stepsWrap = card.querySelector('[data-steps]');
+    (run.steps || []).forEach((step, si) => {
+      if (!step.submitted && !(step.deletedPhotos || []).length) return;
+      const row = document.createElement('div');
+      row.className = 'approval-step-row';
+      const state = step.approved
+        ? (step.approvalRequired ? '승인됨' : '자동승인')
+        : step.submitted ? '승인대기' : '제출취소됨';
+      row.innerHTML = `
+        <div class="approval-step-info">
+          <strong>${esc(step.name)}</strong>
+          <em class="state-${step.approved ? 'done' : step.submitted ? 'pending' : 'off'}">${state}</em>
+          <span>${step.submittedAt ? esc(new Date(step.submittedAt).toLocaleString('ko-KR')) : '-'} · 사진 ${(step.photoKeys || []).length}장${(step.deletedPhotos || []).length ? ` · 삭제 ${(step.deletedPhotos || []).length}장` : ''}</span>
+          ${step.memo ? `<p>${esc(step.memo)}</p>` : ''}
+        </div>
+        <div class="service-run-actions"></div>`;
+      const actions = row.querySelector('.service-run-actions');
+      if (step.submitted) {
+        actions.append(miniBtn('수정', () => openStepEditModal(run.id, si)));
+        actions.append(miniBtn('고객전송', () => sendStepToCustomer(run.id, si)));
+        actions.append(miniBtn('삭제', () => deleteStepSubmission(run.id, si), true));
+        if (!step.approved && si === run.currentStep) actions.append(miniBtn('반려', () => rejectServiceStep(run.id), true));
+      }
+      stepsWrap.append(row);
+    });
+    card.addEventListener('click', e => {
+      if (e.target.closest('button, a')) return;
+      card.classList.toggle('open');
+      card.querySelector('.work-card-detail').hidden = !card.classList.contains('open');
+    });
     list.append(card);
+  });
+}
+
+/* 승인화면: 제출 삭제 — 사진은 삭제 이력으로 보관, 해당 단계부터 다시 진행 */
+function deleteStepSubmission(runId, stepIndex) {
+  if (!confirm('이 단계 제출을 삭제할까요? 사진은 삭제 이력으로 보관됩니다.')) return;
+  const arr = getServiceRuns();
+  const run = arr.find(r => r.id === runId);
+  const step = run?.steps?.[stepIndex];
+  if (!run || !step) return;
+  step.deletedPhotos = step.deletedPhotos || [];
+  (step.photoKeys || []).forEach(key => step.deletedPhotos.push({ key, at: new Date().toISOString(), by: adminActorLabel() }));
+  step.photoKeys = [];
+  step.submitted = false;
+  step.approved = false;
+  run.currentStep = Math.min(run.currentStep, stepIndex);
+  run.completedAt = null;
+  run.status = `${step.name} 대기`;
+  store.set('pm-service-runs', arr);
+  logWorkAudit('제출 삭제', run, step.name, '메인관리자가 제출을 삭제 (사진 이력 보관)');
+  renderAdmApproval();
+  renderAdmWork();
+}
+
+/* 승인화면: 고객전송 — 미승인이면 승인 처리, 승인된 단계면 사진 안내 재전송 */
+function sendStepToCustomer(runId, stepIndex) {
+  const arr = getServiceRuns();
+  const run = arr.find(r => r.id === runId);
+  const step = run?.steps?.[stepIndex];
+  if (!run || !step) return;
+  if (!step.approved && stepIndex === run.currentStep) {
+    approveServiceStep(runId);
+    return;
+  }
+  pushCustomerMessage(run, `${run.service} ${step.name} 사진이 업데이트되었습니다. 확인해보세요.`, { runId, approvedStep: step.name });
+  logWorkAudit('고객 전송', run, step.name, '사진 안내 메시지 재전송');
+  store.set('pm-service-runs', arr);
+  alert('고객에게 전송했습니다.');
+}
+
+/* 승인화면: 수정 — 승인 여부와 관계없이 사진·메모 수정 */
+async function openStepEditModal(runId, stepIndex) {
+  const run = getServiceRuns().find(r => r.id === runId);
+  const step = run?.steps?.[stepIndex];
+  if (!run || !step) return;
+  let pendingPhotoKeys = [...(step.photoKeys || [])].slice(0, 10);
+  const album = await renderStepPhotoAlbum(pendingPhotoKeys, step.name);
+  openModal(`
+    <h3>${esc(step.name)} 수정</h3>
+    <p class="cal-msg">${esc(run.name || '-')} · ${esc(run.car || '-')} · ${esc(run.service || '-')}</p>
+    <form id="step-edit-form">
+      <div class="step-photo-uploader">
+        <div class="step-photo-album" id="edit-photo-album">${album}</div>
+        <div class="step-photo-actions">
+          <button type="button" class="mini-btn" id="edit-gallery-btn">사진첩에서 선택</button>
+          <span class="hint" id="edit-photo-count">${pendingPhotoKeys.length}/10장</span>
+        </div>
+      </div>
+      <input type="file" id="edit-camera-file" accept="image/*" capture="environment" hidden>
+      <input type="file" id="edit-gallery-file" accept="image/*" multiple hidden>
+      <textarea id="edit-memo" rows="4" placeholder="특이사항">${esc(step.memo || '')}</textarea>
+      <p class="form-error" id="edit-error"></p>
+      <div class="modal-actions">
+        <button type="submit" class="modal-submit">저장</button>
+        <button type="button" class="modal-cancel" onclick="document.getElementById('modal').hidden=true">취소</button>
+      </div>
+    </form>
+  `, true);
+  const drawAlbum = async () => {
+    $('#edit-photo-album').innerHTML = await renderStepPhotoAlbum(pendingPhotoKeys, step.name);
+    $('#edit-photo-count').textContent = `${pendingPhotoKeys.length}/10장`;
+  };
+  const addPhotos = async files => {
+    const remaining = 10 - pendingPhotoKeys.length;
+    if (remaining <= 0) { $('#edit-error').textContent = '사진은 최대 10장까지 등록할 수 있습니다.'; return; }
+    const selected = [...files].filter(file => /^image\//.test(file.type || ''));
+    if (!selected.length) return;
+    const keys = await saveFiles(selected, 'service', remaining);
+    pendingPhotoKeys = [...pendingPhotoKeys, ...keys].slice(0, 10);
+    $('#edit-error').textContent = '';
+    await drawAlbum();
+  };
+  $('#edit-photo-album').addEventListener('click', async e => {
+    const removeBtn = e.target.closest('[data-remove]');
+    if (removeBtn) { pendingPhotoKeys.splice(Number(removeBtn.dataset.remove), 1); await drawAlbum(); return; }
+    if (e.target.closest('[data-camera]')) { $('#edit-camera-file').click(); return; }
+    if (e.target.closest('[data-gallery]')) $('#edit-gallery-file').click();
+  });
+  $('#edit-gallery-btn').addEventListener('click', () => $('#edit-gallery-file').click());
+  $('#edit-camera-file').addEventListener('change', async e => { await addPhotos(e.target.files); e.target.value = ''; });
+  $('#edit-gallery-file').addEventListener('change', async e => { await addPhotos(e.target.files); e.target.value = ''; });
+  $('#step-edit-form').addEventListener('submit', e => {
+    e.preventDefault();
+    const arr = getServiceRuns();
+    const target = arr.find(r => r.id === runId);
+    const cur = target?.steps?.[stepIndex];
+    if (!target || !cur) return;
+    const removed = (cur.photoKeys || []).filter(k => !pendingPhotoKeys.includes(k));
+    if (removed.length) {
+      cur.deletedPhotos = cur.deletedPhotos || [];
+      removed.forEach(key => cur.deletedPhotos.push({ key, at: new Date().toISOString(), by: adminActorLabel() }));
+    }
+    cur.photoKeys = [...pendingPhotoKeys].slice(0, 10);
+    cur.memo = $('#edit-memo').value.trim();
+    store.set('pm-service-runs', arr);
+    logWorkAudit('제출 수정', target, cur.name, `사진 ${cur.photoKeys.length}장${removed.length ? ` · 삭제 ${removed.length}장` : ''}`);
+    closeModal();
+    renderAdmApproval();
+    renderAdmWork();
   });
 }
 
@@ -3467,6 +3790,7 @@ function approveServiceStep(runId) {
     run.status = `${run.steps[run.currentStep].name} 대기`;
   }
   pushCustomerMessage(run, customerMsg, { runId, approvedStep: step.name });
+  logWorkAudit('승인 · 고객 전송', run, step.name, isLast ? '출고 완료 처리' : '다음 단계로 진행');
   store.set('pm-service-runs', arr);
   renderAdmApproval();
   renderAdmWork();
@@ -3483,6 +3807,7 @@ function rejectServiceStep(runId) {
   step.rejectReason = reason;
   run.status = `${step.name} 재작업`;
   pushAdminNotification(`${run.name} ${run.car} ${step.name} 반려: ${reason || '사유 없음'}`, { runId, step: step.name });
+  logWorkAudit('반려', run, step.name, reason || '사유 없음');
   store.set('pm-service-runs', arr);
   renderAdmApproval();
   renderAdmWork();
@@ -3550,6 +3875,21 @@ function renderAdmSettings() {
         <input type="password" id="main-admin-password" placeholder="새 메인관리자 비밀번호" value="${esc(main.password || '')}">
         <button type="submit" class="mini-btn add">변경</button>
       </form>
+    </section>
+    <section class="settings-card">
+      <h3>작업 기록</h3>
+      <p class="field-help">모든 작업 데이터(입고·단계 처리·사진 삭제·승인·반려·수정)가 날짜·시간과 함께 저장됩니다. 최근 100건 표시.</p>
+      <ul class="audit-list">${(() => {
+        const audit = store.get('pm-work-audit', []).slice(0, 100);
+        if (!audit.length) return '<li class="empty">작업 기록이 없습니다.</li>';
+        return audit.map(a => `
+          <li>
+            <time>${esc(new Date(a.at).toLocaleString('ko-KR'))}</time>
+            <strong>${esc(a.action)}</strong>
+            <span>${esc(a.by || '-')} · ${esc(a.customer || '-')} ${esc(a.car || '')} · ${esc(a.service || '-')}${a.step ? ` · ${esc(a.step)}` : ''}</span>
+            ${a.detail ? `<em>${esc(a.detail)}</em>` : ''}
+          </li>`).join('');
+      })()}</ul>
     </section>
     <p class="form-error" id="security-save-msg"></p>`;
   $('#make-sub-pw').addEventListener('click', () => {
