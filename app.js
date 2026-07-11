@@ -232,6 +232,7 @@ const SUPABASE_DATA_KEYS = [
   'promotors-cases',
   'pm-products',
   'pm-blocked',
+  'pm-banned-members',
   'pm-customers',
   'pm-bookings',
   'pm-members',
@@ -345,6 +346,8 @@ const getNotices   = () => store.get('pm-notices', DEFAULT_NOTICES);
 const getCases     = () => store.get('promotors-cases', []);
 const getProducts  = () => normalizeProducts(store.get('pm-products', DEFAULT_PRODUCTS));
 const getBlocked   = () => store.get('pm-blocked', []);
+const getBannedMembers = () => store.get('pm-banned-members', []);
+const normPhone = p => String(p || '').replace(/\D/g, '');
 const getCustomers = () => store.get('pm-customers', {});
 const getIntroSlides = () => store.get('pm-intro-slides', []);
 const DEFAULT_BLOG_PROXY = 'https://promotors-site.pages.dev/api/naver-blog?url=';
@@ -444,6 +447,10 @@ let introLastActivity = Date.now();
 let chatTimer = null;
 let chatOpenTarget = null;
 let securityUnlocked = false;
+/* 고객관리: 저장/수정 후에도 열려있던 고객 카드를 유지 */
+const openCustCards = new Set();
+/* 고객관리: 고객별 메모 검색어/펼침 상태 */
+const custMemoFilters = new Map();
 
 /* ============================================================
    화면(뷰) 전환 — 오른쪽만 변경, 왼쪽 고정
@@ -457,7 +464,17 @@ function showView(name) {
   document.body.dataset.view = name;
   $$('.view').forEach(v => v.classList.toggle('active', v.id === 'view-' + name));
   $$('.top-nav .nav-btn').forEach(b => b.classList.toggle('active', b.dataset.view === name));
+  syncMobileTabbar();
   $('.right-panel').scrollTop = 0;
+}
+
+/* 모바일 탭바 활성 표시: 마이 페이지가 열려있으면 마이, 아니면 현재 화면 기준 */
+function syncMobileTabbar(myOpen = false) {
+  const name = document.body.dataset.view || '';
+  $$('#mobile-tabbar [data-mtab]').forEach(b =>
+    b.classList.toggle('active', myOpen
+      ? b.dataset.mtab === 'my'
+      : b.dataset.mtab === name || (b.dataset.mtab === 'my' && name.startsWith('adm-'))));
 }
 
 function scrollMobilePublicView(name) {
@@ -536,7 +553,7 @@ function openModal(html, wide, full, backHandler = null) {
   const first = modalCard.querySelector('input, textarea, [contenteditable="true"]');
   if (first) first.focus();
 }
-function closeModal() { modalBackHandler = null; modal.hidden = true; modalCard.classList.remove('full', 'mypage-card'); modalCard.innerHTML = ''; }
+function closeModal() { modalBackHandler = null; modal.hidden = true; modalCard.classList.remove('full', 'mypage-card', 'mobile-full'); modalCard.innerHTML = ''; syncMobileTabbar(); }
 modal.addEventListener('click', e => { if (e.target === modal) e.preventDefault(); });
 
 function openHomeViewConfirm(view, label) {
@@ -700,6 +717,8 @@ function openMemberModal(tab) {
     </form>
   `);
 
+  /* 모바일에서는 로그인/회원가입을 전체화면 페이지로 표시 */
+  modalCard.classList.add('mobile-full');
   modalCard.querySelectorAll('.mtab').forEach(b =>
     b.addEventListener('click', () => openMemberModal(b.dataset.t)));
   $('#m-id').value = tab === 'signup' ? (draft.id || '') : rememberedId;
@@ -751,12 +770,23 @@ function openMemberModal(tab) {
       if (password !== password2) { err.textContent = '비밀번호 확인이 일치하지 않습니다.'; return; }
       if (members.some(m => m.id === id)) { err.textContent = '이미 가입된 아이디입니다.'; return; }
       if (members.some(m => m.car === car)) { err.textContent = '이미 가입된 차량번호입니다.'; return; }
+      /* 차단된 핸드폰번호는 재가입 불가 */
+      if (getBannedMembers().some(b => b.type === 'blocked' && normPhone(b.member?.phone) && normPhone(b.member?.phone) === normPhone(phone))) {
+        err.textContent = '차단된 핸드폰번호로는 가입할 수 없습니다. 매장에 문의해주세요.';
+        return;
+      }
       members.push({ id, password, car, name, phone, model, email, address, role: 'customer' });
       store.set('pm-members', members);
       member = { id, password, car, name, phone, model, email, address, role: 'customer' };
       store.del('pm-signup-draft');
     } else {
       const found = members.find(m => (m.id === id && m.password === password) || (!m.id && m.car === id && m.phone === password));
+      /* 차단된 계정/핸드폰번호는 로그인 불가 (자료는 보안 화면에 보관) */
+      const blockedList = getBannedMembers().filter(b => b.type === 'blocked' && b.member);
+      const bannedHit = found
+        ? blockedList.some(b => b.member.id === found.id || (normPhone(b.member.phone) && normPhone(b.member.phone) === normPhone(found.phone)))
+        : blockedList.some(b => (b.member.id === id && b.member.password === password) || (b.member.car === id && b.member.phone === password));
+      if (bannedHit) { err.textContent = '차단된 계정입니다. 매장에 문의해주세요.'; return; }
       if (!found) { err.textContent = '아이디 또는 비밀번호가 일치하지 않습니다.'; return; }
       member = found;
       if ($('#m-remember')?.checked) store.setLocal('pm-remember-id', id); else store.del('pm-remember-id');
@@ -781,7 +811,8 @@ const MYPAGE_ICONS = {
   check: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6L9 17l-5-5"/></svg>',
   search: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.35-4.35"/></svg>',
   flag: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M8.5 12.2l2.4 2.4 4.6-4.8"/></svg>',
-  car: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 11l1.5-4.5A2 2 0 0 1 8.4 5h7.2a2 2 0 0 1 1.9 1.5L19 11"/><path d="M3 17v-4a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v4"/><circle cx="7.5" cy="16.5" r="1.5"/><circle cx="16.5" cy="16.5" r="1.5"/></svg>'
+  car: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 11l1.5-4.5A2 2 0 0 1 8.4 5h7.2a2 2 0 0 1 1.9 1.5L19 11"/><path d="M3 17v-4a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v4"/><circle cx="7.5" cy="16.5" r="1.5"/><circle cx="16.5" cy="16.5" r="1.5"/></svg>',
+  lock: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>'
 };
 const WORK_STAGES = [
   { label: '접수완료', icon: 'check' },
@@ -2783,11 +2814,17 @@ function fmtMinute(iso) {
 
 function memoEntryHtml(entry) {
   return `
-    <article class="memo-entry">
-      <time>${esc(fmtMinute(entry.createdAt))}</time>
-      ${entry.title ? `<strong>${esc(entry.title)}</strong>` : ''}
-      ${entry.amount ? `<em>${Number(entry.amount).toLocaleString()}원</em>` : ''}
-      ${entry.body ? `<p>${esc(entry.body)}</p>` : ''}
+    <article class="memo-entry" data-memo-id="${esc(entry.id)}">
+      <header class="memo-entry-head">
+        <time>${esc(fmtMinute(entry.createdAt))}${entry.updatedAt ? ' <i>(수정됨)</i>' : ''}</time>
+        <span class="memo-entry-actions">
+          <button type="button" class="memo-edit" data-memo="${esc(entry.id)}">수정</button>
+          <button type="button" class="memo-del" data-memo="${esc(entry.id)}">삭제</button>
+        </span>
+      </header>
+      ${entry.title ? `<p class="memo-line"><span class="memo-label">제목</span><strong>${esc(entry.title)}</strong></p>` : ''}
+      ${entry.amount ? `<p class="memo-line"><span class="memo-label">금액</span><em>${Number(entry.amount).toLocaleString()}원</em></p>` : ''}
+      ${entry.body ? `<p class="memo-line memo-body"><span class="memo-label">내용</span><span class="memo-text">${esc(entry.body)}</span></p>` : ''}
     </article>`;
 }
 
@@ -2806,18 +2843,12 @@ function custRunRowHtml(run) {
 function renderAdmCust() {
   const body = $('#adm-cust-body');
   if (!isMainAdmin()) { body.innerHTML = ''; return; }
-  const dateFilter = $('#cust-date-search')?.value || '';
-  const textFilter = ($('#cust-text-search')?.value || '').trim().toLowerCase();
   const bookings = getBookings();
   const members = store.get('pm-members', [])
     .map(m => ({ ...m, latestBooking: latestBookingForMember(m, bookings) }))
     .sort((a, b) => bookingTimestamp(b.latestBooking) - bookingTimestamp(a.latestBooking));
   const customers = getCustomers();
   body.innerHTML = `
-    <div class="cust-search">
-      <input type="date" id="cust-date-search" value="${esc(dateFilter)}" aria-label="메모 날짜 검색">
-      <input type="search" id="cust-text-search" value="${esc(textFilter)}" placeholder="메모 내용 검색">
-    </div>
     <datalist id="service-product-options">${getProducts().map(p => `<option value="${esc(p.name)}"></option>`).join('')}</datalist>
     <div id="cust-list">${members.length ? '' : '<p class="hint">가입된 고객이 없습니다.</p>'}</div>`;
   const list = $('#cust-list');
@@ -2827,26 +2858,24 @@ function renderAdmCust() {
     const bookCnt = bookings.filter(b => b.memberId === m.id || b.car === m.car || b.phone === m.phone).length;
     const total = (c.records || []).reduce((sum, r) => sum + Number(r.amount || 0), 0);
     const unpaid = (c.records || []).filter(r => !r.paid).reduce((sum, r) => sum + Number(r.amount || 0), 0);
-    const memoEntries = memoEntriesFor(c).filter(entry => {
-      const dateOk = !dateFilter || String(entry.createdAt || '').slice(0, 10) === dateFilter;
-      const textOk = !textFilter || `${entry.title || ''} ${entry.body || ''}`.toLowerCase().includes(textFilter);
-      return dateOk && textOk;
-    });
     const memberRuns = getServiceRuns()
       .filter(r => r.car === m.car || (m.id && r.memberId === m.id))
       .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
     const latestText = m.latestBooking ? `${m.latestBooking.date} ${m.latestBooking.time}` : '예약 없음';
+    const isOpen = openCustCards.has(m.car);
+    const memoFilter = custMemoFilters.get(m.car) || { date: '', text: '', open: false };
+    custMemoFilters.set(m.car, memoFilter);
     const card = document.createElement('article');
-    card.className = 'cust-card';
+    card.className = 'cust-card' + (isOpen ? ' open' : '');
     card.innerHTML = `
-      <button type="button" class="cust-summary" aria-expanded="false">
+      <button type="button" class="cust-summary" aria-expanded="${isOpen}">
         <strong>${esc(m.name || '-')}</strong>
         <span>${esc(m.car || '-')}</span>
         <span>${esc(m.model || '-')}</span>
         <a href="${phoneHref(m.phone)}" data-phone>${esc(m.phone || '-')}</a>
         <em>최근 ${esc(latestText)}</em>
       </button>
-      <div class="cust-detail" hidden>
+      <div class="cust-detail" ${isOpen ? '' : 'hidden'}>
         <div class="cust-head">
           <strong>${esc(m.name || '-')}</strong>
           <span>${esc(m.car || '-')} · ${esc(m.model || '-')} · <a href="${phoneHref(m.phone)}">${esc(m.phone || '-')}</a></span>
@@ -2856,24 +2885,25 @@ function renderAdmCust() {
           <button type="button" class="mini-btn detail-view">상세정보</button>
           <button type="button" class="mini-btn customer-chat">문의사항</button>
         </div>
+        <p class="cust-sec-title">메모 <span>날짜·내용으로 검색 · 수정/삭제 가능</span></p>
+        <div class="memo-tools">
+          <input type="date" class="memo-search-date" value="${esc(memoFilter.date)}" aria-label="메모 날짜 검색">
+          <input type="search" class="memo-search-text" value="${esc(memoFilter.text)}" placeholder="메모 내용 검색">
+          <button type="button" class="fold-toggle memo-fold" hidden></button>
+        </div>
+        <div class="memo-book"></div>
         <div class="memo-form postit">
           <div class="memo-form-row">
             <input type="text" class="memo-title" placeholder="제목">
             <input type="number" class="memo-amount" placeholder="금액(원)" min="0">
           </div>
-          <textarea class="cust-memo" rows="2" placeholder="내용을 입력하면 날짜/시간별 기록으로 저장됩니다."></textarea>
-          <div class="memo-form-foot">
-            <button type="button" class="mini-btn memo-save">메모 저장</button>
+          <div class="memo-form-main">
+            <textarea class="cust-memo" rows="2" placeholder="내용을 입력하면 날짜/시간별 기록으로 저장됩니다."></textarea>
+            <div class="memo-form-side">
+              <button type="button" class="mini-btn add memo-save">메모 저장</button>
+              <button type="button" class="mini-btn memo-edit-cancel" hidden>수정 취소</button>
+            </div>
           </div>
-        </div>
-        <div class="memo-book">
-          ${memoEntries.length ? `
-            ${memoEntryHtml(memoEntries[0])}
-            ${memoEntries.length > 1 ? `
-              <div class="fold-rest" data-fold-body="memo" hidden>${memoEntries.slice(1).map(memoEntryHtml).join('')}</div>
-              <button type="button" class="mini-btn fold-toggle" data-fold="memo" data-label="메모 ${memoEntries.length - 1}개 더보기">메모 ${memoEntries.length - 1}개 더보기</button>
-            ` : ''}
-          ` : '<p class="hint">저장된 메모가 없습니다.</p>'}
         </div>
         <p class="cust-sec-title">작업 내역 <span>예약 자동 연동 · 클릭하면 저장된 작업 데이터로 이동</span></p>
         <div class="cust-runs">
@@ -2881,7 +2911,7 @@ function renderAdmCust() {
             ${custRunRowHtml(memberRuns[0])}
             ${memberRuns.length > 1 ? `
               <div class="fold-rest" data-fold-body="runs" hidden>${memberRuns.slice(1).map(custRunRowHtml).join('')}</div>
-              <button type="button" class="mini-btn fold-toggle" data-fold="runs" data-label="작업 ${memberRuns.length - 1}개 더보기">작업 ${memberRuns.length - 1}개 더보기</button>
+              <button type="button" class="fold-toggle" data-fold="runs" data-label="더보기 ${memberRuns.length - 1}개 ▼">더보기 ${memberRuns.length - 1}개 ▼</button>
             ` : ''}
           ` : '<p class="hint">연동된 작업이 없습니다. 예약에서 입고를 시작하면 자동으로 표시됩니다.</p>'}
         </div>
@@ -2896,8 +2926,13 @@ function renderAdmCust() {
           <input type="number" class="rec-amt" placeholder="금액(원)" min="0">
           <select class="rec-paytype"><option>현금</option><option>카드</option><option>계좌이체</option></select>
           <label class="rec-paid-label"><input type="checkbox" class="rec-paid"> 정산완료</label>
-          <button type="submit" class="mini-btn add">추가</button>
+          <button type="submit" class="mini-btn add rec-add">추가</button>
         </form>
+        <div class="cust-danger">
+          <span class="cust-danger-note">차단 시 해당 핸드폰번호로 재가입·로그인이 불가하며, 자료는 보안 화면에 보관됩니다.</span>
+          <button type="button" class="mini-btn danger cust-block">고객차단</button>
+          <button type="button" class="mini-btn danger cust-delete">고객삭제</button>
+        </div>
       </div>
     `;
 
@@ -2921,12 +2956,124 @@ function renderAdmCust() {
     if ((c.records || []).length > 1) {
       const recToggle = document.createElement('button');
       recToggle.type = 'button';
-      recToggle.className = 'mini-btn fold-toggle';
+      recToggle.className = 'fold-toggle';
       recToggle.dataset.fold = 'rec';
-      recToggle.dataset.label = `기록 ${c.records.length - 1}개 더보기`;
+      recToggle.dataset.label = `더보기 ${c.records.length - 1}개 ▼`;
       recToggle.textContent = recToggle.dataset.label;
       card.querySelector('.rec-table').after(recToggle);
     }
+
+    /* ---------- 메모: 검색/2개 노출 + 접기펴기/수정/삭제 ---------- */
+    const memoBook = card.querySelector('.memo-book');
+    const memoFoldBtn = card.querySelector('.memo-fold');
+    const memoForm = card.querySelector('.memo-form');
+    const memoSaveBtn = card.querySelector('.memo-save');
+    const memoCancelBtn = card.querySelector('.memo-edit-cancel');
+
+    const currentEntries = () => memoEntriesFor(getCustomers()[m.car] || { memo: '', records: [] });
+
+    const resetMemoForm = () => {
+      delete memoForm.dataset.editing;
+      card.querySelector('.memo-title').value = '';
+      card.querySelector('.memo-amount').value = '';
+      card.querySelector('.cust-memo').value = '';
+      memoSaveBtn.textContent = '메모 저장';
+      memoCancelBtn.hidden = true;
+    };
+
+    const startMemoEdit = id => {
+      const entry = currentEntries().find(en => en.id === id);
+      if (!entry) return;
+      memoForm.dataset.editing = id;
+      card.querySelector('.memo-title').value = entry.title || '';
+      card.querySelector('.memo-amount').value = entry.amount || '';
+      card.querySelector('.cust-memo').value = entry.body || '';
+      memoSaveBtn.textContent = '메모 수정';
+      memoCancelBtn.hidden = false;
+      card.querySelector('.cust-memo').focus();
+    };
+
+    const deleteMemo = id => {
+      if (!confirm('이 메모를 삭제할까요?')) return;
+      const all = getCustomers();
+      const cc = all[m.car] || { memo: '', records: [] };
+      cc.memoEntries = memoEntriesFor(cc).filter(en => en.id !== id);
+      if (id === 'legacy-memo') cc.memo = '';
+      all[m.car] = cc;
+      store.set('pm-customers', all);
+      paintMemoBook();
+    };
+
+    const paintMemoBook = () => {
+      const f = custMemoFilters.get(m.car) || { date: '', text: '', open: false };
+      const all = currentEntries();
+      const entries = all.filter(entry => {
+        const dateOk = !f.date || String(entry.createdAt || '').slice(0, 10) === f.date;
+        const textOk = !f.text || `${entry.title || ''} ${entry.body || ''}`.toLowerCase().includes(f.text.trim().toLowerCase());
+        return dateOk && textOk;
+      });
+      if (!entries.length) {
+        memoBook.innerHTML = all.length ? '<p class="hint">검색된 메모가 없습니다.</p>' : '<p class="hint">저장된 메모가 없습니다.</p>';
+        memoFoldBtn.hidden = true;
+        return;
+      }
+      /* 최근 2개까지 노출, 나머지는 접기/펴기 */
+      const rest = entries.slice(2);
+      memoBook.innerHTML = `
+        ${entries.slice(0, 2).map(memoEntryHtml).join('')}
+        ${rest.length ? `<div class="fold-rest" ${f.open ? '' : 'hidden'}>${rest.map(memoEntryHtml).join('')}</div>` : ''}`;
+      memoFoldBtn.hidden = !rest.length;
+      memoFoldBtn.textContent = f.open ? '접기 ▲' : `더보기 ${rest.length}개 ▼`;
+      memoBook.querySelectorAll('.memo-edit').forEach(btn => btn.addEventListener('click', () => startMemoEdit(btn.dataset.memo)));
+      memoBook.querySelectorAll('.memo-del').forEach(btn => btn.addEventListener('click', () => deleteMemo(btn.dataset.memo)));
+    };
+    paintMemoBook();
+
+    memoFoldBtn.addEventListener('click', () => {
+      memoFilter.open = !memoFilter.open;
+      paintMemoBook();
+    });
+    card.querySelector('.memo-search-date').addEventListener('change', e => {
+      memoFilter.date = e.target.value;
+      paintMemoBook();
+    });
+    card.querySelector('.memo-search-text').addEventListener('input', e => {
+      memoFilter.text = e.target.value;
+      paintMemoBook();
+    });
+    memoCancelBtn.addEventListener('click', resetMemoForm);
+    memoSaveBtn.addEventListener('click', () => {
+      const title = card.querySelector('.memo-title').value.trim();
+      const amount = card.querySelector('.memo-amount').value.trim();
+      const bodyText = card.querySelector('.cust-memo').value.trim();
+      if (!bodyText && !title && !amount) return;
+      const all = getCustomers();
+      const cNext = all[m.car] || { memo: '', records: [] };
+      const entries = memoEntriesFor(cNext);
+      const editing = memoForm.dataset.editing;
+      if (editing) {
+        const target = entries.find(en => en.id === editing);
+        if (target) {
+          target.title = title;
+          target.amount = amount;
+          target.body = bodyText;
+          target.updatedAt = new Date().toISOString();
+          if (editing === 'legacy-memo') cNext.memo = bodyText || title;
+        }
+        cNext.memoEntries = entries;
+      } else {
+        cNext.memo = bodyText || title;
+        cNext.memoUpdatedAt = new Date().toISOString();
+        cNext.memoEntries = [
+          { id: `memo-${Date.now()}-${Math.random().toString(36).slice(2)}`, title, amount, body: bodyText, createdAt: cNext.memoUpdatedAt },
+          ...entries
+        ].slice(0, 200);
+      }
+      all[m.car] = cNext;
+      store.set('pm-customers', all);
+      resetMemoForm();
+      paintMemoBook();
+    });
 
     card.querySelector('[data-phone]').addEventListener('click', e => e.stopPropagation());
     card.querySelector('.cust-summary').addEventListener('click', e => {
@@ -2935,37 +3082,20 @@ function renderAdmCust() {
       detail.hidden = !expanded;
       e.currentTarget.setAttribute('aria-expanded', String(expanded));
       card.classList.toggle('open', expanded);
+      if (expanded) openCustCards.add(m.car); else openCustCards.delete(m.car);
     });
-    card.querySelector('.memo-save').addEventListener('click', e => {
-      const title = card.querySelector('.memo-title').value.trim();
-      const amount = card.querySelector('.memo-amount').value.trim();
-      const bodyText = card.querySelector('.cust-memo').value.trim();
-      if (!bodyText && !title) return;
-      const customers = getCustomers();
-      const cNext = customers[m.car] || { memo: '', records: [] };
-      cNext.memo = bodyText || title;
-      cNext.memoUpdatedAt = new Date().toISOString();
-      cNext.memoEntries = [
-        { id: `memo-${Date.now()}-${Math.random().toString(36).slice(2)}`, title, amount, body: bodyText, createdAt: cNext.memoUpdatedAt },
-        ...(Array.isArray(cNext.memoEntries) ? cNext.memoEntries : [])
-      ].slice(0, 200);
-      customers[m.car] = cNext;
-      store.set('pm-customers', customers);
-      e.currentTarget.textContent = '저장됨';
-      setTimeout(renderAdmCust, 500);
-    });
-    card.querySelectorAll('.fold-toggle').forEach(btn => {
+    card.querySelectorAll('.fold-toggle[data-fold]').forEach(btn => {
       btn.addEventListener('click', () => {
         if (btn.dataset.fold === 'rec') {
           const rows = card.querySelectorAll('tr.fold-rest-row');
           const show = rows[0]?.hidden;
           rows.forEach(row => { row.hidden = !show; });
-          btn.textContent = show ? '접기' : btn.dataset.label;
+          btn.textContent = show ? '접기 ▲' : btn.dataset.label;
         } else {
           const foldBody = card.querySelector(`[data-fold-body="${btn.dataset.fold}"]`);
           if (!foldBody) return;
           foldBody.hidden = !foldBody.hidden;
-          btn.textContent = foldBody.hidden ? btn.dataset.label : '접기';
+          btn.textContent = foldBody.hidden ? btn.dataset.label : '접기 ▲';
         }
       });
     });
@@ -2974,6 +3104,8 @@ function renderAdmCust() {
     });
     card.querySelector('.detail-view').addEventListener('click', () => openCustomerDetail(m));
     card.querySelector('.customer-chat').addEventListener('click', () => openCustomerCenterModal(m));
+    card.querySelector('.cust-block').addEventListener('click', () => banMember(m, 'blocked'));
+    card.querySelector('.cust-delete').addEventListener('click', () => banMember(m, 'deleted'));
 
     const form = card.querySelector('.rec-form');
     form.querySelector('.rec-date').value = new Date().toISOString().slice(0, 10);
@@ -2992,12 +3124,29 @@ function renderAdmCust() {
 
     list.append(card);
   });
+}
 
-  $('#cust-date-search').addEventListener('change', renderAdmCust);
-  $('#cust-text-search').addEventListener('input', () => {
-    clearTimeout(renderAdmCust._timer);
-    renderAdmCust._timer = setTimeout(renderAdmCust, 250);
+/* 고객 차단/삭제: 계정은 회원 목록에서 제거, 기록은 보안 화면에 보관.
+   차단 시 해당 핸드폰번호는 재가입·로그인 불가. 고객 자료(메모·정비내역)는 유지. */
+function banMember(m, type) {
+  const label = type === 'blocked' ? '차단' : '삭제';
+  const msg = type === 'blocked'
+    ? `${m.name || m.car || '고객'} 고객을 차단할까요?\n차단하면 해당 핸드폰번호로 재가입할 수 없고 로그인도 차단됩니다.\n자료는 보안 화면에 보관됩니다.`
+    : `${m.name || m.car || '고객'} 고객을 삭제할까요?\n계정이 삭제되어 로그인할 수 없습니다.\n기록은 보안 화면에 보관됩니다.`;
+  if (!confirm(msg)) return;
+  const { latestBooking, ...snapshot } = m;
+  const banned = getBannedMembers();
+  banned.unshift({
+    id: `ban-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+    type,
+    at: new Date().toISOString(),
+    member: snapshot
   });
+  store.set('pm-banned-members', banned);
+  store.set('pm-members', store.get('pm-members', []).filter(x => x.id !== m.id));
+  openCustCards.delete(m.car);
+  renderAdmCust();
+  alert(`${label} 처리되었습니다. 보안 화면에서 확인할 수 있습니다.`);
 }
 
 function openCustomerDetail(m) {
@@ -3966,6 +4115,25 @@ function renderAdmSettings() {
       </form>
     </section>
     <section class="settings-card">
+      <h3>차단 · 삭제 회원</h3>
+      <p class="field-help">차단된 회원은 해당 핸드폰번호로 재가입할 수 없고 로그인도 차단됩니다. 고객 자료(메모·정비내역)는 그대로 보관됩니다.</p>
+      <ul class="banned-list">${(() => {
+        const banned = getBannedMembers();
+        if (!banned.length) return '<li class="empty">차단·삭제된 회원이 없습니다.</li>';
+        return banned.map(b => `
+          <li>
+            <em class="ban-chip ${b.type === 'blocked' ? 'blocked' : 'deleted'}">${b.type === 'blocked' ? '차단' : '삭제'}</em>
+            <strong>${esc(b.member?.name || '-')}</strong>
+            <span>${esc(b.member?.car || '-')} · ${esc(b.member?.phone || '-')} · 아이디 ${esc(b.member?.id || '-')}</span>
+            <time>${esc(new Date(b.at).toLocaleString('ko-KR'))}</time>
+            <span class="ban-actions">
+              <button type="button" class="mini-btn ban-restore" data-ban="${esc(b.id)}">${b.type === 'blocked' ? '차단해제' : '계정복구'}</button>
+              <button type="button" class="mini-btn danger ban-remove" data-ban="${esc(b.id)}">기록삭제</button>
+            </span>
+          </li>`).join('');
+      })()}</ul>
+    </section>
+    <section class="settings-card">
       <h3>작업 기록</h3>
       <p class="field-help">모든 작업 데이터(입고·단계 처리·사진 삭제·승인·반려·수정)가 날짜·시간과 함께 저장됩니다. 최근 100건 표시.</p>
       <ul class="audit-list">${(() => {
@@ -4018,6 +4186,34 @@ function renderAdmSettings() {
     store.set('pm-main-admin', { password: next });
     $('#security-save-msg').textContent = '메인관리자 비밀번호가 변경되었습니다.';
   });
+  $$('.ban-restore').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const banned = getBannedMembers();
+      const entry = banned.find(b => b.id === btn.dataset.ban);
+      if (!entry) return;
+      const label = entry.type === 'blocked' ? '차단을 해제' : '계정을 복구';
+      if (!confirm(`${entry.member?.name || entry.member?.car || '회원'}님의 ${label}할까요? 다시 로그인과 가입이 가능해집니다.`)) return;
+      const members = store.get('pm-members', []);
+      if (entry.member?.id && members.some(x => x.id === entry.member.id)) {
+        alert('같은 아이디로 가입된 회원이 이미 있어 복구할 수 없습니다. 기록삭제로 차단만 해제할 수 있습니다.');
+        return;
+      }
+      if (entry.member) {
+        members.push(entry.member);
+        store.set('pm-members', members);
+      }
+      store.set('pm-banned-members', banned.filter(b => b.id !== entry.id));
+      renderAdmSettings();
+      renderAdmCust();
+    });
+  });
+  $$('.ban-remove').forEach(btn => {
+    btn.addEventListener('click', () => {
+      if (!confirm('이 기록을 삭제할까요? 차단 중이었다면 해당 번호로 다시 가입할 수 있게 됩니다.')) return;
+      store.set('pm-banned-members', getBannedMembers().filter(b => b.id !== btn.dataset.ban));
+      renderAdmSettings();
+    });
+  });
 }
 
 function renderAdmInquiry() {
@@ -4057,6 +4253,93 @@ function renderAdminInquiries(messages) {
 }
 
 /* ============================================================
+   모바일 하단 탭바 — 소개 · 매장안내 · 정비사례 · 게시판 · 마이
+   ============================================================ */
+function showAdminViewFromMenu(view) {
+  showView(view);
+  if (view === 'adm-book') initAdmBook();
+  if (view === 'adm-work') renderAdmWork();
+  if (view === 'adm-approval') renderAdmApproval();
+  if (view === 'adm-cust') renderAdmCust();
+  if (view === 'adm-prod') renderAdmProd();
+  if (view === 'adm-inquiry') renderAdmInquiry();
+  if (view === 'adm-settings') renderAdmSettings();
+}
+
+/* 관리자용 마이(설정): 고객 내예약 페이지와 같은 전체화면 구성 */
+function openAdminSettingsPage() {
+  const menus = [
+    { view: 'adm-book', label: '예약관리', icon: 'calendar' },
+    { view: 'adm-work', label: '작업현황', icon: 'wrench' },
+    ...(isMainAdmin() ? [
+      { view: 'adm-approval', label: '작업승인', icon: 'check' },
+      { view: 'adm-cust', label: '고객관리', icon: 'user' },
+      { view: 'adm-prod', label: '상품관리', icon: 'doc' },
+      { view: 'adm-inquiry', label: '고객문의', icon: 'headset' },
+      { view: 'adm-settings', label: '보안', icon: 'lock' }
+    ] : [])
+  ];
+  openModal(`
+    <h3>설정</h3>
+    <section class="mypage-account-card">
+      <div class="mypage-profile admin-profile">
+        <span class="profile-avatar" aria-hidden="true">${MYPAGE_ICONS.user}</span>
+        <span class="profile-text">
+          <strong>${esc(isGeneralAdmin() && adminBranch ? `${adminBranch} 관리자` : '관리자 모드')}</strong>
+          <span>${isMainAdmin() ? '메인관리자' : '일반관리자'}</span>
+        </span>
+      </div>
+    </section>
+    <h4 class="mypage-sec-title">관리 메뉴</h4>
+    <nav class="mypage-quick admin-settings-quick" aria-label="관리 메뉴">
+      ${menus.map(menu => `
+        <button type="button" data-adm-view="${menu.view}">
+          <span class="quick-icon">${MYPAGE_ICONS[menu.icon]}</span>
+          <strong>${menu.label}</strong>
+        </button>`).join('')}
+    </nav>
+    <button type="button" class="mypage-cs-btn" id="admin-settings-logout">
+      <span class="cs-icon" aria-hidden="true">${MYPAGE_ICONS.user}</span>
+      <span class="cs-text"><strong>로그아웃</strong><span>관리자 모드를 종료합니다</span></span>
+      <b>›</b>
+    </button>
+  `, true);
+  modalCard.classList.add('mypage-card');
+  modalCard.querySelectorAll('[data-adm-view]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      closeModal();
+      showAdminViewFromMenu(btn.dataset.admView);
+      $('.nav-row')?.scrollIntoView({ block: 'start' });
+    });
+  });
+  $('#admin-settings-logout').addEventListener('click', () => {
+    closeModal();
+    logout();
+  });
+}
+
+/* 마이 탭: 관리자=설정, 고객=내예약, 비로그인=로그인/회원가입 */
+function openMobileMy() {
+  if (isAdmin) openAdminSettingsPage();
+  else if (member) openMyPageModal();
+  else openMemberModal('login');
+  syncMobileTabbar(true);
+}
+
+function initMobileTabbar() {
+  $$('#mobile-tabbar [data-mtab]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const tab = btn.dataset.mtab;
+      if (tab === 'my') { openMobileMy(); return; }
+      closeModal();
+      showView(tab);
+      if (tab === 'cases') activateTab('tab-blog');
+      $('.nav-row')?.scrollIntoView({ block: 'start' });
+    });
+  });
+}
+
+/* ============================================================
    시작
    ============================================================ */
 /* PC 고정 캔버스: 1920×1080 화면을 가로폭에 꽉 차게 (좌우 여백 없음) */
@@ -4080,6 +4363,7 @@ async function startApp() {
   await hydrateSupabaseData();
   await migrateLocalAssetsToSupabase();
   wireNav();
+  initMobileTabbar();
   initShopImage();
   $('#btn-add-notice').addEventListener('click', () => openNoticeModal(null));
   $('#btn-add-case').addEventListener('click', () => openCaseModal(null));
