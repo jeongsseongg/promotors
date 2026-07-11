@@ -248,7 +248,8 @@ const SUPABASE_DATA_KEYS = [
   'pm-security-settings',
   'pm-home-view',
   'pm-admin-notifications',
-  'pm-work-audit'
+  'pm-work-audit',
+  'pm-event-banners'
 ];
 let isHydratingSupabase = false;
 
@@ -395,7 +396,7 @@ const canAccessBranch = branch => isMainAdmin() || !adminBranch || branch === ad
 const canUseAdminView = name => {
   if (!isAdmin) return false;
   if (isMainAdmin()) return true;
-  return ['adm-book', 'adm-work'].includes(name);
+  return ['adm-book', 'adm-work', 'adm-inquiry'].includes(name);
 };
 
 function defaultWorkflowSteps() {
@@ -567,6 +568,51 @@ function openModal(html, wide, full, backHandler = null) {
 function closeModal() { modalBackHandler = null; modal.hidden = true; modalCard.classList.remove('full', 'mypage-card', 'mobile-full'); modalCard.innerHTML = ''; syncMobileTabbar(); }
 modal.addEventListener('click', e => { if (e.target === modal) e.preventDefault(); });
 
+/* ============================================================
+   프로모터스 전용 팝업 — 브라우저 기본 alert/confirm/prompt 대체
+   ============================================================ */
+let pmDialogBackdrop = null;
+function ensurePmDialog() {
+  if (pmDialogBackdrop) return pmDialogBackdrop;
+  pmDialogBackdrop = document.createElement('div');
+  pmDialogBackdrop.className = 'pm-dialog-backdrop';
+  pmDialogBackdrop.hidden = true;
+  pmDialogBackdrop.innerHTML = '<div class="pm-dialog" role="alertdialog" aria-modal="true"></div>';
+  document.body.append(pmDialogBackdrop);
+  return pmDialogBackdrop;
+}
+
+function pmDialog({ title = '알림', message = '', input = null, okText = '확인', cancelText = '', danger = false }) {
+  return new Promise(resolve => {
+    const backdrop = ensurePmDialog();
+    const card = backdrop.querySelector('.pm-dialog');
+    card.innerHTML = `
+      <span class="pm-dialog-brand">PRO MOTORS</span>
+      <strong class="pm-dialog-title">${esc(title)}</strong>
+      ${message ? `<p class="pm-dialog-msg">${esc(message).replace(/\n/g, '<br>')}</p>` : ''}
+      ${input ? `<input type="text" class="pm-dialog-input" placeholder="${esc(input.placeholder || '')}" value="${esc(input.value || '')}">` : ''}
+      <div class="pm-dialog-actions">
+        ${cancelText ? `<button type="button" class="pm-dialog-cancel">${esc(cancelText)}</button>` : ''}
+        <button type="button" class="pm-dialog-ok${danger ? ' danger' : ''}">${esc(okText)}</button>
+      </div>`;
+    backdrop.hidden = false;
+    const inputEl = card.querySelector('.pm-dialog-input');
+    const finish = value => { backdrop.hidden = true; card.innerHTML = ''; resolve(value); };
+    card.querySelector('.pm-dialog-ok').addEventListener('click', () => finish(input ? inputEl.value : true));
+    card.querySelector('.pm-dialog-cancel')?.addEventListener('click', () => finish(input ? null : false));
+    inputEl?.addEventListener('keydown', e => {
+      if (e.key === 'Enter' && !e.isComposing) { e.preventDefault(); finish(inputEl.value); }
+    });
+    (inputEl || card.querySelector('.pm-dialog-ok')).focus();
+  });
+}
+
+const pmAlert = (message, title = '알림') => pmDialog({ title, message });
+const pmConfirm = (message, { title = '확인', okText = '확인', cancelText = '취소', danger = false } = {}) =>
+  pmDialog({ title, message, okText, cancelText, danger });
+const pmPrompt = (message, { title = '입력', placeholder = '', value = '' } = {}) =>
+  pmDialog({ title, message, input: { placeholder, value }, cancelText: '취소' });
+
 function openHomeViewConfirm(view, label) {
   openModal(`
     <h3>메인화면 설정</h3>
@@ -622,8 +668,8 @@ function applyAuthUI() {
     renderAdmProd();
     renderAdmApproval();
     renderAdmSettings();
-    renderAdmInquiry();
   }
+  if (isAdmin) renderAdmInquiry();
   if (isAdmin) {
     initAdmBook();
     renderAdmWork();
@@ -660,7 +706,7 @@ function logout() {
 function openAddressSearch(input) {
   const finish = () => {
     if (!window.daum?.Postcode) {
-      alert('주소 검색 스크립트를 불러오지 못했습니다. 주소를 직접 입력해주세요.');
+      pmAlert('주소 검색 스크립트를 불러오지 못했습니다. 주소를 직접 입력해주세요.');
       return;
     }
     new daum.Postcode({
@@ -783,7 +829,7 @@ function openMemberModal(tab) {
       if (members.some(m => m.car === car)) { err.textContent = '이미 가입된 차량번호입니다.'; return; }
       /* 차단된 핸드폰번호는 재가입 불가 */
       if (getBannedMembers().some(b => b.type === 'blocked' && normPhone(b.member?.phone) && normPhone(b.member?.phone) === normPhone(phone))) {
-        err.textContent = '차단된 핸드폰번호로는 가입할 수 없습니다. 매장에 문의해주세요.';
+        err.textContent = '가입이 제한된 핸드폰번호입니다. 매장에 문의해주세요.';
         return;
       }
       members.push({ id, password, car, name, phone, model, email, address, role: 'customer' });
@@ -797,7 +843,7 @@ function openMemberModal(tab) {
       const bannedHit = found
         ? blockedList.some(b => b.member.id === found.id || (normPhone(b.member.phone) && normPhone(b.member.phone) === normPhone(found.phone)))
         : blockedList.some(b => (b.member.id === id && b.member.password === password) || (b.member.car === id && b.member.phone === password));
-      if (bannedHit) { err.textContent = '차단된 계정입니다. 매장에 문의해주세요.'; return; }
+      if (bannedHit) { err.textContent = '이용이 제한된 계정입니다. 매장에 문의해주세요.'; return; }
       if (!found) { err.textContent = '아이디 또는 비밀번호가 일치하지 않습니다.'; return; }
       member = found;
       if ($('#m-remember')?.checked) store.setLocal('pm-remember-id', id); else store.del('pm-remember-id');
@@ -867,6 +913,7 @@ async function openMyPageModal() {
     </div>${i < WORK_STAGES.length - 1 ? `<i class="${stageIndex > i ? 'done' : ''}"></i>` : ''}`).join('');
   const hasRunPhotos = latestRun && (latestRun.steps || []).some(s => s.approved && (s.photoKeys || []).length);
   const carMeta = [member.year, member.car].filter(Boolean).join(' · ');
+  const banner = await eventBannerHtml();
 
   openModal(`
     <h3>내예약</h3>
@@ -895,6 +942,7 @@ async function openMyPageModal() {
       <div class="work-steps">${stepsHtml}</div>
       ${hasRunPhotos ? `<button type="button" class="mini-btn view-run-photos" data-run="${esc(latestRun.id)}">작업사진 보기</button>` : ''}
     </article>
+    ${banner}
     <button type="button" class="mypage-cs-btn" id="mypage-center">
       <span class="cs-icon" aria-hidden="true">${MYPAGE_ICONS.headset}</span>
       <span class="cs-text"><strong>고객센터</strong><span>실시간 채팅으로 문의하세요</span></span>
@@ -902,6 +950,7 @@ async function openMyPageModal() {
     </button>
   `, true);
   modalCard.classList.add('mypage-card');
+  wireEventBanner();
   $('#customer-detail-page').addEventListener('click', openCustomerHistoryModal);
   $('#mypage-alerts').addEventListener('click', openMyAlertsPage);
   $('#mypage-info').addEventListener('click', openMyInfoPage);
@@ -927,9 +976,9 @@ function myPagePageHeader(title, icon = 'doc') {
 }
 
 /* 고객 예약취소 공용: 예약 삭제 + 관리자 알림 */
-function cancelMemberBooking(booking) {
+async function cancelMemberBooking(booking) {
   if (!booking) return false;
-  if (!confirm(`${booking.date} ${booking.time} ${booking.branch} 예약을 취소할까요?`)) return false;
+  if (!await pmConfirm(`${booking.date} ${booking.time} ${booking.branch} 예약을 취소할까요?`, { title: '예약 취소', okText: '예약취소', danger: true })) return false;
   const arr = getBookings();
   const key = bookingKey(booking);
   const idx = arr.findIndex(b => bookingKey(b) === key);
@@ -937,6 +986,7 @@ function cancelMemberBooking(booking) {
   arr.splice(idx, 1);
   store.set('pm-bookings', arr);
   pushAdminNotification(`${booking.name || booking.car || '고객'}님이 ${booking.date} ${booking.time} ${booking.branch} 예약을 취소했습니다.`, { type: 'booking-cancel', car: booking.car || '' });
+  logWorkAudit('예약 취소', { name: booking.name, car: booking.car, phone: booking.phone, model: booking.model, branch: booking.branch, service: (booking.services || []).join(', '), bookingDate: booking.date, bookingTime: booking.time }, '', '고객이 예약을 취소함', '고객');
   logEvent('booking_cancel', { branch: booking.branch, date: booking.date, time: booking.time });
   return true;
 }
@@ -1157,9 +1207,9 @@ function openMyBookingsPage() {
   modalCard.classList.add('mypage-card');
   myPageBackActions();
   modalCard.querySelectorAll('.cancel-booking').forEach(btn => {
-    btn.addEventListener('click', () => {
+    btn.addEventListener('click', async () => {
       const booking = bookings[Number(btn.dataset.i)];
-      if (cancelMemberBooking(booking)) openMyBookingsPage();
+      if (await cancelMemberBooking(booking)) openMyBookingsPage();
     });
   });
 }
@@ -1425,7 +1475,7 @@ async function renderBranches() {
 
     if (isMainAdmin()) card.append(cardActions(
       () => openBranchModal(i),
-      () => { if (confirm('"' + b.name + '" 지점을 삭제할까요?')) { const arr = getBranches(); arr.splice(i, 1); store.set('pm-branches', arr); applyAuthUI(); } }
+      async () => { if (await pmConfirm(`"${b.name}" 지점을 삭제할까요?`, { title: '지점 삭제', okText: '삭제', danger: true })) { const arr = getBranches(); arr.splice(i, 1); store.set('pm-branches', arr); applyAuthUI(); } }
     ));
     wrap.append(card);
   }
@@ -1675,9 +1725,17 @@ function applyEditorToolbar(toolbar, editor, options = {}) {
     });
   });
   toolbar.querySelectorAll('[data-link]').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const url = normalizeUrl(prompt('연결할 URL을 입력하세요.') || '');
-      if (url) document.execCommand('createLink', false, url);
+    btn.addEventListener('click', async () => {
+      remember();
+      const url = normalizeUrl(await pmPrompt('연결할 URL을 입력하세요.', { title: 'URL 연결', placeholder: 'https://' }) || '');
+      if (url) {
+        if (lastRange) {
+          const sel = window.getSelection();
+          sel.removeAllRanges();
+          sel.addRange(lastRange);
+        }
+        document.execCommand('createLink', false, url);
+      }
       editor.focus();
     });
   });
@@ -1696,7 +1754,7 @@ function applyEditorToolbar(toolbar, editor, options = {}) {
       const currentCount = editorImageKeys(editor).length;
       const room = 10 - currentCount;
       if (room <= 0) {
-        alert('본문 이미지는 최대 10장까지 넣을 수 있습니다.');
+        pmAlert('본문 이미지는 최대 10장까지 넣을 수 있습니다.');
         e.target.value = '';
         return;
       }
@@ -1762,7 +1820,7 @@ async function mountAlbumGrid(wrap, keys, options) {
     input.addEventListener('change', async e => {
       const room = limit - current.length;
       if (room <= 0) {
-        alert(`이미지는 최대 ${limit}장까지 등록할 수 있습니다.`);
+        pmAlert(`이미지는 최대 ${limit}장까지 등록할 수 있습니다.`);
         e.target.value = '';
         return;
       }
@@ -1964,8 +2022,8 @@ async function renderNotices() {
       () => {
         openNoticeModal(allNotices.indexOf(n));
       },
-      () => {
-        if (confirm('이 공지를 삭제할까요?')) { const arr = getNotices(); arr.splice(allNotices.indexOf(n), 1); store.set('pm-notices', arr); renderNotices(); }
+      async () => {
+        if (await pmConfirm('이 공지를 삭제할까요?', { title: '공지 삭제', okText: '삭제', danger: true })) { const arr = getNotices(); arr.splice(allNotices.indexOf(n), 1); store.set('pm-notices', arr); renderNotices(); }
       }
     ));
     album.append(card);
@@ -2061,7 +2119,7 @@ async function renderCases() {
     });
     if (isMainAdmin()) card.append(cardActions(
       () => openCaseModal(realIndex),
-      () => { if (confirm('이 정비사례를 삭제할까요?')) { const arr = getCases(); arr.splice(realIndex, 1); store.set('promotors-cases', arr); renderCases(); } }
+      async () => { if (await pmConfirm('이 정비사례를 삭제할까요?', { title: '정비사례 삭제', okText: '삭제', danger: true })) { const arr = getCases(); arr.splice(realIndex, 1); store.set('promotors-cases', arr); renderCases(); } }
     ));
     list.append(card);
   }
@@ -2148,8 +2206,8 @@ async function openPostView(post, options = {}) {
   hydrateInlineImages(modalCard);
   if (canEditNotice) {
     $('#post-edit-notice')?.addEventListener('click', () => openNoticeModal(options.index));
-    $('#post-delete-notice')?.addEventListener('click', () => {
-      if (!confirm('이 공지를 삭제할까요?')) return;
+    $('#post-delete-notice')?.addEventListener('click', async () => {
+      if (!await pmConfirm('이 공지를 삭제할까요?', { title: '공지 삭제', okText: '삭제', danger: true })) return;
       const arr = getNotices();
       arr.splice(options.index, 1);
       store.set('pm-notices', arr);
@@ -2303,8 +2361,8 @@ function openReserveFlow() {
         <button type="button" class="modal-cancel" onclick="closeModal()">닫기</button>
       </div>
     `);
-    $('#cancel-active-booking')?.addEventListener('click', () => {
-      if (cancelMemberBooking(activeBooking)) openBranchSelect();
+    $('#cancel-active-booking')?.addEventListener('click', async () => {
+      if (await cancelMemberBooking(activeBooking)) openBranchSelect();
     });
     return;
   }
@@ -2432,8 +2490,8 @@ function renderSlots(branchBookings) {
     } else if (taken && taken.car === member.car) {
       el.classList.add('mine');
       el.title = '내 예약 - 누르면 취소';
-      el.addEventListener('click', () => {
-        if (cancelMemberBooking(taken)) renderCalendar('예약이 취소되었습니다.');
+      el.addEventListener('click', async () => {
+        if (await cancelMemberBooking(taken)) renderCalendar('예약이 취소되었습니다.');
       });
     } else if (taken) {
       el.disabled = true; /* 해당 시간만 차단 - 다른 시간은 예약 가능 */
@@ -2484,15 +2542,15 @@ function renderServiceStep() {
     const services = [...list.querySelectorAll('input:checked')].map(c => c.value);
     const memo = $('#svc-memo').value.trim();
     const mileage = $('#svc-mileage').value.trim();
-    if (!mileage) { alert('현재 주행거리를 입력해주세요.'); return; }
-    if (!services.length && !memo) { alert('서비스를 선택하거나 기타 메모를 입력해주세요.'); return; }
+    if (!mileage) { pmAlert('현재 주행거리를 입력해주세요.'); return; }
+    if (!services.length && !memo) { pmAlert('서비스를 선택하거나 기타 메모를 입력해주세요.'); return; }
     const activeBooking = getBookings().find(b =>
       (b.memberId === member.id || b.car === member.car) &&
       b.status !== '취소' &&
       String(b.date || '') >= todayKey()
     );
     if (activeBooking) {
-      alert(`${activeBooking.date} ${activeBooking.time} 예약된 날짜가 있습니다. 취소 후 신청해주세요.`);
+      pmAlert(`${activeBooking.date} ${activeBooking.time} 예약된 날짜가 있습니다. 취소 후 신청해주세요.`);
       return;
     }
     const arr = getBookings();
@@ -2506,6 +2564,7 @@ function renderServiceStep() {
                services, memo, mileage, status: '승인대기' });
     store.set('pm-bookings', arr);
     pushAdminNotification(`${member.name} ${member.car} ${cal.branch} ${cal.selDate} ${cal.selTime} 예약 승인 요청`, { bookingId: arr[arr.length - 1].id });
+    logWorkAudit('고객 예약', { name: member.name, car: member.car, phone: member.phone, model: member.model, branch: cal.branch, service: services.join(', ') || '서비스 미선택', bookingDate: cal.selDate, bookingTime: cal.selTime }, '', memo ? `요청메모: ${memo}` : '', '고객');
     const done = `${cal.branch} ${cal.selTime} 예약 신청이 접수되었습니다. 관리자 승인 후 확정됩니다.`;
     cal.selTime = null;
     openBookingDoneModal(done);
@@ -2639,9 +2698,11 @@ function renderAdmDay() {
         row.append(miniBtn('예약승인', () => approveBooking(b.id)));
       }
       row.append(miniBtn('변경', () => openMoveBooking(bIdx)),
-                 miniBtn('취소', () => {
-                   if (!confirm('이 예약을 취소할까요?')) return;
-                   const arr = getBookings(); arr.splice(bIdx, 1); store.set('pm-bookings', arr); renderAdmBook();
+                 miniBtn('취소', async () => {
+                   if (!await pmConfirm('이 예약을 취소할까요?', { title: '예약 취소', okText: '예약취소', danger: true })) return;
+                   const arr = getBookings(); arr.splice(bIdx, 1); store.set('pm-bookings', arr);
+                   logWorkAudit('예약 취소', { name: b.name, car: b.car, phone: b.phone, model: b.model, branch: b.branch, service: (b.services || []).join(', '), bookingDate: b.date, bookingTime: b.time }, '', '관리자가 예약을 취소함');
+                   renderAdmBook();
                  }, true));
     } else if (blkIdx > -1) {
       info.textContent = '예약완료';
@@ -2792,6 +2853,8 @@ function openAdminBookingModal(time) {
       createdBy: 'admin'
     });
     store.set('pm-bookings', all);
+    const added = all[all.length - 1];
+    logWorkAudit('예약 등록(직접)', { name: added.name, car: added.car, phone: added.phone, model: added.model, branch: added.branch, service: services.join(', ') || '서비스 미선택', bookingDate: added.date, bookingTime: added.time }, '', memo ? `메모: ${memo}` : '');
     closeModal();
     renderAdmBook();
   });
@@ -2959,8 +3022,8 @@ function renderAdmCust() {
           <button type="submit" class="mini-btn add rec-add">추가</button>
         </form>
         <div class="cust-danger">
-          <span class="cust-danger-note">차단 시 해당 핸드폰번호로 재가입·로그인이 불가하며, 자료는 보안 화면에 보관됩니다.</span>
-          <button type="button" class="mini-btn danger cust-block">고객차단</button>
+          <span class="cust-danger-note">블랙리스트 등록 시 해당 핸드폰번호로 재가입·로그인이 불가하며, 자료는 보안 화면에 보관됩니다.</span>
+          <button type="button" class="mini-btn danger cust-block">블랙리스트</button>
           <button type="button" class="mini-btn danger cust-delete">고객삭제</button>
         </div>
       </div>
@@ -2979,7 +3042,7 @@ function renderAdmCust() {
       pill.addEventListener('click', () => mutateCust(m.car, cc => { cc.records[ri].paid = !cc.records[ri].paid; }));
       tdPaid.append(pill);
       const tdDel = document.createElement('td');
-      tdDel.append(miniBtn('삭제', () => { if (confirm('기록을 삭제할까요?')) mutateCust(m.car, cc => cc.records.splice(ri, 1)); }, true));
+      tdDel.append(miniBtn('삭제', async () => { if (await pmConfirm('기록을 삭제할까요?', { title: '기록 삭제', okText: '삭제', danger: true })) mutateCust(m.car, cc => cc.records.splice(ri, 1)); }, true));
       tr.append(tdPaid, tdDel);
       tbody.append(tr);
     });
@@ -3023,8 +3086,8 @@ function renderAdmCust() {
       card.querySelector('.cust-memo').focus();
     };
 
-    const deleteMemo = id => {
-      if (!confirm('이 메모를 삭제할까요?')) return;
+    const deleteMemo = async id => {
+      if (!await pmConfirm('이 메모를 삭제할까요?', { title: '메모 삭제', okText: '삭제', danger: true })) return;
       const all = getCustomers();
       const cc = all[m.car] || { memo: '', records: [] };
       cc.memoEntries = memoEntriesFor(cc).filter(en => en.id !== id);
@@ -3156,14 +3219,14 @@ function renderAdmCust() {
   });
 }
 
-/* 고객 차단/삭제: 계정은 회원 목록에서 제거, 기록은 보안 화면에 보관.
-   차단 시 해당 핸드폰번호는 재가입·로그인 불가. 고객 자료(메모·정비내역)는 유지. */
-function banMember(m, type) {
-  const label = type === 'blocked' ? '차단' : '삭제';
+/* 고객 블랙리스트/삭제: 계정은 회원 목록에서 제거, 기록은 보안 화면에 보관.
+   블랙리스트 등록 시 해당 핸드폰번호는 재가입·로그인 불가. 고객 자료(메모·정비내역)는 유지. */
+async function banMember(m, type) {
+  const label = type === 'blocked' ? '블랙리스트 등록' : '삭제';
   const msg = type === 'blocked'
-    ? `${m.name || m.car || '고객'} 고객을 차단할까요?\n차단하면 해당 핸드폰번호로 재가입할 수 없고 로그인도 차단됩니다.\n자료는 보안 화면에 보관됩니다.`
+    ? `${m.name || m.car || '고객'} 고객을 블랙리스트에 등록할까요?\n등록하면 해당 핸드폰번호로 재가입할 수 없고 로그인도 제한됩니다.\n자료는 보안 화면에 보관됩니다.`
     : `${m.name || m.car || '고객'} 고객을 삭제할까요?\n계정이 삭제되어 로그인할 수 없습니다.\n기록은 보안 화면에 보관됩니다.`;
-  if (!confirm(msg)) return;
+  if (!await pmConfirm(msg, { title: label, okText: label, danger: true })) return;
   const { latestBooking, ...snapshot } = m;
   const banned = getBannedMembers();
   banned.unshift({
@@ -3176,7 +3239,7 @@ function banMember(m, type) {
   store.set('pm-members', store.get('pm-members', []).filter(x => x.id !== m.id));
   openCustCards.delete(m.car);
   renderAdmCust();
-  alert(`${label} 처리되었습니다. 보안 화면에서 확인할 수 있습니다.`);
+  pmAlert(`${label} 처리되었습니다. 보안 화면에서 확인할 수 있습니다.`);
 }
 
 function openCustomerDetail(m) {
@@ -3221,8 +3284,8 @@ function renderAdmProd() {
     const actions = document.createElement('div');
     actions.className = 'card-actions';
     actions.append(miniBtn('수정', () => openProductModal(i)),
-                   miniBtn('삭제', () => {
-                     if (!confirm(`"${p.name}" 상품을 삭제할까요?`)) return;
+                   miniBtn('삭제', async () => {
+                     if (!await pmConfirm(`"${p.name}" 상품을 삭제할까요?`, { title: '상품 삭제', okText: '삭제', danger: true })) return;
                      const arr = getProducts(); arr.splice(i, 1); store.set('pm-products', arr); renderAdmProd();
                    }, true));
     card.append(main, actions);
@@ -3287,7 +3350,7 @@ function renderServiceRunAdmin(body) {
       const target = arr[i];
       const current = target.steps[target.currentStep];
       if (current?.photoRequired && !current?.photoKeys?.length) {
-        alert('사진을 첨부해야 다음 단계로 이동할 수 있습니다.');
+        pmAlert('사진을 첨부해야 다음 단계로 이동할 수 있습니다.');
         return;
       }
       current.approved = true;
@@ -3297,8 +3360,8 @@ function renderServiceRunAdmin(body) {
       store.set('pm-service-runs', arr);
       renderAdmProd();
     });
-    card.querySelector('.delete-run').addEventListener('click', () => {
-      if (!confirm('실시간 서비스 기록을 삭제할까요?')) return;
+    card.querySelector('.delete-run').addEventListener('click', async () => {
+      if (!await pmConfirm('실시간 서비스 기록을 삭제할까요?', { title: '기록 삭제', okText: '삭제', danger: true })) return;
       const arr = store.get('pm-service-runs', []);
       arr.splice(i, 1);
       store.set('pm-service-runs', arr);
@@ -3438,17 +3501,25 @@ function adminActorLabel() {
   return '시스템';
 }
 
-function logWorkAudit(action, run, stepName = '', detail = '') {
+function logWorkAudit(action, run, stepName = '', detail = '', actor = '') {
   const list = store.get('pm-work-audit', []);
+  const step = stepName ? (run?.steps || []).find(s => s.name === stepName) : null;
   list.unshift({
     id: `audit-${Date.now()}-${Math.random().toString(36).slice(2)}`,
     at: new Date().toISOString(),
-    by: adminActorLabel(),
+    by: actor || adminActorLabel(),
     action,
     car: run?.car || '',
     customer: run?.name || '',
+    phone: run?.phone || '',
+    model: run?.model || '',
+    branch: run?.branch || '',
     service: run?.service || run?.serviceName || '',
+    bookingDate: run?.bookingDate || '',
+    bookingTime: run?.bookingTime || '',
     step: stepName,
+    memo: step?.memo || '',
+    photos: (step?.photoKeys || []).length,
     detail
   });
   store.set('pm-work-audit', list.slice(0, 500));
@@ -3522,7 +3593,7 @@ async function openRunAlbumModal(runId, { allowDelete = false, onClose = null } 
   `, true);
   modalCard.querySelectorAll('.album-del').forEach(btn => {
     btn.addEventListener('click', async () => {
-      if (!confirm('이 사진을 삭제할까요? 삭제 이력은 메인관리자에게 남습니다.')) return;
+      if (!await pmConfirm('이미지를 삭제할까요?', { title: '이미지 삭제', okText: '삭제', danger: true })) return;
       if (softDeleteRunPhoto(btn.dataset.run, Number(btn.dataset.si), btn.dataset.key)) {
         await openRunAlbumModal(runId, { allowDelete, onClose });
         if (onClose) onClose();
@@ -3531,31 +3602,43 @@ async function openRunAlbumModal(runId, { allowDelete = false, onClose = null } 
   });
 }
 
-/* 단계 되돌리기: 제출 취소 또는 이전 단계로 (사진은 유지) */
-function revertServiceStep(runId) {
+/* 단계에 저장된 사진을 모두 삭제 이력으로 이동 (자동삭제) */
+function clearStepPhotos(step) {
+  const count = (step.photoKeys || []).length;
+  if (!count) return 0;
+  step.deletedPhotos = step.deletedPhotos || [];
+  step.photoKeys.forEach(key => step.deletedPhotos.push({ key, at: new Date().toISOString(), by: adminActorLabel() }));
+  step.photoKeys = [];
+  return count;
+}
+
+/* 단계 되돌리기: 제출 취소 또는 이전 단계로 — 해당 단계에 저장된 사진은 자동 삭제 */
+async function revertServiceStep(runId) {
   const arr = getServiceRuns();
   const run = arr.find(r => r.id === runId);
   if (!run) return;
   const step = run.steps?.[run.currentStep];
   if (!step) return;
   if (step.submitted) {
-    if (!confirm(`${step.name} 단계 처리를 취소할까요? 사진은 유지됩니다.`)) return;
+    if (!await pmConfirm(`${step.name} 단계 처리를 취소할까요?\n이 단계에 저장된 사진은 삭제됩니다.`, { title: '단계 취소', okText: '단계 취소', danger: true })) return;
+    const removed = clearStepPhotos(step);
     step.submitted = false;
     step.approved = false;
     run.completedAt = null;
     run.status = `${step.name} 대기`;
-    logWorkAudit('단계 취소', run, step.name, '제출 취소 (사진 유지)');
+    logWorkAudit('단계 취소', run, step.name, removed ? `제출 취소 · 사진 ${removed}장 삭제` : '제출 취소');
   } else if (run.currentStep > 0) {
     const prev = run.steps[run.currentStep - 1];
-    if (!confirm(`${prev.name} 단계로 되돌릴까요? 사진은 유지됩니다.`)) return;
+    if (!await pmConfirm(`${prev.name} 단계로 되돌릴까요?\n${prev.name} 단계에 저장된 사진은 삭제됩니다.`, { title: '단계 되돌리기', okText: '되돌리기', danger: true })) return;
     run.currentStep -= 1;
+    const removed = clearStepPhotos(prev);
     prev.submitted = false;
     prev.approved = false;
     run.completedAt = null;
     run.status = `${prev.name} 대기`;
-    logWorkAudit('단계 되돌리기', run, prev.name, `${prev.name} 단계로 복귀`);
+    logWorkAudit('단계 되돌리기', run, prev.name, removed ? `${prev.name} 단계로 복귀 · 사진 ${removed}장 삭제` : `${prev.name} 단계로 복귀`);
   } else {
-    alert('되돌릴 단계가 없습니다.');
+    pmAlert('되돌릴 단계가 없습니다.');
     return;
   }
   store.set('pm-service-runs', arr);
@@ -3708,7 +3791,7 @@ function renderAdmWork() {
         <a href="${phoneHref(source.phone)}">${esc(source.phone || '-')}</a>
       </div>
       <p>${esc(source.branch || '-')} · ${esc(source.model || '-')} · ${esc(booking ? ((booking.services || []).join(', ') || '서비스 미선택') : (run.service || '서비스 미선택'))}</p>
-      <p class="hint">${run ? esc(stepStateLabel(run)) : '작업 시작 전'} <span class="card-toggle-hint">클릭하여 상세보기</span></p>
+      <p class="hint">${run ? esc(stepStateLabel(run)) : '작업 시작 전'} <button type="button" class="card-fold-btn">펴기 ▼</button></p>
       <div class="work-card-detail" hidden>
         ${run ? `<div class="service-steps">${run.steps.map((s, i) => `<span class="${s.approved ? 'done' : i === run.currentStep ? 'active' : ''}">${esc(s.name)}</span>`).join('')}</div>` : ''}
         ${run ? '<div class="album-cover-wrap" data-cover></div>' : ''}
@@ -3732,10 +3815,17 @@ function renderAdmWork() {
         });
       });
     }
+    const foldBtn = card.querySelector('.card-fold-btn');
+    const toggleCard = () => {
+      card.classList.toggle('open');
+      const open = card.classList.contains('open');
+      card.querySelector('.work-card-detail').hidden = !open;
+      foldBtn.textContent = open ? '접기 ▲' : '펴기 ▼';
+    };
+    foldBtn.addEventListener('click', toggleCard);
     card.addEventListener('click', e => {
       if (e.target.closest('button, a')) return;
-      card.classList.toggle('open');
-      card.querySelector('.work-card-detail').hidden = !card.classList.contains('open');
+      toggleCard();
     });
     list.append(card);
   });
@@ -3879,7 +3969,7 @@ function renderAdmApproval() {
         <a href="${phoneHref(run.phone)}">${esc(run.phone || '-')}</a>
       </div>
       <p>${esc(run.branch || '-')} · ${esc(run.bookingDate || '-')} ${esc(run.bookingTime || '')}</p>
-      <p class="hint">${esc(statusChip)} <span class="card-toggle-hint">클릭하여 상세보기</span></p>
+      <p class="hint">${esc(statusChip)} <button type="button" class="card-fold-btn">펴기 ▼</button></p>
       <div class="work-card-detail" hidden>
         <div class="album-cover-wrap" data-cover></div>
         <div class="approval-steps" data-steps></div>
@@ -3916,18 +4006,25 @@ function renderAdmApproval() {
       }
       stepsWrap.append(row);
     });
+    const foldBtn = card.querySelector('.card-fold-btn');
+    const toggleCard = () => {
+      card.classList.toggle('open');
+      const open = card.classList.contains('open');
+      card.querySelector('.work-card-detail').hidden = !open;
+      foldBtn.textContent = open ? '접기 ▲' : '펴기 ▼';
+    };
+    foldBtn.addEventListener('click', toggleCard);
     card.addEventListener('click', e => {
       if (e.target.closest('button, a')) return;
-      card.classList.toggle('open');
-      card.querySelector('.work-card-detail').hidden = !card.classList.contains('open');
+      toggleCard();
     });
     list.append(card);
   });
 }
 
 /* 승인화면: 제출 삭제 — 사진은 삭제 이력으로 보관, 해당 단계부터 다시 진행 */
-function deleteStepSubmission(runId, stepIndex) {
-  if (!confirm('이 단계 제출을 삭제할까요? 사진은 삭제 이력으로 보관됩니다.')) return;
+async function deleteStepSubmission(runId, stepIndex) {
+  if (!await pmConfirm('이 단계 제출을 삭제할까요?\n사진은 삭제 이력으로 보관됩니다.', { title: '제출 삭제', okText: '삭제', danger: true })) return;
   const arr = getServiceRuns();
   const run = arr.find(r => r.id === runId);
   const step = run?.steps?.[stepIndex];
@@ -3959,7 +4056,7 @@ function sendStepToCustomer(runId, stepIndex) {
   pushCustomerMessage(run, `${run.service} ${step.name} 사진이 업데이트되었습니다. 확인해보세요.`, { runId, approvedStep: step.name });
   logWorkAudit('고객 전송', run, step.name, '사진 안내 메시지 재전송');
   store.set('pm-service-runs', arr);
-  alert('고객에게 전송했습니다.');
+  pmAlert('고객에게 전송했습니다.');
 }
 
 /* 승인화면: 수정 — 승인 여부와 관계없이 사진·메모 수정 */
@@ -4059,8 +4156,10 @@ function approveServiceStep(runId) {
   renderAdmWork();
 }
 
-function rejectServiceStep(runId) {
-  const reason = prompt('반려 사유를 입력하세요.') || '';
+async function rejectServiceStep(runId) {
+  const answer = await pmPrompt('반려 사유를 입력하세요.', { title: '반려', placeholder: '반려 사유 (선택)' });
+  if (answer === null) return;
+  const reason = answer.trim();
   const arr = getServiceRuns();
   const run = arr.find(r => r.id === runId);
   const step = run?.steps?.[run.currentStep];
@@ -4145,19 +4244,28 @@ function renderAdmSettings() {
       </form>
     </section>
     <section class="settings-card">
-      <h3>차단 · 삭제 회원</h3>
-      <p class="field-help">차단된 회원은 해당 핸드폰번호로 재가입할 수 없고 로그인도 차단됩니다. 고객 자료(메모·정비내역)는 그대로 보관됩니다.</p>
+      <h3>이벤트 배너 관리</h3>
+      <p class="field-help">마이·설정 화면의 이벤트 배너입니다. 첫 장은 프로모터스 앱 설치 안내로 고정되고, 이미지는 최대 4장까지 추가할 수 있습니다. 좌우로 밀어 넘겨볼 수 있습니다.</p>
+      <div class="event-admin-grid" id="event-banner-list"><p class="hint">불러오는 중...</p></div>
+      <div class="settings-actions">
+        <button type="button" class="mini-btn add" id="event-banner-add">+ 배너 이미지 추가</button>
+        <input type="file" id="event-banner-file" accept="image/*" multiple hidden>
+      </div>
+    </section>
+    <section class="settings-card">
+      <h3>블랙리스트</h3>
+      <p class="field-help">블랙리스트에 등록된 회원은 해당 핸드폰번호로 재가입할 수 없고 로그인도 제한됩니다. 고객 자료(메모·정비내역)는 그대로 보관됩니다.</p>
       <ul class="banned-list">${(() => {
         const banned = getBannedMembers();
-        if (!banned.length) return '<li class="empty">차단·삭제된 회원이 없습니다.</li>';
+        if (!banned.length) return '<li class="empty">블랙리스트에 등록된 회원이 없습니다.</li>';
         return banned.map(b => `
           <li>
-            <em class="ban-chip ${b.type === 'blocked' ? 'blocked' : 'deleted'}">${b.type === 'blocked' ? '차단' : '삭제'}</em>
+            <em class="ban-chip ${b.type === 'blocked' ? 'blocked' : 'deleted'}">${b.type === 'blocked' ? '블랙리스트' : '삭제'}</em>
             <strong>${esc(b.member?.name || '-')}</strong>
             <span>${esc(b.member?.car || '-')} · ${esc(b.member?.phone || '-')} · 아이디 ${esc(b.member?.id || '-')}</span>
             <time>${esc(new Date(b.at).toLocaleString('ko-KR'))}</time>
             <span class="ban-actions">
-              <button type="button" class="mini-btn ban-restore" data-ban="${esc(b.id)}">${b.type === 'blocked' ? '차단해제' : '계정복구'}</button>
+              <button type="button" class="mini-btn ban-restore" data-ban="${esc(b.id)}">${b.type === 'blocked' ? '해제' : '계정복구'}</button>
               <button type="button" class="mini-btn danger ban-remove" data-ban="${esc(b.id)}">기록삭제</button>
             </span>
           </li>`).join('');
@@ -4165,7 +4273,7 @@ function renderAdmSettings() {
     </section>
     <section class="settings-card">
       <h3>작업 기록</h3>
-      <p class="field-help">모든 작업 데이터(입고·단계 처리·사진 삭제·승인·반려·수정)가 날짜·시간과 함께 저장됩니다. 최근 100건 표시.</p>
+      <p class="field-help">모든 작업 데이터(예약·입고·단계 처리·사진 삭제·승인·반려·수정)가 고객·차량 정보, 작업 메모, 사진 수, 날짜·시간과 함께 저장됩니다. 최근 100건 표시.</p>
       <ul class="audit-list">${(() => {
         const audit = store.get('pm-work-audit', []).slice(0, 100);
         if (!audit.length) return '<li class="empty">작업 기록이 없습니다.</li>';
@@ -4173,12 +4281,15 @@ function renderAdmSettings() {
           <li>
             <time>${esc(new Date(a.at).toLocaleString('ko-KR'))}</time>
             <strong>${esc(a.action)}</strong>
-            <span>${esc(a.by || '-')} · ${esc(a.customer || '-')} ${esc(a.car || '')} · ${esc(a.service || '-')}${a.step ? ` · ${esc(a.step)}` : ''}</span>
+            <span>${esc(a.by || '-')} · ${esc(a.customer || '-')} ${esc(a.car || '')}${a.model ? ` · ${esc(a.model)}` : ''}${a.phone ? ` · ${esc(a.phone)}` : ''}</span>
+            <span>${esc(a.branch || '-')}${a.bookingDate ? ` · ${esc(a.bookingDate)} ${esc(a.bookingTime || '')}` : ''} · ${esc(a.service || '-')}${a.step ? ` · ${esc(a.step)}` : ''}${a.photos ? ` · 사진 ${a.photos}장` : ''}</span>
+            ${a.memo ? `<em>작업메모: ${esc(a.memo)}</em>` : ''}
             ${a.detail ? `<em>${esc(a.detail)}</em>` : ''}
           </li>`).join('');
       })()}</ul>
     </section>
     <p class="form-error" id="security-save-msg"></p>`;
+  wireEventBannerAdmin();
   $('#make-sub-pw').addEventListener('click', () => {
     $('#sub-admin-password').value = `pro${Math.random().toString(36).slice(2, 8)}!`;
   });
@@ -4217,15 +4328,15 @@ function renderAdmSettings() {
     $('#security-save-msg').textContent = '메인관리자 비밀번호가 변경되었습니다.';
   });
   $$('.ban-restore').forEach(btn => {
-    btn.addEventListener('click', () => {
+    btn.addEventListener('click', async () => {
       const banned = getBannedMembers();
       const entry = banned.find(b => b.id === btn.dataset.ban);
       if (!entry) return;
-      const label = entry.type === 'blocked' ? '차단을 해제' : '계정을 복구';
-      if (!confirm(`${entry.member?.name || entry.member?.car || '회원'}님의 ${label}할까요? 다시 로그인과 가입이 가능해집니다.`)) return;
+      const label = entry.type === 'blocked' ? '블랙리스트를 해제' : '계정을 복구';
+      if (!await pmConfirm(`${entry.member?.name || entry.member?.car || '회원'}님의 ${label}할까요?\n다시 로그인과 가입이 가능해집니다.`, { title: '블랙리스트', okText: '확인' })) return;
       const members = store.get('pm-members', []);
       if (entry.member?.id && members.some(x => x.id === entry.member.id)) {
-        alert('같은 아이디로 가입된 회원이 이미 있어 복구할 수 없습니다. 기록삭제로 차단만 해제할 수 있습니다.');
+        pmAlert('같은 아이디로 가입된 회원이 이미 있어 복구할 수 없습니다. 기록삭제로 블랙리스트만 해제할 수 있습니다.');
         return;
       }
       if (entry.member) {
@@ -4238,17 +4349,61 @@ function renderAdmSettings() {
     });
   });
   $$('.ban-remove').forEach(btn => {
-    btn.addEventListener('click', () => {
-      if (!confirm('이 기록을 삭제할까요? 차단 중이었다면 해당 번호로 다시 가입할 수 있게 됩니다.')) return;
+    btn.addEventListener('click', async () => {
+      if (!await pmConfirm('이 기록을 삭제할까요?\n블랙리스트 상태였다면 해당 번호로 다시 가입할 수 있게 됩니다.', { title: '기록 삭제', okText: '삭제', danger: true })) return;
       store.set('pm-banned-members', getBannedMembers().filter(b => b.id !== btn.dataset.ban));
       renderAdmSettings();
     });
   });
 }
 
+/* ---------- 이벤트 배너 관리 (보안 화면, 메인관리자) ---------- */
+const getEventBanners = () => store.get('pm-event-banners', []);
+
+async function wireEventBannerAdmin() {
+  const list = $('#event-banner-list');
+  if (!list) return;
+  const banners = getEventBanners().slice(0, 4);
+  const items = await Promise.all(banners.map(async b => ({ ...b, src: await assetSrc(b.key) })));
+  list.innerHTML = `
+    <figure class="event-admin-item fixed">
+      <img src="images/logo-icon.png" alt="앱 설치 안내 (고정)">
+      <figcaption>앱 설치 안내 (고정)</figcaption>
+    </figure>
+    ${items.map(item => `
+      <figure class="event-admin-item">
+        ${item.src ? `<img src="${esc(item.src)}" alt="이벤트 배너">` : '<span class="hint">이미지 없음</span>'}
+        <button type="button" class="album-del" data-banner="${esc(item.key)}" aria-label="배너 삭제">×</button>
+      </figure>`).join('')}`;
+  list.querySelectorAll('[data-banner]').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      if (!await pmConfirm('이미지를 삭제할까요?', { title: '배너 삭제', okText: '삭제', danger: true })) return;
+      store.set('pm-event-banners', getEventBanners().filter(b => b.key !== btn.dataset.banner));
+      wireEventBannerAdmin();
+    });
+  });
+  const addBtn = $('#event-banner-add');
+  const fileInput = $('#event-banner-file');
+  if (addBtn && fileInput && !addBtn.dataset.wired) {
+    addBtn.dataset.wired = '1';
+    addBtn.addEventListener('click', () => {
+      if (getEventBanners().length >= 4) { pmAlert('배너 이미지는 최대 4장까지 등록할 수 있습니다.'); return; }
+      fileInput.click();
+    });
+    fileInput.addEventListener('change', async e => {
+      const room = 4 - getEventBanners().length;
+      if (room <= 0) { pmAlert('배너 이미지는 최대 4장까지 등록할 수 있습니다.'); e.target.value = ''; return; }
+      const keys = await saveFiles(e.target.files, 'event-banner', room);
+      store.set('pm-event-banners', [...getEventBanners(), ...keys.map(key => ({ key, addedAt: new Date().toISOString() }))].slice(0, 4));
+      e.target.value = '';
+      wireEventBannerAdmin();
+    });
+  }
+}
+
 function renderAdmInquiry() {
   const body = $('#adm-inquiry-body');
-  if (!isMainAdmin()) { body.innerHTML = ''; return; }
+  if (!isAdmin) { body.innerHTML = ''; return; }
   const messages = store.get('pm-messages', [])
     .filter(m => !m.serviceContext?.runId)
     .slice()
@@ -4283,6 +4438,72 @@ function renderAdminInquiries(messages) {
 }
 
 /* ============================================================
+   이벤트 배너 + 앱 설치 (PWA)
+   ============================================================ */
+let deferredInstallPrompt = null;
+window.addEventListener('beforeinstallprompt', e => {
+  e.preventDefault();
+  deferredInstallPrompt = e;
+});
+
+async function requestAppInstall() {
+  if (deferredInstallPrompt) {
+    const promptEvent = deferredInstallPrompt;
+    deferredInstallPrompt = null;
+    promptEvent.prompt();
+    try { await promptEvent.userChoice; } catch {}
+    return;
+  }
+  if (window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone) {
+    pmAlert('이미 홈 화면에 추가된 앱으로 사용 중입니다.', '앱 설치');
+    return;
+  }
+  const guide = /iPhone|iPad|iPod/i.test(navigator.userAgent)
+    ? 'Safari 하단의 공유 버튼을 누른 뒤 "홈 화면에 추가"를 선택해주세요.'
+    : '브라우저 메뉴(⋮)에서 "홈 화면에 추가" 또는 "앱 설치"를 선택해주세요.';
+  pmAlert(`이 브라우저에서는 바로 설치를 지원하지 않습니다.\n${guide}`, '앱 설치');
+}
+
+async function eventBannerHtml() {
+  const slides = [`
+    <div class="event-slide install-slide" data-install role="button" tabindex="0">
+      <img class="event-logo" src="images/logo-icon.png" alt="프로모터스 로고">
+      <span class="event-copy">
+        <strong>PRO MOTORS</strong>
+        <span>1초 프로모터스 앱 다운로드</span>
+      </span>
+      <span class="event-install-mark">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="M6 11l6 6 6-6"/><path d="M5 21h14"/></svg>
+        <em>설치</em>
+      </span>
+    </div>`];
+  const banners = getEventBanners().slice(0, 4);
+  const items = await Promise.all(banners.map(async b => ({ ...b, src: await assetSrc(b.key) })));
+  items.filter(i => i.src).forEach(i => slides.push(`<div class="event-slide"><img src="${esc(i.src)}" alt="이벤트 배너"></div>`));
+  return `
+    <div class="event-banner" data-event-banner aria-label="이벤트 배너">
+      <div class="event-track">${slides.join('')}</div>
+      ${slides.length > 1 ? `<div class="event-dots">${slides.map((_, i) => `<i class="${i === 0 ? 'on' : ''}"></i>`).join('')}</div>` : ''}
+    </div>`;
+}
+
+function wireEventBanner(scope = modalCard) {
+  const banner = scope.querySelector('[data-event-banner]');
+  if (!banner) return;
+  const track = banner.querySelector('.event-track');
+  const dots = [...banner.querySelectorAll('.event-dots i')];
+  track.addEventListener('scroll', () => {
+    const idx = Math.round(track.scrollLeft / Math.max(1, track.clientWidth));
+    dots.forEach((d, i) => d.classList.toggle('on', i === idx));
+  }, { passive: true });
+  const install = banner.querySelector('[data-install]');
+  install?.addEventListener('click', requestAppInstall);
+  install?.addEventListener('keydown', e => {
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); requestAppInstall(); }
+  });
+}
+
+/* ============================================================
    모바일 하단 탭바 — 소개 · 매장안내 · 정비사례 · 게시판 · 마이
    ============================================================ */
 function showAdminViewFromMenu(view) {
@@ -4297,26 +4518,27 @@ function showAdminViewFromMenu(view) {
 }
 
 /* 관리자용 마이(설정): 고객 내예약 페이지와 같은 전체화면 구성 */
-function openAdminSettingsPage() {
+async function openAdminSettingsPage() {
   const menus = [
     { view: 'adm-book', label: '예약관리', icon: 'calendar' },
     { view: 'adm-work', label: '작업현황', icon: 'wrench' },
+    { view: 'adm-inquiry', label: '고객문의', icon: 'headset' },
     ...(isMainAdmin() ? [
       { view: 'adm-approval', label: '작업승인', icon: 'check' },
       { view: 'adm-cust', label: '고객관리', icon: 'user' },
       { view: 'adm-prod', label: '상품관리', icon: 'doc' },
-      { view: 'adm-inquiry', label: '고객문의', icon: 'headset' },
       { view: 'adm-settings', label: '보안', icon: 'lock' }
     ] : [])
   ];
+  const banner = await eventBannerHtml();
   openModal(`
     <h3>설정</h3>
     <section class="mypage-account-card">
       <div class="mypage-profile admin-profile">
         <span class="profile-avatar" aria-hidden="true">${MYPAGE_ICONS.user}</span>
         <span class="profile-text">
-          <strong>${esc(isGeneralAdmin() && adminBranch ? `${adminBranch} 관리자` : '관리자 모드')}</strong>
-          <span>${isMainAdmin() ? '메인관리자' : '일반관리자'}</span>
+          <strong>관리자 모드</strong>
+          <span>프로모터스</span>
         </span>
       </div>
     </section>
@@ -4328,6 +4550,7 @@ function openAdminSettingsPage() {
           <strong>${menu.label}</strong>
         </button>`).join('')}
     </nav>
+    ${banner}
     <button type="button" class="mypage-cs-btn" id="admin-settings-logout">
       <span class="cs-icon" aria-hidden="true">${MYPAGE_ICONS.user}</span>
       <span class="cs-text"><strong>로그아웃</strong><span>관리자 모드를 종료합니다</span></span>
@@ -4335,6 +4558,7 @@ function openAdminSettingsPage() {
     </button>
   `, true);
   modalCard.classList.add('mypage-card');
+  wireEventBanner();
   modalCard.querySelectorAll('[data-adm-view]').forEach(btn => {
     btn.addEventListener('click', () => {
       closeModal();
@@ -4357,6 +4581,8 @@ function openMobileMy() {
 }
 
 function initMobileTabbar() {
+  /* 관리자 화면 상단(모바일 전용) ‹ 관리 메뉴 버튼: 설정 페이지로 복귀 */
+  $$('.adm-back').forEach(btn => btn.addEventListener('click', openAdminSettingsPage));
   $$('#mobile-tabbar [data-mtab]').forEach(btn => {
     btn.addEventListener('click', () => {
       const tab = btn.dataset.mtab;
@@ -4390,6 +4616,10 @@ fitStage();
 document.body.dataset.view = document.querySelector('.view.active')?.id.replace('view-', '') || 'intro';
 
 async function startApp() {
+  /* PWA: 홈 화면 추가(앱 설치)를 위해 서비스워커 등록 */
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('sw.js').catch(() => {});
+  }
   /* 로컬 캐시로 즉시 화면을 그리고, 원격 데이터는 백그라운드에서 갱신한다.
      첫 진입 화면이 나왔다가 다른 화면으로 튀는 현상을 막는다. */
   wireNav();

@@ -41,7 +41,10 @@
 }
 </script>
 <link rel="icon" type="image/png" href="images/logo-icon.png">
-<link rel="stylesheet" href="style.css?v=20260711-1620">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#0f1f3d">
+<link rel="apple-touch-icon" href="images/logo-icon.png">
+<link rel="stylesheet" href="style.css?v=20260711-2140">
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700;900&display=swap" rel="stylesheet">
 </head>
 <body>
@@ -112,7 +115,7 @@
             <button class="main-admin-only" data-view="adm-approval">작업승인</button>
             <button class="main-admin-only" data-view="adm-cust">고객관리</button>
             <button class="main-admin-only" data-view="adm-prod">상품관리</button>
-            <button class="main-admin-only" data-view="adm-inquiry">고객문의</button>
+            <button data-view="adm-inquiry">고객문의</button>
             <button class="main-admin-only" data-view="adm-settings">보안</button>
           </div>
         </li>
@@ -187,6 +190,9 @@
 
     <!-- ⑤ 관리자: 예약관리 -->
     <div class="view" id="view-adm-book">
+      <div class="adm-mobile-bar">
+        <button type="button" class="adm-back" aria-label="관리 메뉴로 돌아가기">‹ 관리 메뉴</button>
+      </div>
       <header class="intro">
         <h2>예약관리</h2>
         <p class="intro-sub"><span class="line"></span>예약 현황 · 예약완료 · 변경/취소<span class="line"></span></p>
@@ -196,6 +202,9 @@
 
     <!-- ⑥ 관리자: 작업현황 -->
     <div class="view" id="view-adm-work">
+      <div class="adm-mobile-bar">
+        <button type="button" class="adm-back" aria-label="관리 메뉴로 돌아가기">‹ 관리 메뉴</button>
+      </div>
       <header class="intro">
         <h2>작업현황</h2>
         <p class="intro-sub"><span class="line"></span>오늘 예약 · 입고 · 작업 · 출고<span class="line"></span></p>
@@ -205,6 +214,9 @@
 
     <!-- ⑦ 관리자: 작업승인 -->
     <div class="view" id="view-adm-approval">
+      <div class="adm-mobile-bar">
+        <button type="button" class="adm-back" aria-label="관리 메뉴로 돌아가기">‹ 관리 메뉴</button>
+      </div>
       <header class="intro">
         <h2>작업승인</h2>
         <p class="intro-sub"><span class="line"></span>실시간 서비스 단계 승인<span class="line"></span></p>
@@ -214,6 +226,9 @@
 
     <!-- ⑧ 관리자: 고객관리 -->
     <div class="view" id="view-adm-cust">
+      <div class="adm-mobile-bar">
+        <button type="button" class="adm-back" aria-label="관리 메뉴로 돌아가기">‹ 관리 메뉴</button>
+      </div>
       <header class="intro">
         <h2>고객관리</h2>
         <p class="intro-sub"><span class="line"></span>메모 · 서비스 이력 · 정산<span class="line"></span></p>
@@ -223,6 +238,9 @@
 
     <!-- ⑨ 관리자: 상품관리 -->
     <div class="view" id="view-adm-prod">
+      <div class="adm-mobile-bar">
+        <button type="button" class="adm-back" aria-label="관리 메뉴로 돌아가기">‹ 관리 메뉴</button>
+      </div>
       <header class="intro">
         <h2>상품관리</h2>
         <p class="intro-sub"><span class="line"></span>예약 시 선택 가능한 서비스<span class="line"></span></p>
@@ -235,6 +253,9 @@
 
     <!-- ⑩ 관리자: 고객문의 -->
     <div class="view" id="view-adm-inquiry">
+      <div class="adm-mobile-bar">
+        <button type="button" class="adm-back" aria-label="관리 메뉴로 돌아가기">‹ 관리 메뉴</button>
+      </div>
       <header class="intro">
         <h2>고객문의</h2>
         <p class="intro-sub"><span class="line"></span>고객과 실시간 채팅<span class="line"></span></p>
@@ -244,6 +265,9 @@
 
     <!-- ⑪ 관리자: 보안 -->
     <div class="view" id="view-adm-settings">
+      <div class="adm-mobile-bar">
+        <button type="button" class="adm-back" aria-label="관리 메뉴로 돌아가기">‹ 관리 메뉴</button>
+      </div>
       <header class="intro">
         <h2>보안</h2>
         <p class="intro-sub"><span class="line"></span>관리자 비밀번호 관리<span class="line"></span></p>
@@ -284,7 +308,7 @@
   <div class="modal-card" id="modal-card" role="dialog" aria-modal="true"></div>
 </div>
 
-<script src="config.js?v=20260711-1620"></script>
-<script src="app.js?v=20260711-1620"></script>
+<script src="config.js?v=20260711-2140"></script>
+<script src="app.js?v=20260711-2140"></script>
 </body>
 </html>

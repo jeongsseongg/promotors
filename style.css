@@ -3763,3 +3763,254 @@ button.step-photo-slot {
 @media (max-width: 520px) {
   .admin-settings-quick { grid-template-columns: repeat(3, 1fr); }
 }
+
+/* ============================================================
+   프로모터스 전용 팝업 (alert/confirm/prompt 대체)
+   ============================================================ */
+.pm-dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 300;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(15, 23, 42, .55);
+}
+.pm-dialog {
+  width: min(360px, 100%);
+  background: #fff;
+  border-radius: 16px;
+  padding: 22px 20px 18px;
+  box-shadow: 0 18px 48px rgba(15, 23, 42, .28);
+  text-align: center;
+}
+.pm-dialog-brand {
+  display: block;
+  color: var(--gold);
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: .22em;
+  margin-bottom: 6px;
+}
+.pm-dialog-title {
+  display: block;
+  color: var(--navy);
+  font-size: 18px;
+  line-height: 1.3;
+  word-break: keep-all;
+}
+.pm-dialog-msg {
+  margin-top: 10px;
+  color: #444d57;
+  font-size: 15px;
+  line-height: 1.6;
+  word-break: keep-all;
+}
+.pm-dialog-input {
+  width: 100%;
+  margin-top: 14px;
+  padding: 12px;
+  font-family: inherit;
+  font-size: 15px;
+  border: 1px solid #d6dbe1;
+  border-radius: 10px;
+}
+.pm-dialog-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 18px;
+}
+.pm-dialog-actions button {
+  flex: 1;
+  min-height: 48px;
+  border-radius: 10px;
+  font-family: inherit;
+  font-size: 15px;
+  font-weight: 800;
+  cursor: pointer;
+}
+.pm-dialog-ok {
+  border: none;
+  background: var(--navy);
+  color: #fff;
+}
+.pm-dialog-ok.danger { background: var(--red); }
+.pm-dialog-cancel {
+  border: 1px solid #d6dbe1;
+  background: #fff;
+  color: #555f6b;
+}
+
+/* ============================================================
+   작업 카드 접기/펴기 버튼
+   ============================================================ */
+.card-fold-btn {
+  margin-left: 8px;
+  padding: 4px 10px;
+  border: 1px solid #d6dbe1;
+  border-radius: 999px;
+  background: #fff;
+  color: var(--navy);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 800;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.card-fold-btn:hover { border-color: var(--navy); }
+
+/* ============================================================
+   보안 화면 모바일 레이아웃 수정 (세로 글씨 · 겹침)
+   ============================================================ */
+.mini-btn { white-space: nowrap; writing-mode: horizontal-tb; }
+.settings-card .field-help { margin: 10px 0 4px; }
+.settings-form { row-gap: 10px; }
+@media (max-width: 900px) {
+  .sub-admin-list li .sub-admin-delete {
+    grid-column: 2 / -1;
+    justify-self: start;
+    min-height: 40px;
+    padding: 8px 18px;
+  }
+  .settings-form input,
+  .settings-form select { min-width: 0; flex: 1 1 100%; }
+  .settings-form .mini-btn { flex: 1 1 auto; min-height: 44px; }
+  .ban-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+}
+
+/* ============================================================
+   이벤트 배너 (마이·설정) + 앱 설치 슬라이드
+   ============================================================ */
+.event-banner {
+  position: relative;
+  width: 100%;
+  margin: 14px auto;
+  border-radius: 16px;
+  overflow: hidden;
+}
+.event-track {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 100%;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  scrollbar-width: none;
+  border-radius: 16px;
+}
+.event-track::-webkit-scrollbar { display: none; }
+.event-slide {
+  scroll-snap-align: start;
+  min-height: 132px;
+  display: grid;
+}
+.event-slide img { width: 100%; height: 132px; object-fit: cover; display: block; }
+.event-slide.install-slide {
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 14px;
+  padding: 18px 20px;
+  background: linear-gradient(135deg, #10163f 0%, var(--navy) 60%, #2a317e 100%);
+  color: #fff;
+  cursor: pointer;
+}
+.event-slide .event-logo {
+  width: 64px;
+  height: 64px;
+  border-radius: 14px;
+  object-fit: cover;
+  background: #fff;
+}
+.event-slide .event-copy { display: grid; gap: 4px; min-width: 0; }
+.event-slide .event-copy strong {
+  font-size: 16px;
+  letter-spacing: .14em;
+  color: #fff;
+}
+.event-slide .event-copy span {
+  color: #c9d2ff;
+  font-size: 13px;
+  font-weight: 700;
+  word-break: keep-all;
+}
+.event-install-mark {
+  display: grid;
+  justify-items: center;
+  gap: 2px;
+  color: var(--yellow);
+  font-weight: 900;
+}
+.event-install-mark svg { width: 22px; height: 22px; }
+.event-install-mark em { font-style: normal; font-size: 12px; }
+.event-dots {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 8px;
+  display: flex;
+  justify-content: center;
+  gap: 6px;
+  pointer-events: none;
+}
+.event-dots i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, .45);
+}
+.event-dots i.on { background: var(--yellow); }
+
+/* 보안 화면: 이벤트 배너 관리 */
+.event-admin-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 10px;
+  margin-bottom: 4px;
+}
+.event-admin-item {
+  position: relative;
+  border: 1px solid #e2e6ea;
+  border-radius: 12px;
+  overflow: hidden;
+  background: #fafbfc;
+}
+.event-admin-item img { width: 100%; height: 90px; object-fit: cover; display: block; }
+.event-admin-item figcaption {
+  padding: 6px 8px;
+  color: #6b7280;
+  font-size: 12px;
+  font-weight: 700;
+  text-align: center;
+}
+.event-admin-item .album-del {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+}
+
+/* ============================================================
+   모바일 관리자 화면: 상단 ‹ 관리 메뉴 바 (앱 페이지처럼)
+   ============================================================ */
+.adm-mobile-bar { display: none; }
+@media (max-width: 900px) {
+  .adm-mobile-bar {
+    display: flex;
+    position: sticky;
+    top: 0;
+    z-index: 40;
+    margin: -4px -2px 10px;
+    padding: 8px 2px;
+    background: inherit;
+  }
+  .adm-back {
+    min-height: 44px;
+    padding: 8px 16px;
+    border: 1px solid #d6dbe1;
+    border-radius: 999px;
+    background: #fff;
+    color: var(--navy);
+    font-family: inherit;
+    font-size: 14px;
+    font-weight: 800;
+    cursor: pointer;
+  }
+}
