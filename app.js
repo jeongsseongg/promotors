@@ -484,6 +484,8 @@ function showView(name) {
   }
   /* 보안 화면을 벗어나면 다시 비밀번호를 묻는다 (1시간 해제 체크 시 제외) */
   if (name !== 'adm-settings') securityUnlocked = false;
+  /* 새로고침 시 현재 화면을 유지하기 위해 마지막 화면을 기억한다 */
+  sessionStorage.setItem('pm-view', name);
   document.body.dataset.view = name;
   $$('.view').forEach(v => v.classList.toggle('active', v.id === 'view-' + name));
   $$('.top-nav .nav-btn').forEach(b => b.classList.toggle('active', b.dataset.view === name));
@@ -576,7 +578,15 @@ function openModal(html, wide, full, backHandler = null) {
   const first = modalCard.querySelector('input, textarea, [contenteditable="true"]');
   if (first) first.focus();
 }
-function closeModal() { modalBackHandler = null; modal.hidden = true; modalCard.classList.remove('full', 'mypage-card', 'mobile-full'); modalCard.innerHTML = ''; syncMobileTabbar(); }
+function closeModal() {
+  modalBackHandler = null;
+  modal.hidden = true;
+  modalCard.classList.remove('full', 'mypage-card', 'mobile-full');
+  modalCard.innerHTML = '';
+  /* 마이(모달) 화면을 닫으면 새로고침 복원 지점을 뒤에 깔린 화면으로 되돌린다 */
+  sessionStorage.setItem('pm-view', document.body.dataset.view || 'intro');
+  syncMobileTabbar();
+}
 modal.addEventListener('click', e => { if (e.target === modal) e.preventDefault(); });
 
 /* ============================================================
@@ -891,6 +901,7 @@ const WORK_STAGES = [
 ];
 
 async function openMyPageModal() {
+  sessionStorage.setItem('pm-view', 'my');
   if (!member) return openMemberModal('login');
   const bookings = getBookings().filter(b => b.car === member.car || b.memberId === member.id);
   const serviceRuns = store.get('pm-service-runs', []).filter(r => r.car === member.car || r.memberId === member.id);
@@ -4738,6 +4749,7 @@ function showAdminViewFromMenu(view) {
 
 /* 관리자용 마이(설정): 고객 내예약 페이지와 같은 전체화면 구성 */
 async function openAdminSettingsPage() {
+  sessionStorage.setItem('pm-view', 'my');
   const menus = [
     { view: 'adm-book', label: '예약관리', icon: 'calendar' },
     { view: 'adm-work', label: '작업현황', icon: 'wrench' },
@@ -4860,9 +4872,19 @@ async function startApp() {
   });
   initRealtimeChat();
   applyAuthUI();
-  const initialView = getHomeView();
-  showView(initialView);
-  if (initialView === 'cases') activateTab('tab-blog');
+  /* 새로고침 시 홈으로 돌아가지 않고 마지막 화면을 복원한다 */
+  const savedView = sessionStorage.getItem('pm-view');
+  let initialView = getHomeView();
+  if (savedView && savedView !== 'my' && document.getElementById('view-' + savedView)) {
+    if (!savedView.startsWith('adm-') || canUseAdminView(savedView)) initialView = savedView;
+  }
+  if (initialView.startsWith('adm-')) {
+    showAdminViewFromMenu(initialView);
+  } else {
+    showView(initialView);
+    if (initialView === 'cases') activateTab('tab-blog');
+  }
+  if (savedView === 'my') openMobileMy();
 
   /* 원격 데이터 수신 후 화면 전환 없이 내용만 다시 그린다 */
   await hydrateSupabaseData();

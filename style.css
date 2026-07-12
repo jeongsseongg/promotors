@@ -3964,7 +3964,7 @@ button.step-photo-slot {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  min-width: 34%;
+  min-width: 44%;
   padding: 9px 16px;
   border-radius: 8px;
   background: linear-gradient(180deg, #2e6bf2 0%, #1e5ced 55%, #1a51d6 100%);
