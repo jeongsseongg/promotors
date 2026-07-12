@@ -4004,6 +4004,18 @@ button.step-photo-slot {
 .install-sheet-logo { width: 58px; height: 58px; border-radius: 14px; margin-top: 8px; }
 .install-sheet-title { font-size: 18px; color: var(--navy, #10254d); }
 .install-sheet-sub { color: #6b7280; font-size: 13px; font-weight: 700; margin: 0; }
+.install-sheet-note {
+  width: 100%;
+  margin: 8px 0 0;
+  padding: 11px 14px;
+  border-radius: 12px;
+  background: #fff8e3;
+  color: #7a6420;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.55;
+  word-break: keep-all;
+}
 .install-sheet-steps {
   display: grid;
   gap: 10px;

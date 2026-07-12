@@ -4639,6 +4639,12 @@ function showInstallGuide(platform) {
     ]
   };
   const steps = stepsByPlatform[platform] || stepsByPlatform.android;
+  /* 기기별 안내: 바로 설치가 안 되는 이유를 부드럽게 설명 (브라우저·OS 정책 때문임을 안내) */
+  const notesByPlatform = {
+    ios: '아이폰은 Apple 정책에 따라 모든 앱·웹 서비스가 Safari의 \'홈 화면에 추가\' 기능을 통해서만 설치할 수 있어요. 아래 순서대로 하면 10초면 충분해요!',
+    'ios-inapp': '지금 보고 계신 앱 속 브라우저는 Apple 정책상 홈 화면 추가 기능이 제공되지 않아요. Safari로 열어주시면 바로 이어서 설치하실 수 있어요.',
+    android: '지금 사용 중인 브라우저는 자동 설치 기능을 제공하지 않아요. 아래 방법으로 간단히 추가하실 수 있고, Chrome으로 접속하시면 버튼 한 번에 설치돼요.'
+  };
   const backdrop = document.createElement('div');
   backdrop.className = 'install-sheet-backdrop';
   backdrop.innerHTML = `
@@ -4647,6 +4653,7 @@ function showInstallGuide(platform) {
       <img src="images/logo-icon.png" alt="" class="install-sheet-logo">
       <strong class="install-sheet-title">프로모터스 앱 설치</strong>
       <p class="install-sheet-sub">홈 화면에 추가하면 앱처럼 바로 열 수 있어요</p>
+      <p class="install-sheet-note">${notesByPlatform[platform] || notesByPlatform.android}</p>
       <ol class="install-sheet-steps">
         ${steps.map(([icon, text], i) => `
           <li>
