@@ -4586,15 +4586,11 @@ async function requestAppInstall() {
 
 async function eventBannerHtml() {
   const slides = [`
-    <div class="event-slide install-slide" data-install role="button" tabindex="0">
-      <img class="event-logo" src="images/logo-icon.png" alt="프로모터스 로고">
-      <span class="event-copy">
-        <strong>PRO MOTORS</strong>
-        <span>1초 프로모터스 앱 다운로드</span>
-      </span>
-      <span class="event-install-mark">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="M6 11l6 6 6-6"/><path d="M5 21h14"/></svg>
-        <em>설치</em>
+    <div class="event-slide install-slide" data-install role="button" tabindex="0" aria-label="프로모터스 앱 설치">
+      <img class="install-slide-bg" src="images/app-install-banner.jpg" alt="프로모터스 앱 — 내 차 관리">
+      <span class="event-install-btn">
+        <em>앱 설치</em>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="M6 11l6 6 6-6"/><path d="M5 21h14"/></svg>
       </span>
     </div>`];
   const banners = getEventBanners().slice(0, 4);

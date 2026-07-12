@@ -3941,57 +3941,39 @@ button.step-photo-slot {
   display: grid;
 }
 .event-slide img { width: 100%; height: 148px; object-fit: cover; display: block; }
-/* 앱 설치 슬라이드: 마이/설정 카드와 같은 블루 그라데이션 배너 */
+/* 앱 설치 슬라이드: 배너 이미지 위에 앱 설치 버튼 오버레이 */
 .event-slide.install-slide {
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 16px;
-  padding: 14px 18px;
-  background:
-    radial-gradient(circle at 85% 0%, rgba(255,255,255,.2), transparent 45%),
-    linear-gradient(135deg, var(--blue) 0%, var(--blue-dark) 100%);
-  color: #fff;
+  position: relative;
+  background: #f4f6fa;
   cursor: pointer;
 }
-.event-slide .event-logo {
-  width: 96px;
-  height: 96px;
-  border-radius: 22px;
+.event-slide .install-slide-bg {
+  width: 100%;
+  height: 148px;
   object-fit: cover;
-  background: #fff;
-  box-shadow: 0 8px 20px rgba(9, 24, 60, .35);
+  object-position: left center;
+  display: block;
 }
-.event-slide .event-copy { display: grid; gap: 6px; min-width: 0; }
-.event-slide .event-copy strong {
-  font-size: 21px;
-  letter-spacing: .12em;
+/* 앱 설치 버튼: 배너 좌하단 빈 공간에 배치 (시안 위치 기준) */
+.event-install-btn {
+  position: absolute;
+  left: 4.5%;
+  bottom: 12%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 34%;
+  padding: 9px 16px;
+  border-radius: 8px;
+  background: var(--blue);
   color: #fff;
-  white-space: nowrap;
-}
-.event-slide .event-copy span {
-  color: #dbe7ff;
-  font-size: 14px;
-  font-weight: 800;
-  word-break: keep-all;
-}
-/* 설치 버튼: 노란 원형 배지로 눈에 띄게 */
-.event-install-mark {
-  display: grid;
-  justify-items: center;
-  gap: 5px;
-  color: var(--yellow);
   font-weight: 900;
+  box-shadow: 0 6px 16px rgba(9, 24, 60, .28);
 }
-.event-install-mark svg {
-  width: 54px;
-  height: 54px;
-  padding: 13px;
-  border-radius: 50%;
-  background: var(--yellow);
-  color: #10254d;
-  box-shadow: 0 6px 16px rgba(9, 24, 60, .35);
-}
-.event-install-mark em { font-style: normal; font-size: 13px; }
+.event-install-btn em { font-style: normal; font-size: 16px; letter-spacing: .02em; }
+.event-install-btn svg { width: 20px; height: 20px; flex: none; }
+.event-slide.install-slide:active .event-install-btn { transform: scale(.97); }
 .event-dots {
   position: absolute;
   left: 0;
