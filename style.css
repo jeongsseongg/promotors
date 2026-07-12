@@ -3954,7 +3954,8 @@ button.step-photo-slot {
   object-position: left center;
   display: block;
 }
-/* 앱 설치 버튼: 배너 좌하단 빈 공간에 배치 (시안 위치 기준) */
+/* 앱 설치 버튼: 배너 좌하단 빈 공간에 배치 (시안 위치 기준)
+   색상은 사이트 테마가 아닌 배너 이미지에서 추출한 블루(#1e5ced)로 맞춘다 */
 .event-install-btn {
   position: absolute;
   left: 4.5%;
@@ -3966,10 +3967,10 @@ button.step-photo-slot {
   min-width: 34%;
   padding: 9px 16px;
   border-radius: 8px;
-  background: var(--blue);
+  background: linear-gradient(180deg, #2e6bf2 0%, #1e5ced 55%, #1a51d6 100%);
   color: #fff;
   font-weight: 900;
-  box-shadow: 0 6px 16px rgba(9, 24, 60, .28);
+  box-shadow: 0 6px 16px rgba(16, 34, 74, .32);
 }
 .event-install-btn em { font-style: normal; font-size: 16px; letter-spacing: .02em; }
 .event-install-btn svg { width: 20px; height: 20px; flex: none; }
