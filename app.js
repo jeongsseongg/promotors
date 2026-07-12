@@ -4558,8 +4558,21 @@ window.addEventListener('beforeinstallprompt', e => {
   e.preventDefault();
   deferredInstallPrompt = e;
 });
+window.addEventListener('appinstalled', () => {
+  deferredInstallPrompt = null;
+  pmAlert('프로모터스 앱이 홈 화면에 추가되었습니다.', '설치 완료');
+});
+
+const isStandaloneApp = () =>
+  window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
 
 async function requestAppInstall() {
+  if (isStandaloneApp()) {
+    pmAlert('이미 홈 화면에 추가된 앱으로 사용 중입니다.', '앱 설치');
+    return;
+  }
+
+  /* 1) 설치 프롬프트 지원 브라우저(안드로이드 크롬·삼성인터넷·엣지 등): 시스템 설치창 즉시 표시 */
   if (deferredInstallPrompt) {
     const promptEvent = deferredInstallPrompt;
     deferredInstallPrompt = null;
@@ -4567,21 +4580,103 @@ async function requestAppInstall() {
     try { await promptEvent.userChoice; } catch {}
     return;
   }
-  if (window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone) {
-    pmAlert('이미 홈 화면에 추가된 앱으로 사용 중입니다.', '앱 설치');
-    return;
-  }
+
   const ua = navigator.userAgent;
-  /* 네이버·카카오 등 인앱 브라우저(안드로이드)는 설치를 막으므로 Chrome으로 열어서 진행 */
+  const isIOS = /iPhone|iPad|iPod/i.test(ua) || (/Macintosh/i.test(ua) && navigator.maxTouchPoints > 1);
+  const isAndroid = /Android/i.test(ua);
   const inAppBrowser = /NAVER|KAKAOTALK|Instagram|FBAN|FBAV|Line\/|DaumApps|; wv\)/i.test(ua);
-  if (/Android/i.test(ua) && inAppBrowser && location.protocol === 'https:') {
-    location.href = `intent://${location.host}${location.pathname}#Intent;scheme=https;package=com.android.chrome;S.browser_fallback_url=${encodeURIComponent(location.href)};end`;
+
+  /* 2) 인앱 브라우저 탈출: 설치가 가능한 기본 브라우저로 강제 이동 */
+  if (inAppBrowser && location.protocol === 'https:') {
+    if (/KAKAOTALK/i.test(ua)) {
+      location.href = 'kakaotalk://web/openExternal?url=' + encodeURIComponent(location.href);
+      return;
+    }
+    if (/Line\//i.test(ua)) {
+      location.href = location.href + (location.search ? '&' : '?') + 'openExternalBrowser=1';
+      return;
+    }
+    if (isAndroid) {
+      location.href = `intent://${location.host}${location.pathname}#Intent;scheme=https;package=com.android.chrome;S.browser_fallback_url=${encodeURIComponent(location.href)};end`;
+      return;
+    }
+    /* iOS 인앱(네이버·인스타 등)은 Safari 강제 이동 API가 막혀 있어 링크 복사로 유도 */
+    showInstallGuide('ios-inapp');
     return;
   }
-  const guide = /iPhone|iPad|iPod/i.test(ua)
-    ? 'Safari 하단의 공유 버튼을 누른 뒤 "홈 화면에 추가"를 선택해주세요.'
-    : '브라우저 메뉴(⋮)에서 "홈 화면에 추가" 또는 "앱 설치"를 선택해주세요.';
-  pmAlert(`이 브라우저에서는 바로 설치를 지원하지 않습니다.\n${guide}`, '앱 설치');
+
+  /* 3) 프롬프트 미지원 환경(iOS Safari 등): 단계별 설치 안내 시트 표시 */
+  showInstallGuide(isIOS ? 'ios' : 'android');
+}
+
+/* 설치 안내 바텀시트 — 플랫폼별 단계 안내 */
+const INSTALL_GUIDE_ICONS = {
+  share: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="M8 7l4-4 4 4"/><path d="M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-7"/></svg>',
+  plus: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="4"/><path d="M12 8v8M8 12h8"/></svg>',
+  check: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12l5 5L20 6"/></svg>',
+  menu: '<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="12" cy="19" r="1.8"/></svg>',
+  copy: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>',
+  safari: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M15.5 8.5l-2 5-5 2 2-5z"/></svg>'
+};
+
+function showInstallGuide(platform) {
+  document.querySelector('.install-sheet-backdrop')?.remove();
+  const stepsByPlatform = {
+    ios: [
+      ['share', 'Safari 하단의 <b>공유 버튼</b>을 눌러주세요'],
+      ['plus', '<b>홈 화면에 추가</b>를 선택해주세요'],
+      ['check', '오른쪽 위 <b>추가</b>를 누르면 설치 완료!']
+    ],
+    'ios-inapp': [
+      ['copy', '아래 버튼으로 <b>링크를 복사</b>해주세요'],
+      ['safari', '<b>Safari</b>를 열고 주소창에 붙여넣어 접속해주세요'],
+      ['share', '공유 버튼 → <b>홈 화면에 추가</b>를 선택해주세요']
+    ],
+    android: [
+      ['menu', '브라우저 오른쪽 위 <b>메뉴(⋮)</b>를 눌러주세요'],
+      ['plus', '<b>홈 화면에 추가</b> 또는 <b>앱 설치</b>를 선택해주세요'],
+      ['check', '<b>설치</b>를 누르면 홈 화면에 앱이 생겨요!']
+    ]
+  };
+  const steps = stepsByPlatform[platform] || stepsByPlatform.android;
+  const backdrop = document.createElement('div');
+  backdrop.className = 'install-sheet-backdrop';
+  backdrop.innerHTML = `
+    <div class="install-sheet" role="dialog" aria-modal="true" aria-label="앱 설치 방법">
+      <span class="install-sheet-grip" aria-hidden="true"></span>
+      <img src="images/logo-icon.png" alt="" class="install-sheet-logo">
+      <strong class="install-sheet-title">프로모터스 앱 설치</strong>
+      <p class="install-sheet-sub">홈 화면에 추가하면 앱처럼 바로 열 수 있어요</p>
+      <ol class="install-sheet-steps">
+        ${steps.map(([icon, text], i) => `
+          <li>
+            <span class="install-step-num">${i + 1}</span>
+            <span class="install-step-icon">${INSTALL_GUIDE_ICONS[icon]}</span>
+            <span class="install-step-text">${text}</span>
+          </li>`).join('')}
+      </ol>
+      ${platform === 'ios-inapp' ? '<button type="button" class="install-sheet-copy">링크 복사하기</button>' : ''}
+      <button type="button" class="install-sheet-close">닫기</button>
+    </div>`;
+  document.body.append(backdrop);
+  const close = () => backdrop.remove();
+  backdrop.addEventListener('click', e => { if (e.target === backdrop) close(); });
+  backdrop.querySelector('.install-sheet-close').addEventListener('click', close);
+  backdrop.querySelector('.install-sheet-copy')?.addEventListener('click', async e => {
+    const btn = e.currentTarget;
+    try {
+      await navigator.clipboard.writeText(location.href);
+      btn.textContent = '복사 완료! Safari에 붙여넣어 주세요';
+    } catch {
+      /* 클립보드 권한이 막힌 인앱 브라우저 대비 폴백 */
+      const ta = document.createElement('textarea');
+      ta.value = location.href;
+      document.body.append(ta);
+      ta.select();
+      try { document.execCommand('copy'); btn.textContent = '복사 완료! Safari에 붙여넣어 주세요'; } catch {}
+      ta.remove();
+    }
+  });
 }
 
 async function eventBannerHtml() {
