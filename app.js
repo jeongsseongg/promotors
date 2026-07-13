@@ -4990,8 +4990,21 @@ window.addEventListener('beforeinstallprompt', e => {
   e.preventDefault();
   deferredInstallPrompt = e;
 });
+window.addEventListener('appinstalled', () => {
+  deferredInstallPrompt = null;
+  pmAlert('프로모터스 앱이 홈 화면에 추가되었습니다.', '설치 완료');
+});
+
+const isStandaloneApp = () =>
+  window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
 
 async function requestAppInstall() {
+  if (isStandaloneApp()) {
+    pmAlert('이미 홈 화면에 추가된 앱으로 사용 중입니다.', '앱 설치');
+    return;
+  }
+
+  /* 1) 설치 프롬프트 지원 브라우저(안드로이드 크롬·삼성인터넷·엣지 등): 시스템 설치창 즉시 표시 */
   if (deferredInstallPrompt) {
     const promptEvent = deferredInstallPrompt;
     deferredInstallPrompt = null;
@@ -4999,22 +5012,20 @@ async function requestAppInstall() {
     try { await promptEvent.userChoice; } catch {}
     return;
   }
-  if (window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone) {
-    pmAlert('이미 홈 화면에 추가된 앱으로 사용 중입니다.', '앱 설치');
-    return;
-  }
+
   const ua = navigator.userAgent;
   const isIOS = /iPhone|iPad|iPod/i.test(ua) || (/Macintosh/i.test(ua) && navigator.maxTouchPoints > 1);
+  const isAndroid = /Android/i.test(ua);
   const inAppBrowser = /NAVER|KAKAOTALK|Instagram|FBAN|FBAV|Line\/|DaumApps|; wv\)/i.test(ua);
-  /* 네이버·카카오 등 인앱 브라우저(안드로이드)는 설치를 막으므로 Chrome으로 열어서 진행 */
-  if (!isIOS && /Android/i.test(ua) && inAppBrowser && location.protocol === 'https:') {
+  /* 안드로이드 인앱 브라우저(네이버·카카오 등)는 설치를 막으므로 Chrome으로 열어서 진행 */
+  if (isAndroid && inAppBrowser && location.protocol === 'https:') {
     location.href = `intent://${location.host}${location.pathname}#Intent;scheme=https;package=com.android.chrome;S.browser_fallback_url=${encodeURIComponent(location.href)};end`;
     return;
   }
   if (isIOS) {
     /* iOS는 Safari에서만 홈 화면 추가(설치)가 가능 */
     const iosSafari = !inAppBrowser && /Safari\//i.test(ua) && !/CriOS|FxiOS|EdgiOS|OPiOS|OPT\/|Whale/i.test(ua);
-    if (iosSafari) { showIosInstallGuide(); return; }
+    if (iosSafari) { showInstallGuide('ios'); return; }
     const openSafari = await pmConfirm(
       '아이폰은 Safari에서만 홈 화면에 앱을 추가할 수 있습니다.\nSafari를 실행할까요?',
       { title: '앱 설치', okText: 'Safari 열기' }
@@ -5022,15 +5033,8 @@ async function requestAppInstall() {
     if (openSafari) openCurrentPageInIosSafari();
     return;
   }
-  pmAlert('이 브라우저에서는 바로 설치를 지원하지 않습니다.\n브라우저 메뉴(⋮)에서 "홈 화면에 추가" 또는 "앱 설치"를 선택해주세요.', '앱 설치');
-}
-
-/* iOS Safari: 홈 화면 추가 방법 안내 팝업 */
-function showIosInstallGuide() {
-  pmAlert(
-    'Safari에서 아래 순서대로 진행하면 홈 화면에 앱이 설치됩니다.\n\n1. 하단 가운데 공유 버튼(네모+화살표)을 누르세요.\n2. "홈 화면에 추가"를 선택하세요.\n3. 오른쪽 위 "추가"를 누르면 완료됩니다.',
-    '앱 설치 방법'
-  );
+  /* 프롬프트 미지원 데스크톱·기타 안드로이드 브라우저: 단계별 설치 안내 시트 표시 */
+  showInstallGuide(isAndroid ? 'android' : 'desktop');
 }
 
 /* iOS 인앱 브라우저·크롬 등에서 현재 페이지를 Safari로 열기 (앱별 스킴 → 공통 스킴 순) */
@@ -5043,12 +5047,87 @@ function openCurrentPageInIosSafari() {
   } else {
     location.href = `x-safari-${url}`;
   }
-  /* 스킴이 차단되어 Safari가 열리지 않은 경우 수동 안내 */
+  /* 스킴이 차단되어 Safari가 열리지 않은 경우: 링크 복사 안내 시트로 폴백 */
   setTimeout(() => {
-    if (!document.hidden) {
-      pmAlert('Safari를 자동으로 열 수 없습니다.\n브라우저 메뉴에서 "Safari로 열기" 또는 "기본 브라우저로 열기"를 선택한 뒤, 공유 버튼 → "홈 화면에 추가"로 설치해주세요.', '앱 설치');
-    }
+    if (!document.hidden) showInstallGuide('ios-inapp');
   }, 1600);
+}
+
+/* 설치 안내 바텀시트 — 플랫폼별 단계 안내 */
+const INSTALL_GUIDE_ICONS = {
+  share: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="M8 7l4-4 4 4"/><path d="M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-7"/></svg>',
+  plus: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="4"/><path d="M12 8v8M8 12h8"/></svg>',
+  check: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12l5 5L20 6"/></svg>',
+  menu: '<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="12" cy="19" r="1.8"/></svg>',
+  copy: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>',
+  safari: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M15.5 8.5l-2 5-5 2 2-5z"/></svg>'
+};
+
+function showInstallGuide(platform) {
+  document.querySelector('.install-sheet-backdrop')?.remove();
+  const stepsByPlatform = {
+    ios: [
+      ['share', 'Safari 하단의 <b>공유 버튼</b>을 눌러주세요'],
+      ['plus', '<b>홈 화면에 추가</b>를 선택해주세요'],
+      ['check', '오른쪽 위 <b>추가</b>를 누르면 설치 완료!']
+    ],
+    'ios-inapp': [
+      ['copy', '아래 버튼으로 <b>링크를 복사</b>해주세요'],
+      ['safari', '<b>Safari</b>를 열고 주소창에 붙여넣어 접속해주세요'],
+      ['share', '공유 버튼 → <b>홈 화면에 추가</b>를 선택해주세요']
+    ],
+    android: [
+      ['menu', '브라우저 오른쪽 위 <b>메뉴(⋮)</b>를 눌러주세요'],
+      ['plus', '<b>홈 화면에 추가</b> 또는 <b>앱 설치</b>를 선택해주세요'],
+      ['check', '<b>설치</b>를 누르면 홈 화면에 앱이 생겨요!']
+    ]
+  };
+  const steps = stepsByPlatform[platform] || stepsByPlatform.android;
+  /* 기기별 안내: 바로 설치가 안 되는 이유를 부드럽게 설명 (브라우저·OS 정책 때문임을 안내) */
+  const notesByPlatform = {
+    ios: '아이폰은 Apple 정책에 따라 모든 앱·웹 서비스가 Safari의 \'홈 화면에 추가\' 기능을 통해서만 설치할 수 있어요. 아래 순서대로 하면 10초면 충분해요!',
+    'ios-inapp': '지금 보고 계신 앱 속 브라우저는 Apple 정책상 홈 화면 추가 기능이 제공되지 않아요. Safari로 열어주시면 바로 이어서 설치하실 수 있어요.',
+    android: '지금 사용 중인 브라우저는 자동 설치 기능을 제공하지 않아요. 아래 방법으로 간단히 추가하실 수 있고, Chrome으로 접속하시면 버튼 한 번에 설치돼요.'
+  };
+  const backdrop = document.createElement('div');
+  backdrop.className = 'install-sheet-backdrop';
+  backdrop.innerHTML = `
+    <div class="install-sheet" role="dialog" aria-modal="true" aria-label="앱 설치 방법">
+      <span class="install-sheet-grip" aria-hidden="true"></span>
+      <img src="images/logo-icon.png" alt="" class="install-sheet-logo">
+      <strong class="install-sheet-title">프로모터스 앱 설치</strong>
+      <p class="install-sheet-sub">홈 화면에 추가하면 앱처럼 바로 열 수 있어요</p>
+      <p class="install-sheet-note">${notesByPlatform[platform] || notesByPlatform.android}</p>
+      <ol class="install-sheet-steps">
+        ${steps.map(([icon, text], i) => `
+          <li>
+            <span class="install-step-num">${i + 1}</span>
+            <span class="install-step-icon">${INSTALL_GUIDE_ICONS[icon]}</span>
+            <span class="install-step-text">${text}</span>
+          </li>`).join('')}
+      </ol>
+      ${platform === 'ios-inapp' ? '<button type="button" class="install-sheet-copy">링크 복사하기</button>' : ''}
+      <button type="button" class="install-sheet-close">닫기</button>
+    </div>`;
+  document.body.append(backdrop);
+  const close = () => backdrop.remove();
+  backdrop.addEventListener('click', e => { if (e.target === backdrop) close(); });
+  backdrop.querySelector('.install-sheet-close').addEventListener('click', close);
+  backdrop.querySelector('.install-sheet-copy')?.addEventListener('click', async e => {
+    const btn = e.currentTarget;
+    try {
+      await navigator.clipboard.writeText(location.href);
+      btn.textContent = '복사 완료! Safari에 붙여넣어 주세요';
+    } catch {
+      /* 클립보드 권한이 막힌 인앱 브라우저 대비 폴백 */
+      const ta = document.createElement('textarea');
+      ta.value = location.href;
+      document.body.append(ta);
+      ta.select();
+      try { document.execCommand('copy'); btn.textContent = '복사 완료! Safari에 붙여넣어 주세요'; } catch {}
+      ta.remove();
+    }
+  });
 }
 
 async function eventBannerHtml() {

@@ -4194,6 +4194,92 @@ button.step-photo-slot {
   border-radius: 10px;
 }
 .image-install-slide .event-install-button:hover { background: #1d55d8; }
+
+/* 앱 설치 안내 바텀시트 */
+.install-sheet-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 320;
+  display: grid;
+  align-items: end;
+  background: rgba(15, 23, 42, .55);
+}
+.install-sheet {
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+  width: 100%;
+  max-width: 520px;
+  margin: 0 auto;
+  padding: 10px 20px calc(20px + env(safe-area-inset-bottom));
+  border-radius: 22px 22px 0 0;
+  background: #fff;
+  animation: install-sheet-up .28s ease;
+}
+@keyframes install-sheet-up {
+  from { transform: translateY(40px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+.install-sheet-grip { width: 44px; height: 4px; border-radius: 4px; background: #dde3ea; }
+.install-sheet-logo { width: 58px; height: 58px; border-radius: 14px; margin-top: 8px; }
+.install-sheet-title { font-size: 18px; color: var(--navy, #10254d); }
+.install-sheet-sub { color: #6b7280; font-size: 13px; font-weight: 700; margin: 0; }
+.install-sheet-note {
+  width: 100%;
+  margin: 8px 0 0;
+  padding: 11px 14px;
+  border-radius: 12px;
+  background: #fff8e3;
+  color: #7a6420;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.55;
+  word-break: keep-all;
+}
+.install-sheet-steps {
+  display: grid;
+  gap: 10px;
+  width: 100%;
+  margin: 12px 0 4px;
+  padding: 0;
+  list-style: none;
+}
+.install-sheet-steps li {
+  display: grid;
+  grid-template-columns: auto auto 1fr;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 14px;
+  border-radius: 12px;
+  background: var(--blue-soft);
+}
+.install-step-num {
+  width: 20px;
+  height: 20px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--blue);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 900;
+}
+.install-step-icon { display: grid; color: var(--blue); }
+.install-step-icon svg { width: 22px; height: 22px; }
+.install-step-text { font-size: 14px; font-weight: 700; color: #33404f; word-break: keep-all; }
+.install-step-text b { color: var(--blue-dark); }
+.install-sheet-copy,
+.install-sheet-close {
+  width: 100%;
+  min-height: 48px;
+  border: 0;
+  border-radius: 12px;
+  font-size: 15px;
+  font-weight: 900;
+  cursor: pointer;
+}
+.install-sheet-copy { background: var(--blue); color: #fff; }
+.install-sheet-close { background: #eef1f5; color: #55606d; }
 .event-dots {
   position: absolute;
   left: 0;
