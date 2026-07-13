@@ -6,17 +6,45 @@
 const $ = s => document.querySelector(s);
 const $$ = s => [...document.querySelectorAll(s)];
 
+const SUPABASE_DATA_KEYS = [
+  'pm-branches', 'pm-notices', 'promotors-cases', 'pm-products', 'pm-blocked',
+  'pm-banned-members', 'pm-customers', 'pm-bookings', 'pm-members',
+  'pm-blog-settings', 'pm-intro-slides', 'pm-service-runs', 'pm-messages',
+  'pm-admin-notifications', 'pm-branch-transfer-requests', 'pm-work-audit',
+  'pm-event-banners', 'pm-home-view'
+];
+const remoteState = Object.create(null);
+const isRemoteDataKey = key => SUPABASE_DATA_KEYS.includes(key);
 const locallyModifiedKeys = new Set();
 const store = {
-  get(k, d) { try { return JSON.parse(localStorage.getItem(k)) ?? d; } catch { return d; } },
+  get(k, d) {
+    if (isRemoteDataKey(k)) return Object.prototype.hasOwnProperty.call(remoteState, k) ? remoteState[k] : d;
+    try { return JSON.parse(localStorage.getItem(k)) ?? d; } catch { return d; }
+  },
   set(k, v) {
-    localStorage.setItem(k, JSON.stringify(v));
+    if (isRemoteDataKey(k)) remoteState[k] = v;
+    else {
+      try { localStorage.setItem(k, JSON.stringify(v)); }
+      catch (err) { console.warn('Local preference save failed', k, err); }
+    }
     locallyModifiedKeys.add(k);
     if (k !== 'pm-logs') syncSupabaseData(k, v);
   },
-  setLocal(k, v) { localStorage.setItem(k, JSON.stringify(v)); },
-  del(k) { localStorage.removeItem(k); }
+  setLocal(k, v) {
+    if (isRemoteDataKey(k)) remoteState[k] = v;
+    else {
+      try { localStorage.setItem(k, JSON.stringify(v)); }
+      catch (err) { console.warn('Local preference save failed', k, err); }
+    }
+  },
+  del(k) {
+    if (isRemoteDataKey(k)) delete remoteState[k];
+    else localStorage.removeItem(k);
+  }
 };
+
+let authToken = sessionStorage.getItem('pm-auth-token') || localStorage.getItem('pm-auth-token') || '';
+const remoteAssets = Object.create(null);
 
 const assetDb = {
   open() {
@@ -61,17 +89,28 @@ const assetDb = {
 const objectUrls = new Map();
 async function assetSrc(key) {
   if (!key) return '';
-  const remote = store.get('pm-assets', {})[key]?.dataUrl;
+  const remote = remoteAssets[key]?.dataUrl;
   if (remote) return remote;
   if (objectUrls.has(key)) return objectUrls.get(key);
   try {
     const file = await assetDb.get(key);
-    if (!file) return '';
-    rememberRemoteAsset(key, file);
-    const url = URL.createObjectURL(file);
-    objectUrls.set(key, url);
-    return url;
-  } catch { return ''; }
+    if (file) {
+      const url = URL.createObjectURL(file);
+      objectUrls.set(key, url);
+      return url;
+    }
+  } catch {}
+  const supa = getSupabaseConfig();
+  if (!supa) return '';
+  try {
+    const asset = await supabaseRpc('pm_asset_get', { p_key: key, p_token: authToken || null });
+    if (!asset?.dataUrl) return '';
+    remoteAssets[key] = asset;
+    return asset.dataUrl;
+  } catch (err) {
+    console.warn('Remote asset load failed', key, err);
+    return '';
+  }
 }
 
 function fileToDataUrl(file) {
@@ -106,13 +145,16 @@ function imageFileToPortableDataUrl(file, maxSize = 1400, quality = .82) {
 }
 
 async function rememberRemoteAsset(key, file) {
-  if (!key || !file || store.get('pm-assets', {})[key]) return;
+  if (!key || !file || remoteAssets[key]) return;
   try {
     const dataUrl = await imageFileToPortableDataUrl(file);
-    const assets = store.get('pm-assets', {});
-    assets[key] = { dataUrl, name: file.name || key, type: file.type || 'image/jpeg', updatedAt: new Date().toISOString() };
-    store.set('pm-assets', assets);
-  } catch {}
+    const asset = { dataUrl, name: file.name || key, type: file.type || 'image/jpeg', updatedAt: new Date().toISOString() };
+    await supabaseRpc('pm_asset_put', { p_token: authToken, p_key: key, p_asset: asset });
+    remoteAssets[key] = asset;
+  } catch (err) {
+    console.warn('Remote asset save failed', key, err);
+    throw err;
+  }
 }
 
 async function saveFiles(files, prefix, limit) {
@@ -143,12 +185,12 @@ function collectAssetKeys(value, found = new Set()) {
 }
 
 async function migrateLocalAssetsToSupabase() {
-  if (!getSupabaseConfig()) return;
+  if (!getSupabaseConfig() || !authToken || !isAdmin) return;
   const sources = ['pm-notices', 'pm-branches', 'pm-intro-slides', 'promotors-cases', 'pm-service-runs'];
   const keys = [...sources.reduce((set, key) => collectAssetKeys(store.get(key, null), set), new Set())];
   if (!keys.length) return;
   for (const key of keys) {
-    if (store.get('pm-assets', {})[key]) continue;
+    if (remoteAssets[key]) continue;
     const file = await assetDb.get(key).catch(() => null);
     if (file) await rememberRemoteAsset(key, file);
   }
@@ -220,37 +262,10 @@ function logEvent(type, payload = {}) {
   store.set('pm-logs', logs.slice(0, 300));
   const supa = getSupabaseConfig();
   if (supa) {
-    fetch(`${supa.url}/rest/v1/site_logs`, {
-      method: 'POST',
-      headers: supabaseHeaders(supa),
-      body: JSON.stringify({ event_type: type, payload, page_url: location.href })
-    }).catch(() => {});
+    supabaseRpc('pm_log', { p_event_type: type, p_payload: payload, p_page_url: location.href }).catch(() => {});
   }
 }
 
-const SUPABASE_DATA_KEYS = [
-  'pm-branches',
-  'pm-notices',
-  'promotors-cases',
-  'pm-products',
-  'pm-blocked',
-  'pm-banned-members',
-  'pm-customers',
-  'pm-bookings',
-  'pm-members',
-  'pm-blog-settings',
-  'pm-intro-slides',
-  'pm-assets',
-  'pm-service-runs',
-  'pm-messages',
-  'pm-sub-admin',
-  'pm-main-admin',
-  'pm-security-settings',
-  'pm-home-view',
-  'pm-admin-notifications',
-  'pm-work-audit',
-  'pm-event-banners'
-];
 let isHydratingSupabase = false;
 
 function getSupabaseConfig() {
@@ -270,30 +285,101 @@ function supabaseHeaders(supa, prefer = 'return=minimal') {
   };
 }
 
-function syncSupabaseData(key, value) {
-  if (isHydratingSupabase || !SUPABASE_DATA_KEYS.includes(key)) return;
+async function supabaseRpc(name, params = {}) {
   const supa = getSupabaseConfig();
-  if (!supa) return;
-  fetch(`${supa.url}/rest/v1/site_data?on_conflict=data_key`, {
+  if (!supa) throw new Error('SUPABASE_NOT_CONFIGURED');
+  const res = await fetch(`${supa.url}/rest/v1/rpc/${name}`, {
     method: 'POST',
-    headers: supabaseHeaders(supa, 'resolution=merge-duplicates,return=minimal'),
-    body: JSON.stringify({ data_key: key, payload: value, page_url: location.href })
-  }).catch(() => {});
+    headers: supabaseHeaders(supa, 'return=representation'),
+    body: JSON.stringify(params)
+  });
+  const text = await res.text();
+  let data = null;
+  try { data = text ? JSON.parse(text) : null; } catch { data = text; }
+  if (!res.ok) {
+    const error = new Error(data?.message || data?.hint || `Supabase ${res.status}`);
+    error.status = res.status;
+    error.details = data;
+    throw error;
+  }
+  return data;
+}
+
+function saveAuthSession(result, { remember = false, admin = false } = {}) {
+  authToken = result?.token || '';
+  if (!authToken) return;
+  sessionStorage.setItem('pm-auth-token', authToken);
+  if (remember && !admin) localStorage.setItem('pm-auth-token', authToken);
+  else localStorage.removeItem('pm-auth-token');
+}
+
+function clearAuthSession() {
+  const token = authToken;
+  authToken = '';
+  sessionStorage.removeItem('pm-auth-token');
+  localStorage.removeItem('pm-auth-token');
+  sessionStorage.removeItem('pm-admin');
+  sessionStorage.removeItem('pm-admin-role');
+  sessionStorage.removeItem('pm-admin-branch');
+  sessionStorage.removeItem('pm-admin-branches');
+  store.del('pm-member');
+  store.del('pm-auto-login');
+  store.del('pm-auto-member');
+  if (token) supabaseRpc('pm_logout', { p_token: token }).catch(() => {});
+}
+
+async function syncSupabaseData(key, value) {
+  if (isHydratingSupabase || !SUPABASE_DATA_KEYS.includes(key)) return;
+  if (!authToken) return;
+  try {
+    await supabaseRpc('pm_sync_write', {
+      p_token: authToken,
+      p_key: key,
+      p_payload: value,
+      p_page_url: location.href
+    });
+    locallyModifiedKeys.delete(key);
+  } catch (err) {
+    console.warn('Supabase save failed', key, err);
+  }
 }
 
 async function hydrateSupabaseData() {
   const supa = getSupabaseConfig();
   if (!supa) return { ok: false, reason: 'not-configured' };
-  const keys = SUPABASE_DATA_KEYS.map(k => `"${k}"`).join(',');
   try {
-    const res = await fetch(`${supa.url}/rest/v1/site_data?select=data_key,payload&data_key=in.(${keys})`, {
-      headers: supabaseHeaders(supa, 'return=representation')
-    });
-    if (!res.ok) throw new Error(`Supabase ${res.status}`);
-    const rows = await res.json();
+    const rows = await supabaseRpc('pm_sync_read', { p_token: authToken || null });
+    if (!Array.isArray(rows)) throw new Error('INVALID_SYNC_RESPONSE');
     isHydratingSupabase = true;
-    /* 원격 데이터를 백그라운드로 받는 동안 사용자가 수정한 키는 덮어쓰지 않는다 */
-    rows.forEach(row => { if (!locallyModifiedKeys.has(row.data_key)) store.setLocal(row.data_key, row.payload); });
+    const context = rows.find(row => row.data_key === 'pm-auth-context')?.payload || { authenticated: false };
+    rows.forEach(row => {
+      if (row.data_key !== 'pm-auth-context' && !locallyModifiedKeys.has(row.data_key)) store.setLocal(row.data_key, row.payload);
+    });
+
+    if (context.authenticated) {
+      if (context.role === 'main' || context.role === 'general') {
+        isAdmin = true;
+        adminRole = context.role;
+        adminBranches = Array.isArray(context.branches) ? context.branches : [];
+        member = null;
+        sessionStorage.setItem('pm-admin', '1');
+        sessionStorage.setItem('pm-admin-role', adminRole);
+        sessionStorage.setItem('pm-admin-branches', JSON.stringify(adminBranches));
+        store.del('pm-member');
+      } else {
+        isAdmin = false;
+        adminRole = '';
+        adminBranches = [];
+        member = context.profile || rows.find(row => row.data_key === 'pm-members')?.payload?.[0] || null;
+        if (member) store.setLocal('pm-member', member);
+      }
+    } else if (authToken) {
+      clearAuthSession();
+      isAdmin = false;
+      adminRole = '';
+      adminBranches = [];
+      member = null;
+    }
     isHydratingSupabase = false;
     return { ok: true, count: rows.length };
   } catch (err) {
@@ -303,12 +389,10 @@ async function hydrateSupabaseData() {
   }
 }
 
-/* 관리자 비밀번호 */
-const ADMIN_PW = 'goodpro1!';
 const DEFAULT_STEP_NAMES = ['입고', '작업', '출고'];
 
 /* ---------- 상태 ---------- */
-let isAdmin = sessionStorage.getItem('pm-admin') === '1';
+let isAdmin = !!authToken && sessionStorage.getItem('pm-admin') === '1';
 let adminRole = sessionStorage.getItem('pm-admin-role') || '';
 let adminBranches = (() => {
   try { return JSON.parse(sessionStorage.getItem('pm-admin-branches')) || []; } catch { return []; }
@@ -321,11 +405,7 @@ if (isAdmin && !adminRole) {
   adminRole = 'main';
   sessionStorage.setItem('pm-admin-role', 'main');
 }
-let member = store.get('pm-member', null);
-if (!member && store.get('pm-auto-login', false)) {
-  member = store.get('pm-auto-member', null);
-  if (member) store.setLocal('pm-member', member);
-}
+let member = authToken ? store.get('pm-member', null) : null;
 
 /* ---------- 기본 데이터 ---------- */
 const DEFAULT_BRANCHES = [
@@ -356,6 +436,7 @@ const getNotices   = () => store.get('pm-notices', DEFAULT_NOTICES);
 const getCases     = () => store.get('promotors-cases', []);
 const getProducts  = () => normalizeProducts(store.get('pm-products', DEFAULT_PRODUCTS));
 const getBlocked   = () => store.get('pm-blocked', []);
+const getBranchTransferRequests = () => store.get('pm-branch-transfer-requests', []);
 const getBannedMembers = () => store.get('pm-banned-members', []);
 const normPhone = p => String(p || '').replace(/\D/g, '');
 const getCustomers = () => store.get('pm-customers', {});
@@ -379,9 +460,8 @@ const getBlogSettings = () => {
     imageProxy
   };
 };
-const getSubAdmin = () => normalizeSubAdmin(store.get('pm-sub-admin', { password: '', accounts: [] }));
-const getMainAdmin = () => store.get('pm-main-admin', { password: ADMIN_PW });
-const getSecuritySettings = () => store.get('pm-security-settings', { password: 'tmdgus123' });
+let adminAccountState = [];
+const getSubAdmin = () => normalizeSubAdmin({ accounts: adminAccountState });
 const getHomeView = () => {
   const saved = store.get('pm-home-view', null);
   /* 구버전(문자열) 설정은 무시한다 */
@@ -448,17 +528,12 @@ function normalizeSubAdmin(value) {
     : String(account.branch || '').trim() ? [String(account.branch).trim()] : [];
   const normalized = accounts
     .map((account, i) => ({
-      id: account.id || `sub-${i}-${String(account.password || '').slice(0, 4)}`,
-      password: String(account.password || '').trim(),
+      id: account.id || `sub-${i}`,
+      label: String(account.label || `일반 관리자 ${i + 1}`).trim(),
       branches: toBranches(account),
       createdAt: account.createdAt || ''
-    }))
-    .filter(account => account.password);
-  const legacy = String(raw.password || '').trim();
-  if (legacy && !normalized.some(account => account.password === legacy)) {
-    normalized.unshift({ id: 'sub-legacy', password: legacy, branches: toBranches(raw), createdAt: raw.createdAt || '' });
-  }
-  return { password: legacy, accounts: normalized };
+    }));
+  return { accounts: normalized };
 }
 const BRANDS = ['전체','Mercedes-Benz','BMW','Audi','Volkswagen','Ferrari','Lamborghini','Maserati','Jaguar','Bentley','Rolls-Royce','MINI','Volvo','Lexus','Jeep','Land Rover','Porsche','기타'];
 let selectedCaseBrand = '전체';
@@ -475,6 +550,17 @@ const openCustCards = new Set();
 /* 고객관리: 고객별 메모 검색어/펼침 상태 */
 const custMemoFilters = new Map();
 
+/* 새로고침 후에도 현재 보고 있던 화면을 복원한다. 로그인 정보는 기존 세션을 그대로 사용한다. */
+const SCREEN_STATE_KEY = 'pm-screen-state';
+function getScreenState() {
+  try { return JSON.parse(sessionStorage.getItem(SCREEN_STATE_KEY)) || {}; } catch { return {}; }
+}
+function saveScreenState(next = {}) {
+  sessionStorage.setItem(SCREEN_STATE_KEY, JSON.stringify({ ...getScreenState(), ...next }));
+}
+function rememberModalScreen(name) { saveScreenState({ modal: name || '' }); }
+function clearModalScreen() { saveScreenState({ modal: '' }); }
+
 /* ============================================================
    화면(뷰) 전환 — 오른쪽만 변경, 왼쪽 고정
    ============================================================ */
@@ -485,10 +571,35 @@ function showView(name) {
   /* 보안 화면을 벗어나면 다시 비밀번호를 묻는다 (1시간 해제 체크 시 제외) */
   if (name !== 'adm-settings') securityUnlocked = false;
   document.body.dataset.view = name;
+  saveScreenState({ view: name });
   $$('.view').forEach(v => v.classList.toggle('active', v.id === 'view-' + name));
   $$('.top-nav .nav-btn').forEach(b => b.classList.toggle('active', b.dataset.view === name));
   syncMobileTabbar();
   $('.right-panel').scrollTop = 0;
+  return name;
+}
+
+function renderViewContent(name) {
+  if (name === 'adm-book') initAdmBook();
+  if (name === 'adm-work') renderAdmWork();
+  if (name === 'adm-approval') renderAdmApproval();
+  if (name === 'adm-cust') renderAdmCust();
+  if (name === 'adm-prod') renderAdmProd();
+  if (name === 'adm-inquiry') renderAdmInquiry();
+  if (name === 'adm-settings') renderAdmSettings();
+  if (name === 'cases') activateTab('tab-blog');
+}
+
+function restoreModalScreen() {
+  const modalName = getScreenState().modal;
+  if (modalName === 'my' && member) openMyPageModal();
+  if (modalName === 'my-work' && member) openWorkStatusPage();
+  if (modalName === 'my-alerts' && member) openMyAlertsPage();
+  if (modalName === 'my-info' && member) openMyInfoPage();
+  if (modalName === 'my-bookings' && member) openMyBookingsPage();
+  if (modalName === 'my-history' && member) openCustomerHistoryModal();
+  if (modalName === 'my-center' && member) openCustomerCenterModal(member);
+  if (modalName === 'admin-settings' && isAdmin) openAdminSettingsPage();
 }
 
 /* 모바일 탭바 활성 표시: 마이 페이지가 열려있으면 마이, 아니면 현재 화면 기준 */
@@ -576,8 +687,49 @@ function openModal(html, wide, full, backHandler = null) {
   const first = modalCard.querySelector('input, textarea, [contenteditable="true"]');
   if (first) first.focus();
 }
-function closeModal() { modalBackHandler = null; modal.hidden = true; modalCard.classList.remove('full', 'mypage-card', 'mobile-full'); modalCard.innerHTML = ''; syncMobileTabbar(); }
+function closeModal() { modalBackHandler = null; clearModalScreen(); modal.hidden = true; modalCard.classList.remove('full', 'mypage-card', 'mobile-full'); modalCard.innerHTML = ''; syncMobileTabbar(); }
 modal.addEventListener('click', e => { if (e.target === modal) e.preventDefault(); });
+
+/* ---------- 푸터 법적 고지 ---------- */
+const LEGAL_MODAL_CONTENT = {
+  terms: {
+    title: '이용약관', updated: '시행일: 2026년 7월 13일',
+    body: `
+      <section><h4>제1조 목적</h4><p>이 약관은 프로모터스 안산점(이하 “회사”)이 웹사이트를 통해 제공하는 회원, 정비예약, 정비 진행현황 및 고객문의 서비스의 이용조건과 절차를 정하는 것을 목적으로 합니다.</p></section>
+      <section><h4>제2조 서비스 범위</h4><p>웹사이트는 정비 상담·예약과 정비 관련 정보 확인을 위한 서비스입니다. 정비계약의 내용, 견적, 작업 범위 및 비용은 차량 상태 확인 후 별도로 안내·합의합니다. 이 웹사이트에서는 재화 또는 용역의 온라인 결제·판매를 하지 않습니다.</p></section>
+      <section><h4>제3조 회원의 책임</h4><p>이용자는 정확한 회원·차량·연락처 정보를 제공해야 하며, 계정 정보를 제3자에게 공유하거나 타인의 정보를 무단 사용해서는 안 됩니다.</p></section>
+      <section><h4>제4조 예약</h4><p>예약 신청은 회사의 확인 또는 확정 안내가 있을 때 성립합니다. 차량 상태, 정비 인력 및 부품 수급 등 운영 사정에 따라 예약 일정 또는 작업 범위가 조정될 수 있습니다.</p></section>
+      <section><h4>제5조 서비스 변경 및 책임 제한</h4><p>회사는 운영상 필요한 경우 서비스의 전부 또는 일부를 변경하거나 중단할 수 있습니다. 회사의 고의 또는 중대한 과실이 없는 한, 이용자의 귀책사유 또는 천재지변·통신장애 등 불가항력으로 인한 손해에 책임을 지지 않습니다.</p></section>
+      <section><h4>제6조 문의 및 분쟁</h4><p>서비스 관련 문의는 아래 연락처로 접수할 수 있습니다. 본 약관에 정하지 않은 사항은 관계 법령 및 상관례에 따릅니다.</p></section>`
+  },
+  privacy: {
+    title: '개인정보 처리방침', updated: '시행일: 2026년 7월 13일',
+    body: `
+      <section><h4>1. 개인정보 처리자 및 문의처</h4><p>상호: 프로모터스 안산점 / 대표자: 이승현 / 주소: 경기도 안산시 단원구 이삭로 6, 1층(고잔동)<br>개인정보 관련 문의: <a href="tel:0318319738">031-831-9738</a>, <a href="mailto:promotors3986@naver.com">promotors3986@naver.com</a></p></section>
+      <section><h4>2. 수집 항목과 처리 목적</h4><ul><li>회원가입: 아이디, 비밀번호, 이름, 차량명, 차량번호, 휴대전화번호, 이메일·주소(선택) — 회원 식별 및 정비 서비스 제공</li><li>정비예약: 예약 일시·지점·선택 서비스·요청 메모 및 회원·차량 정보 — 예약 확인, 정비 상담 및 진행 안내</li><li>정비 진행현황: 정비기록, 작업사진, 고객문의 내용 — 정비 이력 관리 및 고객 응대</li><li>서비스 이용기록: 접속·이용 기록 — 서비스 운영 및 보안 점검</li></ul></section>
+      <section><h4>3. 보유 및 이용 기간</h4><p>회원정보는 회원 탈퇴 또는 처리 목적 달성 시까지 보유합니다. 예약·정비기록 및 고객문의는 분쟁 대응과 서비스 이력 확인을 위해 최종 이용일로부터 5년간 보관 후 파기합니다. 관계 법령상 보존이 필요한 경우에는 해당 기간 동안 보관합니다.</p></section>
+      <section><h4>4. 제3자 제공 및 처리위탁</h4><p>회사는 이용자의 개인정보를 판매하거나 광고 목적의 제3자에게 제공하지 않습니다. 서비스 데이터 저장·동기화를 위해 Supabase Inc.의 클라우드 서비스를 이용할 수 있으며, 이는 서비스 운영을 위한 처리위탁에 해당합니다. 해외 저장이 발생할 수 있으므로 개인정보 관련 문의 또는 열람·정정·삭제 요청은 위 연락처로 할 수 있습니다.</p></section>
+      <section><h4>5. 정보주체의 권리</h4><p>이용자는 자신의 개인정보에 대해 열람, 정정·삭제, 처리정지 및 동의철회를 요구할 수 있습니다. 회원 탈퇴 또는 위 연락처를 통해 요청할 수 있으며, 법령상 제한 사유가 없으면 지체 없이 처리합니다.</p></section>
+      <section><h4>6. 파기 절차 및 방법</h4><p>보유기간이 경과하거나 처리 목적이 달성된 개인정보는 복구할 수 없는 방법으로 삭제합니다. 전자파일은 기술적으로 복구가 불가능한 방식으로 삭제하고, 종이 문서는 분쇄 또는 소각합니다.</p></section>
+      <section><h4>7. 안전성 확보 조치 및 방침 변경</h4><p>회사는 접근권한 관리, 접근기록 관리 및 보안조치 등 개인정보 보호를 위한 합리적인 관리적·기술적 조치를 시행합니다. 이 방침이 변경될 경우 시행일 7일 전부터 웹사이트에 안내합니다.</p></section>`
+  },
+  notice: {
+    title: '법적 고지', updated: '최종 확인일: 2026년 7월 13일',
+    body: `
+      <section><h4>사업자 정보</h4><p>상호: 프로모터스 안산점 / 대표자: 이승현 / 사업자등록번호: 404-18-01638<br>사업장: 경기도 안산시 단원구 이삭로 6, 1층(고잔동)<br>업태: 서비스업 / 종목: 자동차전문정비</p></section>
+      <section><h4>웹사이트 서비스 성격</h4><p>본 웹사이트는 자동차 정비 상담·예약 및 정보 제공을 위한 사이트입니다. 현재 온라인 결제 또는 통신판매를 제공하지 않으므로 통신판매업 신고번호, 에스크로·구매안전서비스, 청약철회·환불 규정은 적용 대상이 아닙니다.</p></section>
+      <section><h4>관련 법령</h4><p>개인정보의 수집·이용·보호에는 「개인정보 보호법」 등 관계 법령이 적용됩니다. 전자상거래법상 사이버몰 표시의무는 전자상거래를 하는 사이버몰에 적용되며, 본 웹사이트는 해당 거래 기능을 제공하지 않습니다.</p></section>
+      <section><h4>연락처</h4><p>전화: <a href="tel:0318319738">031-831-9738</a> / 이메일: <a href="mailto:promotors3986@naver.com">promotors3986@naver.com</a></p></section>`
+  }
+};
+
+function openLegalModal(type) {
+  const legal = LEGAL_MODAL_CONTENT[type];
+  if (!legal) return;
+  openModal(`<article class="legal-modal"><h3>${legal.title}</h3><p class="legal-modal__updated">${legal.updated}</p><div class="legal-modal__content">${legal.body}</div></article>`, true);
+}
+
+$$('[data-legal-modal]').forEach(btn => btn.addEventListener('click', () => openLegalModal(btn.dataset.legalModal)));
 
 /* ============================================================
    프로모터스 전용 팝업 — 브라우저 기본 alert/confirm/prompt 대체
@@ -598,6 +750,7 @@ function pmDialog({ title = '알림', message = '', input = null, okText = '확�
     const backdrop = ensurePmDialog();
     const card = backdrop.querySelector('.pm-dialog');
     card.innerHTML = `
+      <button type="button" class="pm-dialog-x" aria-label="닫기">×</button>
       <span class="pm-dialog-brand">PRO MOTORS</span>
       <strong class="pm-dialog-title">${esc(title)}</strong>
       ${message ? `<p class="pm-dialog-msg">${esc(message).replace(/\n/g, '<br>')}</p>` : ''}
@@ -609,6 +762,7 @@ function pmDialog({ title = '알림', message = '', input = null, okText = '확�
     backdrop.hidden = false;
     const inputEl = card.querySelector('.pm-dialog-input');
     const finish = value => { backdrop.hidden = true; card.innerHTML = ''; resolve(value); };
+    card.querySelector('.pm-dialog-x').addEventListener('click', () => finish(input ? null : false));
     card.querySelector('.pm-dialog-ok').addEventListener('click', () => finish(input ? inputEl.value : true));
     card.querySelector('.pm-dialog-cancel')?.addEventListener('click', () => finish(input ? null : false));
     inputEl?.addEventListener('keydown', e => {
@@ -699,17 +853,11 @@ function authBtn(text, onClick) {
 }
 
 function logout() {
+  clearAuthSession();
   isAdmin = false;
   adminRole = '';
   adminBranches = [];
   member = null;
-  sessionStorage.removeItem('pm-admin');
-  sessionStorage.removeItem('pm-admin-role');
-  sessionStorage.removeItem('pm-admin-branch');
-  sessionStorage.removeItem('pm-admin-branches');
-  store.del('pm-member');
-  store.del('pm-auto-login');
-  store.del('pm-auto-member');
   /* 관리자 화면에 있었다면 소개로 이동 */
   if (document.querySelector('.view.active')?.id.startsWith('view-adm')) showView('intro');
   applyAuthUI();
@@ -738,7 +886,7 @@ function openAddressSearch(input) {
 
 /* ---------- 회원 로그인 / 가입 모달 ---------- */
 function validMemberPassword(value) {
-  return value.length >= 8 && /[A-Za-z가-힣]/.test(value) && /\d/.test(value);
+  return value.length >= 10 && /[A-Za-z가-힣]/.test(value) && /\d/.test(value);
 }
 
 function openMemberModal(tab) {
@@ -772,7 +920,7 @@ function openMemberModal(tab) {
           <button type="button" id="m-address-find">주소찾기</button>
         </div>
         <p class="field-help">주소는 차량에 필요한 악세서리나 부속을 보내드릴 때 사용합니다. 선택사항입니다.</p>
-        <p class="hint">비밀번호는 영어 또는 한글과 숫자를 포함해 8자 이상이어야 합니다.</p>
+        <p class="hint">비밀번호는 문자와 숫자를 포함해 10자 이상이어야 합니다.</p>
       ` : `
         <label class="check-line"><input type="checkbox" id="m-remember"> 아이디 기억하기</label>
         <label class="check-line"><input type="checkbox" id="m-auto"> 자동로그인</label>
@@ -820,53 +968,60 @@ function openMemberModal(tab) {
     $('#resume-signup')?.addEventListener('click', () => openMemberModal('signup'));
   }
 
-  $('#member-form').addEventListener('submit', e => {
+  $('#member-form').addEventListener('submit', async e => {
     e.preventDefault();
     const id = $('#m-id').value.trim();
     const password = $('#m-password').value;
-    const members = store.get('pm-members', []);
     const err = $('#m-error');
+    const submit = $('#member-form .modal-submit');
+    submit.disabled = true;
+    err.textContent = '';
 
-    if (tab === 'signup') {
-      const name = $('#m-name').value.trim();
-      const model = $('#m-model').value.trim();
-      const car = $('#m-car').value.trim();
-      const phone = $('#m-phone').value.trim();
-      const email = $('#m-email').value.trim();
-      const address = $('#m-address').value.trim();
-      const password2 = $('#m-password2').value;
-      if (!validMemberPassword(password)) { err.textContent = '비밀번호는 영어 또는 한글과 숫자를 포함해 8자 이상이어야 합니다.'; return; }
-      if (password !== password2) { err.textContent = '비밀번호 확인이 일치하지 않습니다.'; return; }
-      if (members.some(m => m.id === id)) { err.textContent = '이미 가입된 아이디입니다.'; return; }
-      if (members.some(m => m.car === car)) { err.textContent = '이미 가입된 차량번호입니다.'; return; }
-      /* 차단된 핸드폰번호는 재가입 불가 */
-      if (getBannedMembers().some(b => b.type === 'blocked' && normPhone(b.member?.phone) && normPhone(b.member?.phone) === normPhone(phone))) {
-        err.textContent = '가입이 제한된 핸드폰번호입니다. 매장에 문의해주세요.';
-        return;
+    try {
+      let result;
+      if (tab === 'signup') {
+        const profile = {
+          id,
+          name: $('#m-name').value.trim(),
+          model: $('#m-model').value.trim(),
+          car: $('#m-car').value.trim(),
+          phone: $('#m-phone').value.trim(),
+          email: $('#m-email').value.trim(),
+          address: $('#m-address').value.trim(),
+          role: 'customer'
+        };
+        const password2 = $('#m-password2').value;
+        if (!validMemberPassword(password)) throw new Error('WEAK_PASSWORD');
+        if (password !== password2) throw new Error('PASSWORD_MISMATCH');
+        result = await supabaseRpc('pm_register', { p_login_id: id, p_password: password, p_profile: profile });
+        store.del('pm-signup-draft');
+      } else {
+        const remember = !!$('#m-auto')?.checked;
+        result = await supabaseRpc('pm_login', { p_login_id: id, p_password: password, p_remember: remember });
+        if ($('#m-remember')?.checked) store.setLocal('pm-remember-id', id); else store.del('pm-remember-id');
       }
-      members.push({ id, password, car, name, phone, model, email, address, role: 'customer' });
-      store.set('pm-members', members);
-      member = { id, password, car, name, phone, model, email, address, role: 'customer' };
-      store.del('pm-signup-draft');
-    } else {
-      const found = members.find(m => (m.id === id && m.password === password) || (!m.id && m.car === id && m.phone === password));
-      /* 차단된 계정/핸드폰번호는 로그인 불가 (자료는 보안 화면에 보관) */
-      const blockedList = getBannedMembers().filter(b => b.type === 'blocked' && b.member);
-      const bannedHit = found
-        ? blockedList.some(b => b.member.id === found.id || (normPhone(b.member.phone) && normPhone(b.member.phone) === normPhone(found.phone)))
-        : blockedList.some(b => (b.member.id === id && b.member.password === password) || (b.member.car === id && b.member.phone === password));
-      if (bannedHit) { err.textContent = '이용이 제한된 계정입니다. 매장에 문의해주세요.'; return; }
-      if (!found) { err.textContent = '아이디 또는 비밀번호가 일치하지 않습니다.'; return; }
-      member = found;
-      if ($('#m-remember')?.checked) store.setLocal('pm-remember-id', id); else store.del('pm-remember-id');
-      if ($('#m-auto')?.checked) {
-        store.setLocal('pm-auto-login', true);
-        store.setLocal('pm-auto-member', member);
-      }
+
+      saveAuthSession(result, { remember: tab === 'login' && !!$('#m-auto')?.checked });
+      member = result.profile;
+      store.setLocal('pm-member', member);
+      await hydrateSupabaseData();
+      closeModal();
+      applyAuthUI();
+    } catch (error) {
+      const code = String(error.message || '');
+      const messages = {
+        INVALID_LOGIN: '아이디 또는 비밀번호가 일치하지 않습니다.',
+        INVALID_ID: '아이디는 영문·숫자·점·밑줄·하이픈 4~40자로 입력해주세요.',
+        WEAK_PASSWORD: '비밀번호는 문자와 숫자를 포함해 10자 이상이어야 합니다.',
+        PASSWORD_MISMATCH: '비밀번호 확인이 일치하지 않습니다.',
+        DUPLICATE_ID: '이미 가입된 아이디입니다.',
+        DUPLICATE_CAR: '이미 가입된 차량번호입니다.',
+        ACCOUNT_BLOCKED: '가입 또는 이용이 제한된 계정입니다. 매장에 문의해주세요.'
+      };
+      err.textContent = messages[code] || '서버 연결에 실패했습니다. 잠시 후 다시 시도해주세요.';
+    } finally {
+      submit.disabled = false;
     }
-    store.set('pm-member', member);
-    closeModal();
-    applyAuthUI();
   });
 }
 
@@ -892,6 +1047,7 @@ const WORK_STAGES = [
 
 async function openMyPageModal() {
   if (!member) return openMemberModal('login');
+  rememberModalScreen('my');
   const bookings = getBookings().filter(b => b.car === member.car || b.memberId === member.id);
   const serviceRuns = store.get('pm-service-runs', []).filter(r => r.car === member.car || r.memberId === member.id);
   const notices = getMessagesFor(member).filter(m => m.serviceContext?.runId);
@@ -1006,6 +1162,7 @@ async function cancelMemberBooking(booking) {
 /* 작업현황 상세: 입고 → 작업 → 검수 → 확인 4단계 + 단계별 사진 */
 async function openWorkStatusPage() {
   if (!member) return openMemberModal('login');
+  rememberModalScreen('my-work');
   const serviceRuns = store.get('pm-service-runs', []).filter(r => r.car === member.car || r.memberId === member.id);
   const run = serviceRuns.slice().sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0))[0];
 
@@ -1090,6 +1247,7 @@ async function openWorkStatusPage() {
 
 function openMyAlertsPage() {
   if (!member) return openMemberModal('login');
+  rememberModalScreen('my-alerts');
   const notices = getMessagesFor(member).filter(m => m.serviceContext?.runId);
   openModal(`
     <h3>알림</h3>
@@ -1111,6 +1269,7 @@ function openMyAlertsPage() {
 
 function openMyInfoPage() {
   if (!member) return openMemberModal('login');
+  rememberModalScreen('my-info');
   openModal(`
     <h3>내 정보</h3>
     ${myPagePageHeader('내 정보', 'user')}
@@ -1118,7 +1277,8 @@ function openMyInfoPage() {
       <label>아이디<input type="text" value="${esc(member.id || '')}" disabled></label>
       <label>이름<input type="text" id="mi-name" value="${esc(member.name || '')}" required></label>
       <label>차량명<input type="text" id="mi-model" value="${esc(member.model || '')}" placeholder="예: BMW 520d M Sport"></label>
-      <label>차량번호<input type="text" id="mi-car" value="${esc(member.car || '')}" required placeholder="예: 12가3456"></label>
+      <label>차량번호<input type="text" id="mi-car" value="${esc(member.car || '')}" readonly></label>
+      <p class="field-help">차량번호 변경은 기존 정비기록 연결을 위해 매장에 요청해주세요.</p>
       <label>핸드폰번호<input type="tel" id="mi-phone" value="${esc(member.phone || '')}" placeholder="예: 010-1234-5678"></label>
       <label>이메일<input type="email" id="mi-email" value="${esc(member.email || '')}" placeholder="이메일 (선택)"></label>
       <label>주소
@@ -1136,7 +1296,7 @@ function openMyInfoPage() {
       <input type="password" id="pw-current" placeholder="현재 비밀번호" required autocomplete="current-password">
       <input type="password" id="pw-new" placeholder="새 비밀번호" required autocomplete="new-password">
       <input type="password" id="pw-new2" placeholder="새 비밀번호 확인" required autocomplete="new-password">
-      <p class="hint">비밀번호는 영어 또는 한글과 숫자를 포함해 8자 이상이어야 합니다.</p>
+      <p class="hint">비밀번호는 영문과 숫자를 포함해 10자 이상이어야 합니다.</p>
       <p class="form-error" id="pw-error"></p>
       <p class="form-ok" id="pw-ok"></p>
       <button type="submit" class="modal-submit">비밀번호 변경</button>
@@ -1176,26 +1336,31 @@ function openMyInfoPage() {
     ok.textContent = '저장되었습니다.';
   });
 
-  $('#my-pw-form').addEventListener('submit', e => {
+  $('#my-pw-form').addEventListener('submit', async e => {
     e.preventDefault();
     const err = $('#pw-error'), ok = $('#pw-ok');
     err.textContent = ''; ok.textContent = '';
     const current = $('#pw-current').value;
     const next = $('#pw-new').value;
     const next2 = $('#pw-new2').value;
-    if (current !== (member.password || '')) { err.textContent = '현재 비밀번호가 일치하지 않습니다.'; return; }
     if (!validMemberPassword(next)) { err.textContent = '비밀번호는 영어 또는 한글과 숫자를 포함해 8자 이상이어야 합니다.'; return; }
     if (next !== next2) { err.textContent = '새 비밀번호 확인이 일치하지 않습니다.'; return; }
     if (next === current) { err.textContent = '현재 비밀번호와 다른 비밀번호를 입력해주세요.'; return; }
-    member = { ...member, password: next };
-    saveMemberEverywhere();
-    $('#pw-current').value = $('#pw-new').value = $('#pw-new2').value = '';
-    ok.textContent = '비밀번호가 변경되었습니다.';
+    try {
+      await supabaseRpc('pm_change_password', { p_token: authToken, p_current: current, p_next: next });
+      $('#pw-current').value = $('#pw-new').value = $('#pw-new2').value = '';
+      ok.textContent = '비밀번호가 안전하게 변경되었습니다.';
+    } catch (error) {
+      err.textContent = error.message === 'INVALID_PASSWORD'
+        ? '현재 비밀번호가 일치하지 않습니다.'
+        : '비밀번호는 영문과 숫자를 포함해 10자 이상이어야 합니다.';
+    }
   });
 }
 
 function openMyBookingsPage() {
   if (!member) return openMemberModal('login');
+  rememberModalScreen('my-bookings');
   const bookings = getBookings()
     .filter(b => b.car === member.car || b.memberId === member.id)
     .sort((a, b) => bookingTimestamp(b) - bookingTimestamp(a));
@@ -1228,6 +1393,7 @@ function openMyBookingsPage() {
 
 async function openCustomerHistoryModal() {
   if (!member) return openMemberModal('login');
+  rememberModalScreen('my-history');
   const bookings = getBookings().filter(b => b.car === member.car || b.memberId === member.id);
   const customer = getCustomers()[member.car] || { records: [], memo: '' };
   const serviceRuns = store.get('pm-service-runs', []).filter(r => r.car === member.car || r.memberId === member.id);
@@ -1314,16 +1480,17 @@ function updateChatList(force = false) {
 }
 
 async function fetchRemoteMessages() {
-  const supa = getSupabaseConfig();
-  if (!supa) return null;
+  if (!getSupabaseConfig() || !authToken) return null;
   try {
-    const res = await fetch(`${supa.url}/rest/v1/site_data?select=payload&data_key=eq.pm-messages`, {
-      headers: supabaseHeaders(supa, 'return=representation')
-    });
-    if (!res.ok) return null;
-    const rows = await res.json();
-    return Array.isArray(rows?.[0]?.payload) ? rows[0].payload : null;
-  } catch { return null; }
+    const rows = await supabaseRpc('pm_messages_read', { p_token: authToken });
+    return Array.isArray(rows) ? rows : null;
+  } catch (error) {
+    try {
+      const rows = await supabaseRpc('pm_sync_read', { p_token: authToken });
+      const messages = Array.isArray(rows) ? rows.find(row => row.data_key === 'pm-messages')?.payload : null;
+      return Array.isArray(messages) ? messages : null;
+    } catch { return null; }
+  }
 }
 
 /* 원격/로컬 메시지를 id 기준으로 병합해 전송 직후 새로고침에도 메시지가 유실되지 않게 한다 */
@@ -1340,6 +1507,7 @@ function mergeRemoteMessages(remote) {
 function openCustomerCenterModal(customer = member) {
   const target = customer || member;
   if (!target) return openMemberModal('login');
+  if (!isAdmin) rememberModalScreen('my-center');
   chatOpenTarget = target;
   chatLastStamp = '';
   openModal(`
@@ -1405,8 +1573,6 @@ function initRealtimeChat() {
 
 /* ---------- 관리자 로그인 모달 ---------- */
 function openAdminModal() {
-  const sub = getSubAdmin();
-  const main = getMainAdmin();
   openModal(`
     <h3>관리자 로그인</h3>
     <form id="admin-form">
@@ -1418,23 +1584,29 @@ function openAdminModal() {
       </div>
     </form>
   `);
-  $('#admin-form').addEventListener('submit', e => {
+  $('#admin-form').addEventListener('submit', async e => {
     e.preventDefault();
     const inputPw = $('#a-pw').value;
-    const subAccount = sub.accounts.find(account => account.password === inputPw);
-    if (inputPw === main.password || subAccount) {
+    const submit = $('#admin-form .modal-submit');
+    submit.disabled = true;
+    try {
+      const result = await supabaseRpc('pm_admin_login', { p_password: inputPw });
+      saveAuthSession(result, { admin: true });
       isAdmin = true;
-      adminRole = inputPw === main.password ? 'main' : 'general';
-      adminBranches = inputPw === main.password ? [] : (subAccount.branches || []);
+      adminRole = result.role;
+      adminBranches = Array.isArray(result.branches) ? result.branches : [];
       sessionStorage.setItem('pm-admin', '1');
       sessionStorage.setItem('pm-admin-role', adminRole);
       sessionStorage.removeItem('pm-admin-branch');
       if (adminBranches.length) sessionStorage.setItem('pm-admin-branches', JSON.stringify(adminBranches));
       else sessionStorage.removeItem('pm-admin-branches');
       closeModal();
+      await hydrateSupabaseData();
       applyAuthUI();
-    } else {
+    } catch (error) {
       $('#a-error').textContent = '비밀번호가 올바르지 않습니다.';
+    } finally {
+      submit.disabled = false;
     }
   });
 }
@@ -2634,6 +2806,7 @@ function renderAdmBook() {
       <h4>${adm.y}. ${String(adm.m + 1).padStart(2, '0')}</h4>
       <button type="button" class="cal-nav" id="adm-next">›</button>
     </div>
+    <div id="adm-transfer-requests"></div>
     <div class="cal-grid" id="adm-grid"></div>
     <div id="adm-day"></div>`;
 
@@ -2679,7 +2852,41 @@ function renderAdmBook() {
   $('#adm-prev').addEventListener('click', () => { adm.m--; if (adm.m < 0) { adm.m = 11; adm.y--; } adm.selDate = null; renderAdmBook(); });
   $('#adm-next').addEventListener('click', () => { adm.m++; if (adm.m > 11) { adm.m = 0; adm.y++; } adm.selDate = null; renderAdmBook(); });
 
+  renderBranchTransferRequests();
   if (adm.selDate) renderAdmDay();
+}
+
+function renderBranchTransferRequests() {
+  const wrap = $('#adm-transfer-requests');
+  if (!wrap || !adm?.branch) return;
+  const requests = getBranchTransferRequests()
+    .filter(request => request.toBranch === adm.branch && request.status !== '완료')
+    .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
+  if (!requests.length) { wrap.innerHTML = ''; return; }
+  wrap.innerHTML = `
+    <section class="settings-card">
+      <h3>지점 변경 요청 ${requests.length}건</h3>
+      <div class="settings-list">
+        ${requests.map(request => `
+          <article class="settings-list-item">
+            <strong>${esc(request.car || '-')} · ${esc(request.name || '-')}</strong>
+            <span>${esc(request.fromBranch || '-')} → ${esc(request.toBranch || '-')} · ${esc(request.date || '-')} ${esc(request.time || '')}</span>
+            <em>${esc(request.services?.join(', ') || '서비스 미선택')}${request.memo ? ` · ${esc(request.memo)}` : ''} · 요청: ${esc(request.requestedBy || '-')}</em>
+            <button type="button" class="mini-btn transfer-request-done" data-id="${esc(request.id)}">처리 완료</button>
+          </article>`).join('')}
+      </div>
+    </section>`;
+  wrap.querySelectorAll('.transfer-request-done').forEach(button => {
+    button.addEventListener('click', () => {
+      const list = getBranchTransferRequests();
+      const request = list.find(item => item.id === button.dataset.id);
+      if (!request) return;
+      request.status = '완료';
+      request.completedAt = new Date().toISOString();
+      store.set('pm-branch-transfer-requests', list);
+      renderAdmBook();
+    });
+  });
 }
 
 function renderAdmDay() {
@@ -2757,10 +2964,17 @@ function approveBooking(bookingId) {
 
 function openMoveBooking(idx) {
   const b = getBookings()[idx];
+  const transferableBranches = currentAdminBranches();
+  const requestableBranches = getBranches().filter(branch => !transferableBranches.some(allowed => allowed.name === branch.name));
   openModal(`
     <h3>예약 변경</h3>
-    <p class="cal-msg">${b.car} ${b.name} · 현재 ${b.date} ${b.time}</p>
+    <p class="cal-msg">${b.car} ${b.name} · 현재 ${b.branch} ${b.date} ${b.time}</p>
     <form id="move-form">
+      <label for="mv-branch">변경할 지점</label>
+      <select id="mv-branch" aria-label="변경할 지점">
+        ${transferableBranches.map(branch => `<option value="${esc(branch.name)}">${esc(branch.name)}</option>`).join('')}
+      </select>
+      <p class="field-help">내 계정에 권한이 있는 지점으로만 예약을 바로 변경할 수 있습니다.</p>
       <input type="date" id="mv-date" required>
       <select id="mv-time">${SLOT_TIMES.map(t => `<option>${t}</option>`).join('')}</select>
       <p class="form-error" id="mv-error"></p>
@@ -2769,23 +2983,70 @@ function openMoveBooking(idx) {
         <button type="button" class="modal-cancel" onclick="document.getElementById('modal').hidden=true">취소</button>
       </div>
     </form>`);
+  $('#mv-branch').value = b.branch;
   $('#mv-date').value = b.date.replaceAll('.', '-');
   $('#mv-time').value = b.time;
   $('#move-form').addEventListener('submit', e => {
     e.preventDefault();
+    const nb = $('#mv-branch').value;
     const nd = $('#mv-date').value.replaceAll('-', '.');
     const nt = $('#mv-time').value;
     const all = getBookings();
-    if (all.some((x, i) => i !== idx && x.branch === b.branch && x.date === nd && x.time === nt)) {
+    if (all.some((x, i) => i !== idx && x.branch === nb && x.date === nd && x.time === nt)) {
       $('#mv-error').textContent = '해당 시간에 이미 예약이 있습니다.'; return;
     }
-    if (getBlocked().some(x => x.branch === b.branch && x.date === nd && x.time === nt)) {
+    if (getBlocked().some(x => x.branch === nb && x.date === nd && x.time === nt)) {
       $('#mv-error').textContent = '해당 시간은 예약완료 상태입니다.'; return;
     }
-    all[idx] = { ...b, date: nd, time: nt };
+    all[idx] = { ...b, branch: nb, date: nd, time: nt };
     store.set('pm-bookings', all);
     closeModal();
     renderAdmBook();
+  });
+
+  if (!requestableBranches.length) return;
+  const requestSelect = document.createElement('select');
+  requestSelect.id = 'request-branch';
+  requestSelect.setAttribute('aria-label', '변경 요청할 지점');
+  requestSelect.innerHTML = requestableBranches.map(branch => `<option value="${esc(branch.name)}">${esc(branch.name)}</option>`).join('');
+  const requestLabel = document.createElement('label');
+  requestLabel.htmlFor = 'request-branch';
+  requestLabel.textContent = '권한 없는 지점에 변경 요청';
+  const requestHelp = document.createElement('p');
+  requestHelp.className = 'field-help';
+  requestHelp.textContent = '요청을 보내도 현재 예약은 자동으로 옮겨지지 않습니다.';
+  const requestButton = document.createElement('button');
+  requestButton.type = 'button';
+  requestButton.className = 'modal-cancel';
+  requestButton.textContent = '다른 지점 요청';
+  const actions = $('#move-form .modal-actions');
+  actions.before(requestLabel);
+  actions.before(requestSelect);
+  actions.before(requestHelp);
+  actions.append(requestButton);
+  requestButton.addEventListener('click', async () => {
+    const toBranch = requestSelect.value;
+    if (!await pmConfirm(`${toBranch}에 이 예약의 지점 변경을 요청할까요?`, { title: '지점 변경 요청', okText: '요청 보내기' })) return;
+    const list = getBranchTransferRequests();
+    list.unshift({
+      id: `transfer-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+      bookingId: b.id || '',
+      fromBranch: b.branch,
+      toBranch,
+      date: b.date,
+      time: b.time,
+      car: b.car,
+      name: b.name,
+      phone: b.phone,
+      services: b.services || [],
+      memo: b.memo || '',
+      requestedBy: adminActorLabel(),
+      status: '요청됨',
+      createdAt: new Date().toISOString()
+    });
+    store.set('pm-branch-transfer-requests', list.slice(0, 200));
+    await pmAlert(`${toBranch}에 변경 요청을 보냈습니다. 예약은 현재 지점에 그대로 유지됩니다.`, '요청 완료');
+    closeModal();
   });
 }
 
@@ -4238,47 +4499,109 @@ async function openWorkAuditDetail(key) {
   `, true);
 }
 
+let adminAccountsLoaded = false;
+let lastGeneralAdminCredential = null;
+
+function adminPasswordIssue(password) {
+  if (!password) return '새 비밀번호를 입력하세요.';
+  if (password.length < 10) return `새 비밀번호는 10자 이상이어야 합니다. 현재 ${password.length}자입니다.`;
+  if (!/[A-Za-z]/.test(password)) return '새 비밀번호에 영문을 1자 이상 포함하세요.';
+  if (!/\d/.test(password)) return '새 비밀번호에 숫자를 1자 이상 포함하세요.';
+  return '';
+}
+
+function adminActionError(error, fallback) {
+  const code = String(error?.message || '');
+  if (code.includes('INVALID_PASSWORD')) return '현재 비밀번호가 일치하지 않습니다.';
+  if (code.includes('WEAK_PASSWORD')) return '새 비밀번호는 영문과 숫자를 포함해 10자 이상이어야 합니다.';
+  if (code.includes('MAIN_ADMIN_REQUIRED') || code.includes('SESSION_REQUIRED') || code.includes('INVALID_SESSION')) {
+    return '관리자 로그인 시간이 만료됐습니다. 다시 로그인한 뒤 시도하세요.';
+  }
+  if (!navigator.onLine) return '인터넷 연결이 끊겨 저장하지 못했습니다. 연결 후 다시 시도하세요.';
+  return fallback;
+}
+
+function makeStrongAdminPassword() {
+  const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789';
+  const random = new Uint32Array(12);
+  crypto.getRandomValues(random);
+  return `Pm9!${[...random].map(value => alphabet[value % alphabet.length]).join('')}`;
+}
+
+function passwordFieldMarkup(id, placeholder, autocomplete = 'new-password') {
+  return `<span class="password-input-wrap">
+    <input type="password" id="${id}" autocomplete="${autocomplete}" placeholder="${placeholder}" aria-label="${placeholder}">
+    <button type="button" class="password-toggle" data-password-target="${id}" aria-pressed="false">보기</button>
+  </span>`;
+}
+
+function credentialRevealMarkup(message, password, id) {
+  return `<div class="credential-reveal" id="${id}" role="status">
+    <strong>${esc(message)}</strong>
+    <p>서버에는 암호화된 값만 저장되므로 이 비밀번호는 지금만 확인할 수 있습니다.</p>
+    <div class="credential-value">
+      <input type="text" value="${esc(password)}" readonly aria-label="새 관리자 비밀번호">
+      <button type="button" class="mini-btn credential-copy">복사</button>
+    </div>
+  </div>`;
+}
+
+function wirePasswordToggles(scope = document) {
+  scope.querySelectorAll('.password-toggle').forEach(button => {
+    button.addEventListener('click', () => {
+      const input = document.getElementById(button.dataset.passwordTarget);
+      if (!input) return;
+      const shouldShow = input.type === 'password';
+      input.type = shouldShow ? 'text' : 'password';
+      button.textContent = shouldShow ? '숨김' : '보기';
+      button.setAttribute('aria-pressed', String(shouldShow));
+    });
+  });
+}
+
+function wireCredentialCopy(scope = document) {
+  scope.querySelectorAll('.credential-copy').forEach(button => {
+    button.addEventListener('click', async () => {
+      const input = button.closest('.credential-value')?.querySelector('input');
+      if (!input) return;
+      try {
+        await navigator.clipboard.writeText(input.value);
+      } catch {
+        input.select();
+        document.execCommand('copy');
+      }
+      button.textContent = '복사됨';
+    });
+  });
+}
+async function loadAdminAccounts() {
+  if (!isMainAdmin()) return;
+  const accounts = await supabaseRpc('pm_admin_accounts', { p_token: authToken });
+  adminAccountState = Array.isArray(accounts) ? accounts : [];
+  adminAccountsLoaded = true;
+}
+
 function renderAdmSettings() {
   const body = $('#adm-settings-body');
   if (!isMainAdmin()) { body.innerHTML = ''; return; }
-  const securityWindowActive = Date.now() < Number(sessionStorage.getItem('pm-security-until') || 0);
-  if (!securityUnlocked && !securityWindowActive) {
-    body.innerHTML = `
-      <section class="settings-card security-gate-card">
-        <h3>보안 비밀번호</h3>
-        <form id="security-gate-inline" class="settings-form">
-          <input type="password" id="security-pw-check" placeholder="보안 비밀번호" required>
-          <button type="submit" class="mini-btn add">확인</button>
-        </form>
-        <label class="check-line"><input type="checkbox" id="security-1h"> 1시간 동안 비밀번호 입력 해제</label>
-        <p class="field-help">체크하지 않으면 보안 화면에 들어올 때마다 비밀번호를 입력합니다.</p>
-        <p class="form-error" id="security-error"></p>
-      </section>`;
-    $('#security-gate-inline').addEventListener('submit', e => {
-      e.preventDefault();
-      const current = getSecuritySettings().password || 'tmdgus123';
-      if ($('#security-pw-check').value !== current) {
-        $('#security-error').textContent = '보안 비밀번호가 맞지 않습니다.';
-        return;
-      }
-      securityUnlocked = true;
-      if ($('#security-1h').checked) sessionStorage.setItem('pm-security-until', String(Date.now() + 3600000));
-      else sessionStorage.removeItem('pm-security-until');
-      renderAdmSettings();
+  if (!adminAccountsLoaded) {
+    body.innerHTML = '<section class="settings-card"><p class="hint">보안 계정을 불러오는 중...</p></section>';
+    loadAdminAccounts().then(renderAdmSettings).catch(() => {
+      body.innerHTML = '<section class="settings-card"><p class="form-error">보안 계정을 불러오지 못했습니다.</p></section>';
     });
     return;
   }
   const sub = getSubAdmin();
-  const main = getMainAdmin();
   const branches = getBranches();
   const subRows = sub.accounts.length
     ? sub.accounts.map((account, i) => `
       <li>
-        <span>${i + 1}</span>
-        <strong>${esc(account.password)}</strong>
+        <span class="sub-admin-index">${i + 1}</span>
+        <strong>${esc(account.label)}</strong>
         <em>${account.branches.length ? esc(account.branches.join(' · ')) : '전체 지점'}</em>
         <time>${account.createdAt ? esc(new Date(account.createdAt).toLocaleDateString('ko-KR')) : '생성일 없음'}</time>
         <span class="sub-admin-actions">
+          <button type="button" class="mini-btn sub-admin-reset" data-sub-admin="${esc(account.id)}">비밀번호 재설정</button>
           <button type="button" class="mini-btn sub-admin-branch" data-sub-admin="${esc(account.id)}">지점변경</button>
           <button type="button" class="mini-btn danger sub-admin-delete" data-sub-admin="${esc(account.id)}">삭제</button>
         </span>
@@ -4288,10 +4611,13 @@ function renderAdmSettings() {
     <section class="settings-card">
       <h3>일반 관리자 비밀번호 생성</h3>
       <form id="sub-admin-form" class="settings-form">
-        <input type="text" id="sub-admin-password" placeholder="일반 관리자 비밀번호">
+        ${passwordFieldMarkup('sub-admin-password', '영문+숫자 10자 이상')}
         <button type="button" class="mini-btn" id="make-sub-pw">자동생성</button>
         <button type="submit" class="mini-btn add">생성</button>
       </form>
+      <p class="field-help">저장된 비밀번호는 해시로 암호화되어 다시 볼 수 없습니다. 잊은 계정은 아래의 ‘비밀번호 재설정’을 사용하세요.</p>
+      <p class="form-error inline-save-message" id="sub-admin-error" aria-live="polite"></p>
+      ${lastGeneralAdminCredential ? credentialRevealMarkup(lastGeneralAdminCredential.message, lastGeneralAdminCredential.password, 'general-admin-credential') : ''}
       <div class="branch-check-list" id="sub-admin-branches">
         ${branches.map(b => `<label class="branch-check"><input type="checkbox" value="${esc(b.name)}"> ${esc(b.name)}</label>`).join('')}
       </div>
@@ -4304,9 +4630,13 @@ function renderAdmSettings() {
     <section class="settings-card">
       <h3>메인관리자 비밀번호 변경</h3>
       <form id="main-admin-form" class="settings-form">
-        <input type="password" id="main-admin-password" placeholder="새 메인관리자 비밀번호" value="${esc(main.password || '')}">
+        ${passwordFieldMarkup('main-admin-current', '현재 비밀번호', 'current-password')}
+        ${passwordFieldMarkup('main-admin-password', '새 비밀번호 (영문+숫자 10자 이상)')}
         <button type="submit" class="mini-btn add">변경</button>
       </form>
+      <p class="field-help">입력한 값은 ‘보기’로 확인할 수 있습니다. 저장 후에는 보안상 기존 비밀번호를 조회할 수 없고 새 비밀번호로 재설정해야 합니다.</p>
+      <p class="form-error inline-save-message" id="main-admin-msg" aria-live="polite"></p>
+      <div id="main-admin-result"></div>
     </section>
     <section class="settings-card">
       <h3>이벤트 배너 관리</h3>
@@ -4358,49 +4688,78 @@ function renderAdmSettings() {
     </section>
     <p class="form-error" id="security-save-msg"></p>`;
   wireEventBannerAdmin();
+  wirePasswordToggles(body);
+  wireCredentialCopy(body);
   $$('.audit-summary').forEach(btn => {
     btn.addEventListener('click', () => openWorkAuditDetail(btn.dataset.audit));
   });
   $('#make-sub-pw').addEventListener('click', () => {
-    $('#sub-admin-password').value = `pro${Math.random().toString(36).slice(2, 8)}!`;
+    const passwordInput = $('#sub-admin-password');
+    passwordInput.value = makeStrongAdminPassword();
+    passwordInput.type = 'text';
+    const toggle = $('[data-password-target="sub-admin-password"]');
+    toggle.textContent = '숨김';
+    toggle.setAttribute('aria-pressed', 'true');
   });
-  $('#sub-admin-form').addEventListener('submit', e => {
+  $('#sub-admin-form').addEventListener('submit', async e => {
     e.preventDefault();
     const password = $('#sub-admin-password').value.trim();
-    if (!password) return;
-    const current = getSubAdmin();
-    if (current.accounts.some(account => account.password === password)) {
-      $('#security-save-msg').textContent = '이미 생성된 일반 관리자 비밀번호입니다.';
-      return;
-    }
+    const errorBox = $('#sub-admin-error');
+    errorBox.textContent = '';
+    const passwordIssue = adminPasswordIssue(password);
+    if (passwordIssue) { errorBox.textContent = passwordIssue; return; }
     const selectedBranches = [...document.querySelectorAll('#sub-admin-branches input:checked')].map(el => el.value);
-    current.accounts.push({
-      id: `sub-${Date.now()}-${Math.random().toString(36).slice(2)}`,
-      password,
-      branches: selectedBranches,
-      createdAt: new Date().toISOString()
-    });
-    store.set('pm-sub-admin', { password: current.accounts[0]?.password || '', accounts: current.accounts });
-    $('#security-save-msg').textContent = '일반 관리자 비밀번호가 생성되었습니다.';
-    renderAdmSettings();
+    try {
+      await supabaseRpc('pm_admin_account_create', { p_token: authToken, p_password: password, p_branches: selectedBranches });
+      lastGeneralAdminCredential = { message: '새 일반관리자 비밀번호 — 지금 복사해 보관하세요.', password };
+      adminAccountsLoaded = false;
+      await loadAdminAccounts();
+      renderAdmSettings();
+    } catch (error) {
+      errorBox.textContent = adminActionError(error, '서버가 일반 관리자 계정을 생성하지 못했습니다. 잠시 후 다시 시도하세요.');
+    }
   });
   $$('.sub-admin-delete').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const current = getSubAdmin();
-      const accounts = current.accounts.filter(account => account.id !== btn.dataset.subAdmin);
-      store.set('pm-sub-admin', { password: accounts[0]?.password || '', accounts });
-      renderAdmSettings();
+    btn.addEventListener('click', async () => {
+      if (!await pmConfirm('이 일반관리자 계정을 삭제할까요? 해당 계정은 즉시 로그인할 수 없게 됩니다.', { title: '일반관리자 삭제', okText: '삭제', danger: true })) return;
+      try {
+        await supabaseRpc('pm_admin_account_delete', { p_token: authToken, p_account_id: btn.dataset.subAdmin });
+        adminAccountsLoaded = false;
+        await loadAdminAccounts();
+        renderAdmSettings();
+      } catch (error) {
+        $('#sub-admin-error').textContent = adminActionError(error, '서버에서 계정을 삭제하지 못했습니다. 잠시 후 다시 시도하세요.');
+      }
     });
+  });
+  $$('.sub-admin-reset').forEach(btn => {
+    btn.addEventListener('click', () => openSubAdminPasswordReset(btn.dataset.subAdmin));
   });
   $$('.sub-admin-branch').forEach(btn => {
     btn.addEventListener('click', () => openSubAdminBranchModal(btn.dataset.subAdmin));
   });
-  $('#main-admin-form').addEventListener('submit', e => {
+  $('#main-admin-form').addEventListener('submit', async e => {
     e.preventDefault();
+    const current = $('#main-admin-current').value;
     const next = $('#main-admin-password').value.trim();
-    if (!next) return;
-    store.set('pm-main-admin', { password: next });
-    $('#security-save-msg').textContent = '메인관리자 비밀번호가 변경되었습니다.';
+    const messageBox = $('#main-admin-msg');
+    messageBox.className = 'form-error inline-save-message';
+    messageBox.textContent = '';
+    if (!current) { messageBox.textContent = '현재 비밀번호를 입력하세요.'; return; }
+    const passwordIssue = adminPasswordIssue(next);
+    if (passwordIssue) { messageBox.textContent = passwordIssue; return; }
+    if (current === next) { messageBox.textContent = '현재 비밀번호와 다른 새 비밀번호를 입력하세요.'; return; }
+    try {
+      await supabaseRpc('pm_change_password', { p_token: authToken, p_current: current, p_next: next });
+      $('#main-admin-current').value = $('#main-admin-password').value = '';
+      messageBox.className = 'form-ok inline-save-message';
+      messageBox.textContent = '메인관리자 비밀번호가 변경됐습니다.';
+      const result = $('#main-admin-result');
+      result.innerHTML = credentialRevealMarkup('변경된 메인관리자 비밀번호 — 지금 복사해 보관하세요.', next, 'main-admin-credential');
+      wireCredentialCopy(result);
+    } catch (error) {
+      messageBox.textContent = adminActionError(error, '서버에서 비밀번호를 변경하지 못했습니다. 잠시 후 다시 시도하세요.');
+    }
   });
   $$('.ban-restore').forEach(btn => {
     btn.addEventListener('click', async () => {
@@ -4432,6 +4791,70 @@ function renderAdmSettings() {
   });
 }
 
+function openSubAdminPasswordReset(accountId) {
+  const account = getSubAdmin().accounts.find(item => item.id === accountId);
+  if (!account) return;
+  openModal(`
+    <h3>일반관리자 비밀번호 재설정</h3>
+    <p class="cal-msg">${esc(account.label)} · ${account.branches.length ? esc(account.branches.join(' · ')) : '전체 지점'}</p>
+    <form id="sub-admin-reset-form">
+      ${passwordFieldMarkup('sub-admin-reset-password', '새 비밀번호 (영문+숫자 10자 이상)')}
+      <div class="modal-actions">
+        <button type="button" class="mini-btn" id="make-reset-pw">자동생성</button>
+        <button type="submit" class="modal-submit">재설정</button>
+        <button type="button" class="modal-cancel" onclick="closeModal()">취소</button>
+      </div>
+      <p class="field-help">재설정하면 이 계정의 기존 로그인은 즉시 종료됩니다.</p>
+      <p class="form-error" id="sub-admin-reset-error" aria-live="polite"></p>
+    </form>
+  `);
+  const modal = $('#modal-card');
+  wirePasswordToggles(modal);
+  $('#make-reset-pw').addEventListener('click', () => {
+    const input = $('#sub-admin-reset-password');
+    input.value = makeStrongAdminPassword();
+    input.type = 'text';
+    const toggle = $('[data-password-target="sub-admin-reset-password"]');
+    toggle.textContent = '숨김';
+    toggle.setAttribute('aria-pressed', 'true');
+  });
+  $('#sub-admin-reset-form').addEventListener('submit', async event => {
+    event.preventDefault();
+    const password = $('#sub-admin-reset-password').value.trim();
+    const errorBox = $('#sub-admin-reset-error');
+    const passwordIssue = adminPasswordIssue(password);
+    errorBox.textContent = '';
+    if (passwordIssue) { errorBox.textContent = passwordIssue; return; }
+    const submit = event.submitter;
+    if (submit) submit.disabled = true;
+    let replacementId = '';
+    let replacementComplete = false;
+    try {
+      const created = await supabaseRpc('pm_admin_account_create', {
+        p_token: authToken,
+        p_password: password,
+        p_branches: account.branches
+      });
+      replacementId = created?.id || '';
+      const removed = await supabaseRpc('pm_admin_account_delete', { p_token: authToken, p_account_id: account.id });
+      if (!removed?.ok) throw new Error('ACCOUNT_REPLACE_FAILED');
+      replacementComplete = true;
+      lastGeneralAdminCredential = { message: '재설정된 일반관리자 비밀번호 — 지금 복사해 보관하세요.', password };
+      adminAccountsLoaded = false;
+      closeModal();
+      renderAdmSettings();
+    } catch (error) {
+      if (replacementId && !replacementComplete) {
+        try { await supabaseRpc('pm_admin_account_delete', { p_token: authToken, p_account_id: replacementId }); } catch {}
+      }
+      errorBox.textContent = adminActionError(error, replacementComplete
+        ? '비밀번호는 재설정됐지만 목록을 새로 불러오지 못했습니다. 화면을 새로고침하세요.'
+        : '서버에서 비밀번호를 재설정하지 못했습니다. 기존 계정은 그대로 유지됩니다.');
+      if (submit) submit.disabled = false;
+    }
+  });
+}
+
 /* 생성된 일반관리자의 담당 지점 변경 (복수 선택) */
 function openSubAdminBranchModal(accountId) {
   const current = getSubAdmin();
@@ -4440,21 +4863,30 @@ function openSubAdminBranchModal(accountId) {
   const branches = getBranches();
   openModal(`
     <h3>담당 지점 변경</h3>
-    <p class="cal-msg">${esc(account.password)} · 현재: ${account.branches.length ? esc(account.branches.join(' · ')) : '전체 지점'}</p>
+    <p class="cal-msg">${esc(account.label)} · 현재: ${account.branches.length ? esc(account.branches.join(' · ')) : '전체 지점'}</p>
     <div class="branch-check-list" id="edit-sub-branches">
       ${branches.map(b => `<label class="branch-check"><input type="checkbox" value="${esc(b.name)}" ${account.branches.includes(b.name) ? 'checked' : ''}> ${esc(b.name)}</label>`).join('')}
     </div>
     <p class="field-help">여러 지점을 선택할 수 있습니다. 아무 지점도 체크하지 않으면 전체 지점 보조 관리자가 됩니다.</p>
+    <p class="form-error" id="sub-admin-branch-error" aria-live="polite"></p>
     <div class="modal-actions">
       <button type="button" class="modal-submit" id="save-sub-branches">저장</button>
       <button type="button" class="modal-cancel" onclick="closeModal()">취소</button>
     </div>
   `);
-  $('#save-sub-branches').addEventListener('click', () => {
-    account.branches = [...document.querySelectorAll('#edit-sub-branches input:checked')].map(el => el.value);
-    store.set('pm-sub-admin', { password: current.accounts[0]?.password || '', accounts: current.accounts });
-    closeModal();
-    renderAdmSettings();
+  $('#save-sub-branches').addEventListener('click', async () => {
+    const branches = [...document.querySelectorAll('#edit-sub-branches input:checked')].map(el => el.value);
+    const errorBox = $('#sub-admin-branch-error');
+    errorBox.textContent = '';
+    try {
+      await supabaseRpc('pm_admin_account_branches', { p_token: authToken, p_account_id: account.id, p_branches: branches });
+      adminAccountsLoaded = false;
+      await loadAdminAccounts();
+      closeModal();
+      renderAdmSettings();
+    } catch (error) {
+      errorBox.textContent = adminActionError(error, '서버에서 담당 지점을 변경하지 못했습니다. 잠시 후 다시 시도하세요.');
+    }
   });
 }
 
@@ -4572,34 +5004,66 @@ async function requestAppInstall() {
     return;
   }
   const ua = navigator.userAgent;
-  /* 네이버·카카오 등 인앱 브라우저(안드로이드)는 설치를 막으므로 Chrome으로 열어서 진행 */
+  const isIOS = /iPhone|iPad|iPod/i.test(ua) || (/Macintosh/i.test(ua) && navigator.maxTouchPoints > 1);
   const inAppBrowser = /NAVER|KAKAOTALK|Instagram|FBAN|FBAV|Line\/|DaumApps|; wv\)/i.test(ua);
-  if (/Android/i.test(ua) && inAppBrowser && location.protocol === 'https:') {
+  /* 네이버·카카오 등 인앱 브라우저(안드로이드)는 설치를 막으므로 Chrome으로 열어서 진행 */
+  if (!isIOS && /Android/i.test(ua) && inAppBrowser && location.protocol === 'https:') {
     location.href = `intent://${location.host}${location.pathname}#Intent;scheme=https;package=com.android.chrome;S.browser_fallback_url=${encodeURIComponent(location.href)};end`;
     return;
   }
-  const guide = /iPhone|iPad|iPod/i.test(ua)
-    ? 'Safari 하단의 공유 버튼을 누른 뒤 "홈 화면에 추가"를 선택해주세요.'
-    : '브라우저 메뉴(⋮)에서 "홈 화면에 추가" 또는 "앱 설치"를 선택해주세요.';
-  pmAlert(`이 브라우저에서는 바로 설치를 지원하지 않습니다.\n${guide}`, '앱 설치');
+  if (isIOS) {
+    /* iOS는 Safari에서만 홈 화면 추가(설치)가 가능 */
+    const iosSafari = !inAppBrowser && /Safari\//i.test(ua) && !/CriOS|FxiOS|EdgiOS|OPiOS|OPT\/|Whale/i.test(ua);
+    if (iosSafari) { showIosInstallGuide(); return; }
+    const openSafari = await pmConfirm(
+      '아이폰은 Safari에서만 홈 화면에 앱을 추가할 수 있습니다.\nSafari를 실행할까요?',
+      { title: '앱 설치', okText: 'Safari 열기' }
+    );
+    if (openSafari) openCurrentPageInIosSafari();
+    return;
+  }
+  pmAlert('이 브라우저에서는 바로 설치를 지원하지 않습니다.\n브라우저 메뉴(⋮)에서 "홈 화면에 추가" 또는 "앱 설치"를 선택해주세요.', '앱 설치');
+}
+
+/* iOS Safari: 홈 화면 추가 방법 안내 팝업 */
+function showIosInstallGuide() {
+  pmAlert(
+    'Safari에서 아래 순서대로 진행하면 홈 화면에 앱이 설치됩니다.\n\n1. 하단 가운데 공유 버튼(네모+화살표)을 누르세요.\n2. "홈 화면에 추가"를 선택하세요.\n3. 오른쪽 위 "추가"를 누르면 완료됩니다.',
+    '앱 설치 방법'
+  );
+}
+
+/* iOS 인앱 브라우저·크롬 등에서 현재 페이지를 Safari로 열기 (앱별 스킴 → 공통 스킴 순) */
+function openCurrentPageInIosSafari() {
+  const url = location.href.split('#')[0];
+  if (/KAKAOTALK/i.test(navigator.userAgent)) {
+    location.href = `kakaotalk://web/openExternal?url=${encodeURIComponent(url)}`;
+  } else if (/Line\//i.test(navigator.userAgent)) {
+    location.href = url + (url.includes('?') ? '&' : '?') + 'openExternalBrowser=1';
+  } else {
+    location.href = `x-safari-${url}`;
+  }
+  /* 스킴이 차단되어 Safari가 열리지 않은 경우 수동 안내 */
+  setTimeout(() => {
+    if (!document.hidden) {
+      pmAlert('Safari를 자동으로 열 수 없습니다.\n브라우저 메뉴에서 "Safari로 열기" 또는 "기본 브라우저로 열기"를 선택한 뒤, 공유 버튼 → "홈 화면에 추가"로 설치해주세요.', '앱 설치');
+    }
+  }, 1600);
 }
 
 async function eventBannerHtml() {
-  const slides = [`
-    <div class="event-slide install-slide" data-install role="button" tabindex="0">
-      <img class="event-logo" src="images/logo-icon.png" alt="프로모터스 로고">
-      <span class="event-copy">
-        <strong>PRO MOTORS</strong>
-        <span>1초 프로모터스 앱 다운로드</span>
-      </span>
-      <span class="event-install-mark">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="M6 11l6 6 6-6"/><path d="M5 21h14"/></svg>
-        <em>설치</em>
-      </span>
-    </div>`];
   const banners = getEventBanners().slice(0, 4);
   const items = await Promise.all(banners.map(async b => ({ ...b, src: await assetSrc(b.key) })));
-  items.filter(i => i.src).forEach(i => slides.push(`<div class="event-slide"><img src="${esc(i.src)}" alt="이벤트 배너"></div>`));
+  const slides = [`
+    <div class="event-slide install-slide image-install-slide">
+      <img class="event-install-image" src="images/app-install-banner.png" alt="프로모터스 앱 설치 안내">
+      <button type="button" class="event-install-button" data-install>
+        <span>1초 앱 설치</span>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="M6 11l6 6 6-6"/><path d="M5 21h14"/></svg>
+      </button>
+    </div>`];
+  items.filter(item => item.src)
+    .forEach(item => slides.push(`<div class="event-slide"><img src="${esc(item.src)}" alt="이벤트 배너"></div>`));
   return `
     <div class="event-banner" data-event-banner aria-label="이벤트 배너">
       <div class="event-track">${slides.join('')}</div>
@@ -4618,9 +5082,6 @@ function wireEventBanner(scope = modalCard) {
   }, { passive: true });
   const install = banner.querySelector('[data-install]');
   install?.addEventListener('click', requestAppInstall);
-  install?.addEventListener('keydown', e => {
-    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); requestAppInstall(); }
-  });
 }
 
 /* ============================================================
@@ -4640,6 +5101,7 @@ function showAdminViewFromMenu(view) {
 
 /* 관리자용 마이(설정): 고객 내예약 페이지와 같은 전체화면 구성 */
 async function openAdminSettingsPage() {
+  rememberModalScreen('admin-settings');
   const menus = [
     { view: 'adm-book', label: '예약관리', icon: 'calendar' },
     { view: 'adm-work', label: '작업현황', icon: 'wrench' },
@@ -4739,7 +5201,7 @@ document.body.dataset.view = document.querySelector('.view.active')?.id.replace(
 async function startApp() {
   /* PWA: 홈 화면 추가(앱 설치)를 위해 서비스워커 등록 */
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('sw.js').catch(() => {});
+    navigator.serviceWorker.register('sw.js?v=20260713-2030').catch(() => {});
   }
   /* 로컬 캐시로 즉시 화면을 그리고, 원격 데이터는 백그라운드에서 갱신한다.
      첫 진입 화면이 나왔다가 다른 화면으로 튀는 현상을 막는다. */
@@ -4762,9 +5224,9 @@ async function startApp() {
   });
   initRealtimeChat();
   applyAuthUI();
-  const initialView = getHomeView();
-  showView(initialView);
-  if (initialView === 'cases') activateTab('tab-blog');
+  const savedView = getScreenState().view;
+  const initialView = showView(savedView || getHomeView());
+  renderViewContent(initialView);
 
   /* 원격 데이터 수신 후 화면 전환 없이 내용만 다시 그린다 */
   await hydrateSupabaseData();
@@ -4772,6 +5234,7 @@ async function startApp() {
   await migrateLocalAssetsToSupabase();
   applyAuthUI();
   renderIntroSlides();
+  restoreModalScreen();
 }
 
 startApp();

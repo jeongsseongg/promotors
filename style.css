@@ -392,6 +392,46 @@ body {
   scrollbar-width: thin;
   scrollbar-color: var(--navy) rgba(255,255,255,.48);
 }
+
+/* ===== 하단 푸터 ===== */
+.site-footer {
+  position: relative;
+  z-index: 2;
+  flex: 0 0 auto;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(30, 36, 100, .18);
+  color: #4b5563;
+  font-size: 12px;
+  line-height: 1.55;
+}
+.site-footer__inner { display: flex; align-items: center; gap: 12px 18px; }
+.site-footer__brand { display: flex; flex: 0 0 auto; flex-direction: column; color: var(--navy); }
+.site-footer__brand strong { font-size: 13px; }
+.site-footer__brand span { font-size: 11px; }
+.site-footer__business { display: flex; flex: 1; flex-wrap: wrap; gap: 0 10px; min-width: 0; font-style: normal; }
+.site-footer__business span::after,
+.site-footer__business a::after { content: '·'; margin-left: 10px; color: #a0a8b2; }
+.site-footer__business a:last-child::after { content: none; margin: 0; }
+.site-footer a { color: inherit; text-decoration: none; }
+.site-footer a:hover, .site-footer a:focus-visible { color: var(--navy); text-decoration: underline; }
+/* 약관 버튼을 이메일 오른쪽에 같은 줄로 이어 배치 (address의 flex 흐름에 합류) */
+.site-footer__legal { display: contents; }
+.site-footer__legal button {
+  border: 0; padding: 4px 0; background: none; color: var(--navy); cursor: pointer;
+  font: inherit; font-weight: 700; text-decoration: underline; text-underline-offset: 3px;
+}
+.site-footer__legal button:focus-visible { outline: 2px solid var(--navy); outline-offset: 3px; }
+.site-footer__copyright { margin-top: 3px; color: #7b8490; font-size: 11px; }
+
+.legal-modal { max-width: 760px; }
+.legal-modal h3 { padding-right: 36px; }
+.legal-modal__updated { margin: 6px 0 20px; color: #6b7280; font-size: 13px; }
+.legal-modal__content { display: grid; gap: 20px; color: #374151; font-size: 14px; line-height: 1.7; }
+.legal-modal__content section { display: grid; gap: 6px; }
+.legal-modal__content h4 { color: var(--navy); font-size: 16px; }
+.legal-modal__content ul { padding-left: 20px; }
+.legal-modal__content a { color: var(--navy); }
 .view.active::-webkit-scrollbar,
 .modal-card::-webkit-scrollbar,
 .message-list::-webkit-scrollbar {
@@ -2323,20 +2363,21 @@ button.step-photo-slot {
 }
 .sub-admin-list li {
   display: grid;
-  grid-template-columns: 34px minmax(150px, 1fr) minmax(110px, auto) minmax(130px, auto) auto;
+  grid-template-columns: 34px minmax(120px, 1fr) minmax(160px, 2fr) auto;
   align-items: center;
   gap: 8px;
   border: 1px solid #e2e6ea;
   border-radius: 8px;
   padding: 10px 12px;
   background: #fafbfc;
+  min-width: 0;
 }
 .sub-admin-list li.empty {
   display: block;
   color: #8a94a0;
   font-size: 13px;
 }
-.sub-admin-list span {
+.sub-admin-list .sub-admin-index {
   display: grid;
   place-items: center;
   width: 26px;
@@ -2348,16 +2389,18 @@ button.step-photo-slot {
   font-weight: 900;
 }
 .sub-admin-list strong {
+  min-width: 0;
   color: #1f2933;
   font-size: 14px;
   word-break: break-all;
 }
 .sub-admin-list em {
+  min-width: 0;
   color: var(--navy);
   font-size: 13px;
   font-style: normal;
   font-weight: 900;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 }
 .sub-admin-list time {
   color: #6b7280;
@@ -2663,6 +2706,23 @@ button.step-photo-slot {
     padding: 24px 16px 56px;
     gap: 48px;
   }
+  .site-footer {
+    width: calc(100% + 32px);
+    margin: 0 -16px calc(68px + env(safe-area-inset-bottom));
+    padding: 28px 16px 24px;
+    background: #fff;
+    border-top: 1px solid #e2e6ea;
+    font-size: 13px;
+  }
+  .site-footer__inner { display: grid; gap: 14px; }
+  .site-footer__brand strong { font-size: 15px; }
+  .site-footer__brand span { font-size: 12px; }
+  .site-footer__business { display: grid; gap: 4px; line-height: 1.65; }
+  .site-footer__business span::after,
+  .site-footer__business a::after { content: none; margin: 0; }
+  .site-footer__legal { display: flex; flex-wrap: wrap; gap: 14px; }
+  .site-footer__copyright { margin-top: 14px; }
+  .legal-modal__content { font-size: 14px; }
   body[data-view="intro"] .right-panel { overflow: visible; }
   .view.active,
   #view-location.active,
@@ -3778,7 +3838,11 @@ button.step-photo-slot {
   padding: 20px;
   background: rgba(15, 23, 42, .55);
 }
+/* hidden 속성이 위의 display: grid에 밀려 무시되면 닫은 뒤에도
+   빈 흰색 카드가 화면을 덮어 조작 불가 상태가 되므로 반드시 명시한다. */
+.pm-dialog-backdrop[hidden] { display: none; }
 .pm-dialog {
+  position: relative;
   width: min(360px, 100%);
   background: #fff;
   border-radius: 16px;
@@ -3786,6 +3850,21 @@ button.step-photo-slot {
   box-shadow: 0 18px 48px rgba(15, 23, 42, .28);
   text-align: center;
 }
+.pm-dialog-x {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 32px;
+  height: 32px;
+  border: 0;
+  border-radius: 50%;
+  background: #f1f4f8;
+  color: #6b7280;
+  font-size: 24px;
+  line-height: 1;
+  cursor: pointer;
+}
+.pm-dialog-x:hover { background: #e4e9ef; color: var(--navy); }
 .pm-dialog-brand {
   display: block;
   color: var(--gold);
@@ -3855,6 +3934,72 @@ button.step-photo-slot {
   display: flex;
   gap: 6px;
   flex-wrap: wrap;
+  grid-column: 2 / -1;
+  justify-content: flex-end;
+  width: 100%;
+  min-width: 0;
+  height: auto;
+  border-radius: 0;
+  background: transparent;
+  color: inherit;
+}
+.password-input-wrap {
+  position: relative;
+  display: flex;
+  flex: 1 1 240px;
+  min-width: 0;
+}
+.settings-form .password-input-wrap input,
+.modal-card .password-input-wrap input {
+  width: 100%;
+  min-width: 0;
+  padding-right: 66px;
+}
+.password-toggle {
+  position: absolute;
+  top: 50%;
+  right: 8px;
+  min-width: 48px;
+  min-height: 32px;
+  padding: 4px 8px;
+  transform: translateY(-50%);
+  border: 1px solid #c9d1d9;
+  border-radius: 6px;
+  background: #fff;
+  color: var(--navy);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 900;
+  cursor: pointer;
+}
+.inline-save-message {
+  margin-top: 8px;
+  min-height: 20px;
+  font-weight: 800;
+}
+.credential-reveal {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+  padding: 12px;
+  border: 1px solid var(--blue);
+  border-radius: 8px;
+  background: var(--blue-soft);
+}
+.credential-reveal strong { color: var(--navy); font-size: 14px; }
+.credential-reveal p { color: #555f6b; font-size: 13px; line-height: 1.55; }
+.credential-value { display: flex; gap: 8px; flex-wrap: wrap; }
+.credential-value input {
+  flex: 1 1 220px;
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid #c9d1d9;
+  border-radius: 8px;
+  background: #fff;
+  color: #1f2933;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 900;
 }
 /* 담당 지점 복수 선택 체크칩 */
 .branch-check-list {
@@ -3901,8 +4046,14 @@ button.step-photo-slot {
 .audit-summary em { color: #8a94a0; font-size: 12px; font-style: normal; font-weight: 700; }
 .audit-summary em b { color: var(--blue); font-weight: 900; }
 @media (max-width: 900px) {
+  .sub-admin-list li {
+    grid-template-columns: 30px minmax(0, 1fr);
+  }
+  .sub-admin-list li > strong,
+  .sub-admin-list li > em,
+  .sub-admin-list li > time,
   .sub-admin-list li .sub-admin-actions {
-    grid-column: 2 / -1;
+    grid-column: 2;
     justify-self: start;
   }
   .sub-admin-actions .mini-btn {
@@ -3911,6 +4062,7 @@ button.step-photo-slot {
   }
   .settings-form input,
   .settings-form select { min-width: 0; flex: 1 1 100%; }
+  .settings-form .password-input-wrap { flex-basis: 100%; width: 100%; }
   .settings-form .mini-btn { flex: 1 1 auto; min-height: 44px; }
   .ban-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 }
@@ -3921,10 +4073,17 @@ button.step-photo-slot {
 .event-banner {
   position: relative;
   width: 100%;
-  margin: 14px auto;
+  margin: 14px 0;
   border-radius: 16px;
   overflow: hidden;
 }
+/* 마이·설정 카드의 좌우 여백까지 사용해 배너를 끝까지 확장한다. */
+.mypage-card .event-banner {
+  width: auto;
+  margin: 14px -28px;
+  border-radius: 0;
+}
+.mypage-card .event-track { border-radius: 0; }
 .event-track {
   display: grid;
   grid-auto-flow: column;
@@ -3941,19 +4100,22 @@ button.step-photo-slot {
   display: grid;
 }
 .event-slide img { width: 100%; height: 148px; object-fit: cover; display: block; }
-/* 앱 설치 슬라이드: 마이/설정 카드와 같은 블루 그라데이션 배너 */
+/* 앱 설치 슬라이드: 설치 버튼만 실행되며, 이미지·문구는 안내용이다. */
 .event-slide.install-slide {
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-areas:
+    "logo copy"
+    "logo install";
   align-items: center;
-  gap: 16px;
+  column-gap: 16px;
   padding: 14px 18px;
   background:
     radial-gradient(circle at 85% 0%, rgba(255,255,255,.2), transparent 45%),
     linear-gradient(135deg, var(--blue) 0%, var(--blue-dark) 100%);
   color: #fff;
-  cursor: pointer;
 }
 .event-slide .event-logo {
+  grid-area: logo;
   width: 96px;
   height: 96px;
   border-radius: 22px;
@@ -3961,10 +4123,10 @@ button.step-photo-slot {
   background: #fff;
   box-shadow: 0 8px 20px rgba(9, 24, 60, .35);
 }
-.event-slide .event-copy { display: grid; gap: 6px; min-width: 0; }
+.event-slide .event-copy { grid-area: copy; display: grid; gap: 6px; min-width: 0; }
 .event-slide .event-copy strong {
   font-size: 21px;
-  letter-spacing: .12em;
+  letter-spacing: -.03em;
   color: #fff;
   white-space: nowrap;
 }
@@ -3974,24 +4136,64 @@ button.step-photo-slot {
   font-weight: 800;
   word-break: keep-all;
 }
-/* 설치 버튼: 노란 원형 배지로 눈에 띄게 */
-.event-install-mark {
-  display: grid;
-  justify-items: center;
-  gap: 5px;
-  color: var(--yellow);
+/* 설치 버튼: 내 차 관리 문구에서 10px 아래, 기존보다 오른쪽으로 20px 확장 */
+.event-install-button {
+  grid-area: install;
+  width: calc(100% + 20px);
+  max-width: 260px;
+  min-height: 48px;
+  margin-top: 10px;
+  padding: 0 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border: 0;
+  border-radius: 12px;
+  background: var(--navy);
+  color: #fff;
+  font-family: inherit;
+  font-size: 16px;
   font-weight: 900;
+  cursor: pointer;
+  box-shadow: 0 8px 18px rgba(9, 24, 60, .28);
 }
-.event-install-mark svg {
-  width: 54px;
-  height: 54px;
-  padding: 13px;
-  border-radius: 50%;
-  background: var(--yellow);
-  color: #10254d;
-  box-shadow: 0 6px 16px rgba(9, 24, 60, .35);
+.event-install-button:hover { background: #14194b; }
+.event-install-button:focus-visible { outline: 3px solid var(--yellow); outline-offset: 3px; }
+.event-install-button svg {
+  width: 24px;
+  height: 24px;
+  flex: 0 0 auto;
 }
-.event-install-mark em { font-style: normal; font-size: 13px; }
+/* 기존 앱 설치 이미지는 유지하고, 설치 실행은 위에 올린 실제 버튼으로만 한정한다. */
+.event-slide.install-slide.image-install-slide {
+  position: relative;
+  display: block;
+  min-height: 0;
+  padding: 0;
+}
+.event-slide .event-install-image {
+  width: 100%;
+  height: auto;
+  object-fit: contain;
+  pointer-events: none;
+  user-select: none;
+}
+.image-install-slide .event-install-button {
+  position: absolute;
+  z-index: 1;
+  left: 18px;
+  bottom: 9px;
+  width: min(320px, calc(100% - 220px));
+  min-height: 40px;
+  height: 40px;
+  margin: 0;
+  padding: 0 14px;
+  background: #2463f3;
+  font-size: 14px;
+  border-radius: 10px;
+}
+.image-install-slide .event-install-button:hover { background: #1d55d8; }
 .event-dots {
   position: absolute;
   left: 0;
@@ -4009,6 +4211,24 @@ button.step-photo-slot {
   background: rgba(255, 255, 255, .45);
 }
 .event-dots i.on { background: var(--yellow); }
+
+@media (max-width: 900px) {
+  /* 마이 페이지의 16px 좌우 패딩을 넘겨 화면 폭 전체로 표시 */
+  .mypage-card .event-banner {
+    width: auto;
+    margin: 14px -16px;
+    border-radius: 0;
+  }
+  .mypage-card .event-track { border-radius: 0; }
+}
+@media (max-width: 520px) {
+  .image-install-slide .event-install-button {
+    /* 배너 오른쪽 폰 이미지를 가리지 않도록 폭 축소 */
+    width: min(196px, calc(55% - 18px));
+    left: 18px;
+    bottom: 12px;
+  }
+}
 
 /* 보안 화면: 이벤트 배너 관리 */
 .event-admin-grid {

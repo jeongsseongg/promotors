@@ -1,5 +1,7 @@
 -- Promotors website Supabase schema
--- Run this in Supabase SQL Editor before entering Project URL / anon key in the site.
+-- 신규 테이블 생성용입니다. 실행 후 반드시 supabase-security-migration.sql과
+-- supabase-auth-null-hotfix.sql을 순서대로 실행해야 합니다.
+-- 이 파일 자체는 anon/authenticated의 직접 테이블 접근을 열지 않습니다.
 
 create extension if not exists pgcrypto;
 
@@ -204,33 +206,9 @@ alter table public.site_settings enable row level security;
 alter table public.admin_notifications enable row level security;
 
 drop policy if exists "public read site data" on public.site_data;
-create policy "public read site data"
-on public.site_data
-for select
-to anon
-using (true);
-
 drop policy if exists "public upsert site data" on public.site_data;
-create policy "public upsert site data"
-on public.site_data
-for insert
-to anon
-with check (true);
-
 drop policy if exists "public update site data" on public.site_data;
-create policy "public update site data"
-on public.site_data
-for update
-to anon
-using (true)
-with check (true);
-
 drop policy if exists "public delete site data" on public.site_data;
-create policy "public delete site data"
-on public.site_data
-for delete
-to anon
-using (true);
 
 insert into public.site_data (data_key, payload, page_url)
 values
@@ -247,28 +225,27 @@ values
   ('pm-assets', '{}'::jsonb, 'https://www.promotors.kr/'),
   ('pm-service-runs', '[]'::jsonb, 'https://www.promotors.kr/'),
   ('pm-messages', '[]'::jsonb, 'https://www.promotors.kr/'),
-  ('pm-sub-admin', '{"password":"","accounts":[]}'::jsonb, 'https://www.promotors.kr/'),
-  ('pm-main-admin', '{"password":"goodpro1!"}'::jsonb, 'https://www.promotors.kr/'),
-  ('pm-security-settings', '{"password":"tmdgus123"}'::jsonb, 'https://www.promotors.kr/'),
+  ('pm-sub-admin', '{"accounts":[]}'::jsonb, 'https://www.promotors.kr/'),
+  ('pm-main-admin', '{}'::jsonb, 'https://www.promotors.kr/'),
+  ('pm-security-settings', '{}'::jsonb, 'https://www.promotors.kr/'),
   ('pm-home-view', '"intro"'::jsonb, 'https://www.promotors.kr/'),
   ('pm-admin-notifications', '[]'::jsonb, 'https://www.promotors.kr/'),
+  ('pm-branch-transfer-requests', '[]'::jsonb, 'https://www.promotors.kr/'),
   ('pm-work-audit', '[]'::jsonb, 'https://www.promotors.kr/'),
   ('pm-banned-members', '[]'::jsonb, 'https://www.promotors.kr/'),
   ('pm-event-banners', '[]'::jsonb, 'https://www.promotors.kr/')
 on conflict (data_key) do nothing;
 
 drop policy if exists "public insert site logs" on public.site_logs;
-create policy "public insert site logs"
-on public.site_logs
-for insert
-to anon
-with check (true);
 
 do $$
 declare
   t text;
+  policy_name text;
 begin
   foreach t in array array[
+    'site_data',
+    'site_logs',
     'members',
     'bookings',
     'customer_records',
@@ -282,13 +259,13 @@ begin
     'admin_notifications'
   ]
   loop
-    execute format('drop policy if exists "public read %1$s" on public.%1$I', t);
-    execute format('create policy "public read %1$s" on public.%1$I for select to anon using (true)', t);
-    execute format('drop policy if exists "public insert %1$s" on public.%1$I', t);
-    execute format('create policy "public insert %1$s" on public.%1$I for insert to anon with check (true)', t);
-    execute format('drop policy if exists "public update %1$s" on public.%1$I', t);
-    execute format('create policy "public update %1$s" on public.%1$I for update to anon using (true) with check (true)', t);
-    execute format('drop policy if exists "public delete %1$s" on public.%1$I', t);
-    execute format('create policy "public delete %1$s" on public.%1$I for delete to anon using (true)', t);
+    for policy_name in
+      select policyname from pg_policies where schemaname='public' and tablename=t
+    loop
+      execute format('drop policy if exists %I on public.%I', policy_name, t);
+    end loop;
+    execute format('revoke all on table public.%I from anon, authenticated', t);
   end loop;
 end $$;
+
+revoke all on table public.site_data, public.site_logs from anon, authenticated;

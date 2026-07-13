@@ -2,9 +2,8 @@
 -- 프로모터스 Supabase 등록 상태 검사
 -- 사용법: 이 파일 전체를 Supabase SQL Editor에 붙여넣고 Run.
 --   마지막에 점검 결과 표가 나옵니다. (구분 / 항목 / 상태 / 상세)
--- 상태가 '누락'인 항목이 하나라도 있으면 supabase-schema.sql 전체를
---   다시 실행하면 됩니다. (create if not exists / drop policy if exists
---   방식이라 여러 번 실행해도 기존 데이터는 안전합니다.)
+-- 상태가 '위험' 또는 '누락'이면 임의로 schema 파일을 재실행하지 말고
+-- supabase-security-migration.sql과 supabase-auth-null-hotfix.sql을 확인하세요.
 -- ============================================================
 
 create or replace function pg_temp.promotors_check()
@@ -20,7 +19,7 @@ declare
     'pm-branches','pm-notices','promotors-cases','pm-products','pm-blocked','pm-customers',
     'pm-bookings','pm-members','pm-blog-settings','pm-intro-slides','pm-assets','pm-service-runs',
     'pm-messages','pm-sub-admin','pm-main-admin','pm-security-settings','pm-home-view','pm-admin-notifications',
-    'pm-work-audit'
+    'pm-branch-transfer-requests','pm-work-audit'
   ];
   required_settings text[] := array['home_view','realtime_service'];
   t text;
@@ -83,23 +82,20 @@ begin
     end if;
   end loop;
 
-  -- 4. anon 정책 (site_logs는 insert만, 나머지는 select/insert/update/delete) --
-  foreach t in array required_tables loop
-    if to_regclass('public.' || t) is not null then
-      select string_agg(needed.cmd, ', ') into missing
-      from unnest(case when t = 'site_logs'
-                       then array['INSERT']
-                       else array['SELECT','INSERT','UPDATE','DELETE'] end) as needed(cmd)
-      where not exists (
-        select 1 from pg_policies p
-        where p.schemaname = 'public' and p.tablename = t
-          and (upper(p.cmd) = needed.cmd or upper(p.cmd) = 'ALL')
-      );
-      return query select '4. 정책(anon)'::text, t,
-        case when missing is null then 'OK' else '누락' end,
-        coalesce('누락 정책: ' || missing || ' — supabase-schema.sql의 정책 블록 실행 필요', '');
-    end if;
-  end loop;
+  -- 4. anon/authenticated 직접 테이블 접근은 없어야 함 -----------------
+  return query
+  select '4. 직접 접근'::text, 'anon RLS 정책'::text,
+    case when count(*)=0 then 'OK' else '위험' end,
+    case when count(*)=0 then 'RPC만 허용됨' else format('anon 정책 %s개가 남아 있습니다',count(*)) end
+  from pg_policies
+  where schemaname='public' and roles::text like '%anon%';
+
+  return query
+  select '4. 직접 접근'::text, '테이블 권한'::text,
+    case when count(*)=0 then 'OK' else '위험' end,
+    case when count(*)=0 then 'anon/authenticated 직접 권한 없음' else format('직접 권한 %s개가 남아 있습니다',count(*)) end
+  from information_schema.role_table_grants
+  where table_schema='public' and grantee in ('anon','authenticated');
 
   -- 5. site_data 필수 키 (사이트가 실제 저장에 사용하는 키) --------------
   if to_regclass('public.site_data') is not null then
@@ -126,6 +122,19 @@ begin
   else
     return query select '6. site_settings 키'::text, 'site_settings'::text, '건너뜀'::text, 'site_settings 테이블이 없어 확인 불가'::text;
   end if;
+
+  -- 7. 관리자 RPC의 NULL 세션 우회 차단 여부 --------------------------
+  return query select '7. RPC 보안'::text, 'pm_admin_accounts'::text,
+    case when to_regprocedure('public.pm_admin_accounts(text)') is not null
+           and position('is distinct from ''main''' in pg_get_functiondef(to_regprocedure('public.pm_admin_accounts(text)')))>0
+         then 'OK' else '위험' end,
+    '유효하지 않은 토큰은 MAIN_ADMIN_REQUIRED로 차단되어야 합니다'::text;
+
+  return query select '7. RPC 보안'::text, 'pm_asset_put'::text,
+    case when to_regprocedure('public.pm_asset_put(text,text,jsonb)') is not null
+           and position('role_name is null' in pg_get_functiondef(to_regprocedure('public.pm_asset_put(text,text,jsonb)')))>0
+         then 'OK' else '위험' end,
+    '유효하지 않은 토큰은 ADMIN_REQUIRED로 차단되어야 합니다'::text;
 end
 $fn$;
 
