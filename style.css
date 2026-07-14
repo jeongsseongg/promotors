@@ -2033,16 +2033,29 @@ body:not(.main-admin) .main-admin-only { display: none !important; }
   flex-wrap: wrap;
   margin-top: 10px;
 }
-.service-steps span {
+.service-steps span,
+.service-steps button {
   border: 1px solid #d6dbe1;
   border-radius: 999px;
   padding: 6px 10px;
+  background: #fff;
   color: #555f6b;
+  font-family: inherit;
   font-size: 12px;
   font-weight: 800;
 }
-.service-steps span.active { border-color: var(--yellow); color: var(--navy); background: #fff9d9; }
-.service-steps span.done { border-color: #03c75a; color: #038550; background: #e6f7ee; }
+.service-steps button { cursor: pointer; min-height: 34px; }
+.service-steps button:hover { border-color: var(--navy); color: var(--navy); }
+.service-steps span.active, .service-steps button.active { border-color: var(--yellow); color: var(--navy); background: #fff9d9; }
+.service-steps span.done, .service-steps button.done { border-color: #03c75a; color: #038550; background: #e6f7ee; }
+/* 단계 칩 클릭 시 나오는 단계별 사진 미리보기 (최대 3장) */
+.stage-photos { display: grid; gap: 8px; }
+.stage-photos[hidden] { display: none; }
+.stage-photos-title { color: var(--navy); font-size: 13px; }
+.stage-photos-title span { color: #8a94a0; font-weight: 700; }
+.stage-photos .album-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); max-width: 480px; }
+.stage-photos .album-item img { cursor: zoom-in; }
+.stage-photos .mini-btn { justify-self: start; }
 .service-run-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
 
 /* 작업현황 / 승인 / 설정 */
@@ -2283,6 +2296,120 @@ button.step-photo-slot {
 .inquiry-board {
   display: grid;
   gap: 12px;
+}
+/* ===== 고객문의: 카드형 목록 + 상태 필터 ===== */
+.inquiry-tabs {
+  display: inline-flex;
+  margin-bottom: 14px;
+  border: 1px solid #dfe4ea;
+  border-radius: 12px;
+  overflow: hidden;
+  background: #fff;
+}
+.inquiry-tabs button {
+  min-height: 44px;
+  padding: 0 18px;
+  border: 0;
+  background: none;
+  color: #55606d;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 800;
+  cursor: pointer;
+}
+.inquiry-tabs button + button { border-left: 1px solid #dfe4ea; }
+.inquiry-tabs button.on { background: var(--navy); color: #fff; }
+.inquiry-list {
+  display: grid;
+  border: 1px solid #e6eaef;
+  border-radius: 14px;
+  background: #fff;
+  overflow: hidden;
+}
+.inquiry-item {
+  display: grid;
+  grid-template-columns: auto minmax(110px, auto) 1fr auto auto;
+  align-items: center;
+  gap: 14px;
+  padding: 16px 18px;
+  border-top: 1px solid #eef1f4;
+  cursor: pointer;
+}
+.inquiry-item:first-child { border-top: 0; }
+.inquiry-item:hover, .inquiry-item:focus-visible { background: #f7f9fc; }
+.inquiry-avatar {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: #eef1f5;
+  color: #8a94a0;
+}
+.inquiry-avatar svg { width: 22px; height: 22px; }
+.inquiry-who { display: grid; gap: 2px; }
+.inquiry-who strong { color: var(--navy); font-size: 15px; }
+.inquiry-who span { color: #8a94a0; font-size: 13px; font-weight: 700; }
+.inquiry-preview { display: grid; gap: 3px; min-width: 0; border-left: 1px solid #eef1f4; padding-left: 14px; }
+.inquiry-preview p {
+  color: #2b2f33;
+  font-size: 14px;
+  line-height: 1.45;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.inquiry-preview span { color: #8a94a0; font-size: 12px; font-weight: 700; }
+.inquiry-state { display: grid; justify-items: end; gap: 4px; }
+.inquiry-badge {
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 800;
+}
+.inquiry-badge.live { background: #e6f7ee; color: #03875a; }
+.inquiry-badge.done { background: var(--blue-soft); color: var(--blue-dark); }
+.inquiry-state > span { color: #8a94a0; font-size: 12px; font-weight: 700; }
+.inquiry-arrow { color: #b6bec7; font-size: 20px; font-weight: 800; }
+.inquiry-pages {
+  display: flex;
+  justify-content: center;
+  gap: 6px;
+  margin-top: 16px;
+}
+.inquiry-pages button {
+  min-width: 36px;
+  min-height: 36px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: #55606d;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 800;
+  cursor: pointer;
+}
+.inquiry-pages button.on { background: var(--navy); color: #fff; }
+.inquiry-pages button:disabled { opacity: .35; cursor: default; }
+@media (max-width: 720px) {
+  /* 모바일: 아바타+이름 / 미리보기 / 상태를 세로로 쌓는다 */
+  .inquiry-item {
+    grid-template-columns: auto 1fr auto;
+    grid-template-areas:
+      "avatar who arrow"
+      "avatar preview arrow"
+      "avatar state arrow";
+    gap: 4px 12px;
+    padding: 14px;
+  }
+  .inquiry-avatar { grid-area: avatar; align-self: start; }
+  .inquiry-who { grid-area: who; display: flex; align-items: baseline; gap: 8px; }
+  .inquiry-preview { grid-area: preview; border-left: 0; padding-left: 0; }
+  .inquiry-state { grid-area: state; justify-items: start; grid-auto-flow: column; align-items: center; gap: 10px; margin-top: 2px; }
+  .inquiry-arrow { grid-area: arrow; align-self: center; }
+  .inquiry-tabs { width: 100%; }
+  .inquiry-tabs button { flex: 1; padding: 0 8px; }
 }
 .settings-main { min-width: 0; }
 .inquiry-card {
@@ -3567,9 +3694,75 @@ button.step-photo-slot {
   line-height: 1;
   cursor: pointer;
 }
+.album-item img { cursor: zoom-in; }
 .album-item.deleted img { opacity: .55; border-style: dashed; border-color: var(--red); }
 .album-item.deleted figcaption { font-size: 11px; color: var(--red); margin-top: 4px; font-weight: 700; }
 .album-deleted-title { margin: 10px 0 6px; font-size: 13px; font-weight: 800; color: var(--red); }
+/* 삭제된 사진: 기본 접힘 — 버튼을 눌러야 펼쳐짐 */
+.album-deleted-toggle {
+  width: 100%;
+  min-height: 44px;
+  margin-top: 14px;
+  border: 1px dashed #d6a5a5;
+  border-radius: 10px;
+  background: #fff7f7;
+  color: var(--red);
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 800;
+  cursor: pointer;
+}
+.album-deleted-wrap { display: grid; gap: 12px; margin-top: 12px; }
+.album-deleted-wrap[hidden] { display: none; }
+
+/* 이미지 확대 라이트박스 (모바일·PC) */
+.image-lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 340;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+  background: rgba(8, 12, 24, .88);
+  cursor: zoom-out;
+}
+.image-lightbox img {
+  max-width: 96vw;
+  max-height: 90vh;
+  object-fit: contain;
+  border-radius: 10px;
+}
+.image-lightbox .lightbox-x {
+  position: absolute;
+  top: calc(14px + env(safe-area-inset-top));
+  right: 14px;
+  width: 42px;
+  height: 42px;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, .16);
+  color: #fff;
+  font-size: 24px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+/* 채팅: 사진 안내 메시지의 확인하기 버튼 */
+.chat-msg .chat-check {
+  justify-self: start;
+  margin-top: 6px;
+  min-height: 36px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--navy);
+  color: #fff;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
+}
+.chat-msg.mine .chat-check { background: rgba(255, 255, 255, .92); color: var(--navy); }
 
 .approval-steps { display: grid; gap: 10px; }
 .approval-step-row {
