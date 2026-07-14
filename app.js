@@ -806,7 +806,7 @@ function applyAuthUI() {
   bar.innerHTML = '';
 
   if (isAdmin) {
-    bar.append(span('auth-user', isGeneralAdmin() && adminBranches.length ? adminBranchLabel() : '관리자 모드'), authBtn('로그아웃', logout));
+    bar.append(span('auth-user', '관리자 모드'), authBtn('로그아웃', logout));
   } else if (member) {
     bar.append(authBtn('내 예약', openMyPageModal), authBtn('로그아웃', logout));
   } else {
