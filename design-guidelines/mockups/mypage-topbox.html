@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<title>프로모터스 마이페이지 — 상단 박스 개선안</title>
+<style>
+  :root {
+    --navy: #1e2464;
+    --navy-2: #2a3170;
+    --navy-deep: #141939;
+    --yellow: #f5c400;
+    --yellow-d: #b08c00;
+    --yellow-soft: #fff8d8;
+    --green: #12805a;
+    --green-soft: #e7f6ef;
+    --red: #d93a34;
+    --t1: #14161c;
+    --t2: #666f7d;
+    --t3: #a2adba;
+    --ln: #edeff3;
+    --ln2: #f4f6f9;
+    --bg: #f2f4f7;
+    --mono: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Noto Sans KR', sans-serif; background: #c3cad4; color: var(--t1); padding: 38px 26px 56px; }
+  .wrap { max-width: 1500px; margin: 0 auto; }
+  h1.top { font-size: 32px; font-weight: 900; color: var(--navy); letter-spacing: -1px; }
+  p.lead { margin-top: 9px; font-size: 15.5px; font-weight: 500; color: #4b5563; line-height: 1.6; }
+  .want { margin-top: 16px; background: #fff; border-radius: 14px; padding: 16px 20px; box-shadow: 0 2px 10px rgba(15,23,42,.08);
+      border-left: 5px solid var(--yellow); font-size: 14px; font-weight: 700; line-height: 1.8; }
+  .want b { color: var(--navy); }
+
+  h2.sec { margin: 34px 0 4px; font-size: 21px; font-weight: 900; color: var(--navy); }
+  p.secd { font-size: 13.5px; font-weight: 600; color: #5d6672; margin-bottom: 15px; line-height: 1.55; }
+  .row { display: flex; gap: 20px; flex-wrap: wrap; align-items: flex-start; }
+  .cap b { display: block; font-size: 15.5px; font-weight: 900; color: var(--navy); }
+  .cap i { display: block; font-style: normal; margin: 3px 0 10px; font-size: 12.5px; font-weight: 600; color: #5d6672; line-height: 1.45; }
+  .note { margin-top: 10px; width: 340px; font-size: 12.5px; font-weight: 700; line-height: 1.55; color: #4b5563; }
+  .note em { font-style: normal; color: var(--navy); }
+  .note .plus { color: var(--green); font-weight: 900; }
+  .note .minus { color: var(--red); font-weight: 900; }
+
+  /* 폰 (상단만 보이게 자름) */
+  .phone { position: relative; width: 340px; height: 566px; overflow: hidden; border-radius: 28px 28px 18px 18px; background: var(--bg); box-shadow: 0 10px 28px rgba(15,23,42,.20); }
+  .phone.st { height: 336px; }
+  .sbar { height: 26px; display: flex; align-items: center; justify-content: space-between; padding: 0 16px; font-size: 10.5px; font-weight: 800; }
+  .scr { padding: 0 16px; }
+  .cut { position: absolute; left: 0; right: 0; bottom: 0; height: 60px;
+      background: linear-gradient(180deg, rgba(242,244,247,0), var(--bg) 70%); }
+
+  /* 인사 */
+  .greet { padding: 10px 4px 0; }
+  .greet h2 { font-size: 20px; font-weight: 900; color: var(--navy); letter-spacing: -.6px; }
+  .greet p { margin-top: 5px; font-size: 12.5px; font-weight: 700; color: var(--t2); }
+  .greet p .kw { color: var(--yellow-d); font-weight: 900; }
+
+  /* 공통 조각 */
+  .pl { border: 1.4px solid rgba(255,255,255,.85); border-radius: 4px; font-size: 10px; font-weight: 900; padding: 2px 6px; color: #fff; }
+  .pl.dark { border-color: #23283a; color: #23283a; background: #fff; }
+  .bd { font-size: 10px; font-weight: 900; border-radius: 999px; padding: 3px 9px; background: var(--yellow); color: var(--navy); }
+  .bd.gray { background: var(--ln2); color: var(--t2); }
+  .bd.nv { background: var(--navy); color: var(--yellow); }
+  .stg { display: flex; gap: 4px; }
+  .stg span { flex: 1; text-align: center; font-size: 9px; font-weight: 900; padding: 6px 0; border-radius: 6px; }
+  .stg.onDark span { background: rgba(255,255,255,.1); color: rgba(255,255,255,.45); }
+  .stg.onDark span.done { background: rgba(255,255,255,.9); color: var(--navy); }
+  .stg.onDark span.now { background: var(--yellow); color: var(--navy); }
+  .stg.onLight span { background: var(--ln2); color: var(--t3); }
+  .stg.onLight span.done { background: var(--navy); color: #fff; }
+  .stg.onLight span.now { background: var(--yellow); color: var(--navy); }
+
+  /* ===== A. 2단 카드 ===== */
+  .A {
+    margin-top: 14px; border-radius: 20px; overflow: hidden;
+    background: linear-gradient(155deg, var(--navy-2) 0%, var(--navy) 48%, var(--navy-deep) 100%);
+    box-shadow: 0 10px 26px rgba(20,25,57,.28);
+  }
+  .A .up { padding: 17px 17px 16px; }
+  .A .l1 { display: flex; align-items: center; gap: 7px; }
+  .A h3 { margin-top: 12px; color: #fff; font-size: 22px; font-weight: 900; letter-spacing: -.6px; }
+  .A p.sv { margin-top: 4px; color: rgba(255,255,255,.62); font-size: 12.5px; font-weight: 700; }
+  .A .prog { margin-top: 16px; display: flex; align-items: flex-end; justify-content: space-between; }
+  .A .prog em { font-style: normal; color: var(--yellow); font-size: 34px; font-weight: 900; letter-spacing: -1.6px; line-height: 1; }
+  .A .prog em i { font-style: normal; font-size: 15px; }
+  .A .prog s { text-decoration: none; color: rgba(255,255,255,.7); font-size: 12px; font-weight: 800; }
+  .A .bar { height: 7px; border-radius: 999px; background: rgba(255,255,255,.15); margin-top: 10px; overflow: hidden; }
+  .A .bar u { display: block; height: 100%; width: 66%; background: var(--yellow); border-radius: 999px; }
+  .A .stg { margin-top: 13px; }
+  .A .dn {
+    border-top: 1px solid rgba(255,255,255,.13);
+    background: rgba(255,255,255,.055);
+    padding: 13px 17px;
+    display: grid; grid-template-columns: 18px minmax(0,1fr) auto 11px; align-items: center; gap: 10px;
+  }
+  .A .dn .ic { color: var(--yellow); display: grid; } .A .dn .ic svg { width: 17px; height: 17px; }
+  .A .dn b { color: rgba(255,255,255,.72); font-size: 11.5px; font-weight: 800; }
+  .A .dn strong { color: #fff; font-size: 13px; font-weight: 900; white-space: nowrap; }
+  .A .dn .cv { color: rgba(255,255,255,.4); display: grid; } .A .dn .cv svg { width: 12px; height: 12px; }
+
+  /* ===== B. 숫자 강조 + 하단 2칸 ===== */
+  .B {
+    margin-top: 14px; border-radius: 20px; overflow: hidden;
+    background: linear-gradient(155deg, var(--navy-2), var(--navy) 50%, var(--navy-deep));
+    box-shadow: 0 10px 26px rgba(20,25,57,.28);
+  }
+  .B .up { padding: 17px; }
+  .B .l1 { display: flex; align-items: center; gap: 7px; }
+  .B .mid { margin-top: 14px; display: grid; grid-template-columns: minmax(0,1fr) auto; align-items: center; gap: 12px; }
+  .B .mid b { display: block; color: #fff; font-size: 17px; font-weight: 900; letter-spacing: -.4px; }
+  .B .mid s { text-decoration: none; display: block; margin-top: 5px; color: rgba(255,255,255,.6); font-size: 12px; font-weight: 700; }
+  .B .mid .big { text-align: right; }
+  .B .mid .big em { font-style: normal; color: var(--yellow); font-size: 44px; font-weight: 900; letter-spacing: -2.4px; line-height: .9; display: block; }
+  .B .mid .big u { text-decoration: none; display: block; margin-top: 2px; color: rgba(255,255,255,.5); font-size: 10px; font-weight: 900; }
+  .B .bar { height: 7px; border-radius: 999px; background: rgba(255,255,255,.15); margin-top: 14px; overflow: hidden; }
+  .B .bar u { display: block; height: 100%; width: 66%; background: var(--yellow); border-radius: 999px; }
+  .B .eta { margin-top: 9px; text-align: right; color: rgba(255,255,255,.7); font-size: 11.5px; font-weight: 800; }
+  .B .duo { display: grid; grid-template-columns: 1fr 1fr; border-top: 1px solid rgba(255,255,255,.13); }
+  .B .duo .cell { padding: 13px 15px; }
+  .B .duo .cell + .cell { border-left: 1px solid rgba(255,255,255,.13); }
+  .B .duo .cell s { text-decoration: none; display: block; color: rgba(255,255,255,.55); font-size: 10.5px; font-weight: 900; }
+  .B .duo .cell b { display: block; margin-top: 5px; color: #fff; font-size: 13.5px; font-weight: 900; }
+  .B .duo .cell.acc b { color: var(--yellow); }
+
+  /* ===== C. 흰 카드 (밝은 버전) ===== */
+  .C { margin-top: 14px; background: #fff; border-radius: 20px; overflow: hidden; box-shadow: 0 4px 18px rgba(15,23,42,.10); }
+  .C .up { padding: 17px; }
+  .C .l1 { display: flex; align-items: center; gap: 7px; }
+  .C h3 { margin-top: 12px; color: var(--t1); font-size: 21px; font-weight: 900; letter-spacing: -.6px; }
+  .C p.sv { margin-top: 4px; color: var(--t2); font-size: 12.5px; font-weight: 700; }
+  .C .prog { margin-top: 16px; display: flex; align-items: flex-end; justify-content: space-between; }
+  .C .prog em { font-style: normal; color: var(--navy); font-size: 34px; font-weight: 900; letter-spacing: -1.6px; line-height: 1; }
+  .C .prog em i { font-style: normal; font-size: 15px; color: var(--yellow-d); }
+  .C .prog s { text-decoration: none; color: var(--t2); font-size: 12px; font-weight: 800; }
+  .C .bar { height: 7px; border-radius: 999px; background: var(--ln); margin-top: 10px; overflow: hidden; }
+  .C .bar u { display: block; height: 100%; width: 66%; background: var(--navy); border-radius: 999px; }
+  .C .stg { margin-top: 13px; }
+  .C .dn { border-top: 1px solid var(--ln); background: #fafbfc; padding: 13px 17px;
+      display: grid; grid-template-columns: 18px minmax(0,1fr) auto 11px; align-items: center; gap: 10px; }
+  .C .dn .ic { color: var(--navy); display: grid; } .C .dn .ic svg { width: 17px; height: 17px; }
+  .C .dn b { color: var(--t2); font-size: 11.5px; font-weight: 800; }
+  .C .dn strong { color: var(--navy); font-size: 13px; font-weight: 900; white-space: nowrap; }
+  .C .dn .cv { color: #ccd2db; display: grid; } .C .dn .cv svg { width: 12px; height: 12px; }
+
+  /* 아래 메뉴 살짝 */
+  .glabel { margin: 20px 6px 8px; font-size: 11.5px; font-weight: 900; color: var(--t3); }
+  .group { background: #fff; border-radius: 16px; overflow: hidden; box-shadow: 0 2px 10px rgba(15,23,42,.05); }
+  .mi { display: grid; grid-template-columns: 24px minmax(0,1fr) auto 12px; align-items: center; gap: 12px; padding: 14px 15px; }
+  .mi + .mi { border-top: 1px solid var(--ln2); }
+  .mi .ic { color: var(--navy); display: grid; place-items: center; } .mi .ic svg { width: 21px; height: 21px; }
+  .mi b { font-size: 14px; font-weight: 800; }
+  .mi .v { font-size: 12px; font-weight: 800; color: var(--t3); white-space: nowrap; }
+  .mi .v.warn { color: var(--red); }
+  .mi .cv { color: #ccd2db; display: grid; } .mi .cv svg { width: 13px; height: 13px; }
+
+  /* 상태 3종 (A안 기준) */
+  .Anone { margin-top: 14px; background: #fff; border-radius: 20px; padding: 22px 17px 18px; text-align: center; box-shadow: 0 4px 18px rgba(15,23,42,.08); }
+  .Anone .ic { width: 48px; height: 48px; margin: 0 auto; border-radius: 50%; background: var(--ln2); display: grid; place-items: center; color: var(--t3); }
+  .Anone .ic svg { width: 25px; height: 25px; }
+  .Anone b { display: block; margin-top: 13px; font-size: 17px; font-weight: 900; }
+  .Anone p { margin-top: 5px; font-size: 12.5px; font-weight: 700; color: var(--t2); }
+  .Anone button { width: 100%; margin-top: 16px; border: none; background: var(--navy); color: var(--yellow);
+      font-family: inherit; font-size: 14.5px; font-weight: 900; min-height: 48px; border-radius: 999px;
+      box-shadow: 0 4px 0 var(--yellow), 0 10px 18px rgba(30,36,100,.20); }
+  .Asoon { margin-top: 14px; border-radius: 20px; overflow: hidden; background: linear-gradient(155deg,var(--navy-2),var(--navy) 50%,var(--navy-deep)); box-shadow: 0 10px 26px rgba(20,25,57,.28); }
+  .Asoon .up { padding: 17px; }
+  .Asoon .l1 { display: flex; align-items: center; gap: 7px; }
+  .Asoon .dday { margin-top: 13px; display: flex; align-items: baseline; gap: 8px; }
+  .Asoon .dday em { font-style: normal; color: var(--yellow); font-size: 30px; font-weight: 900; letter-spacing: -1.4px; line-height: 1; }
+  .Asoon .dday b { color: #fff; font-size: 18px; font-weight: 900; }
+  .Asoon p { margin-top: 6px; color: rgba(255,255,255,.62); font-size: 12.5px; font-weight: 700; }
+  .Asoon .two { margin-top: 15px; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .Asoon .two button { border: none; background: rgba(255,255,255,.12); color: #fff; font-family: inherit; font-size: 12.5px; font-weight: 900; min-height: 40px; border-radius: 999px; }
+
+  /* 표 */
+  .tbl { margin-top: 32px; background: #fff; border-radius: 18px; padding: 24px 26px; box-shadow: 0 2px 14px rgba(15,23,42,.08); }
+  .tbl h3 { font-size: 19px; font-weight: 900; color: var(--navy); margin-bottom: 13px; }
+  .tbl table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+  .tbl th, .tbl td { text-align: left; padding: 10px 8px; border-bottom: 1px solid var(--ln); vertical-align: top; }
+  .tbl th { font-size: 12px; font-weight: 900; color: var(--t3); }
+  .tbl td.k { font-weight: 900; color: var(--navy); width: 14%; }
+  .tbl td.m { color: var(--t2); }
+  .tbl .rec { margin-top: 16px; padding: 15px 18px; background: var(--yellow-soft); border-radius: 12px; font-size: 13.5px; font-weight: 700; line-height: 1.7; }
+  .tbl .rec b { color: var(--navy); }
+</style>
+
+<div class="wrap">
+  <h1 class="top">상단 박스 개선 — 크게, 확실하게, 예약까지</h1>
+  <p class="lead">아래 메뉴는 그대로 두고 <b>맨 위 카드만</b> 다시 만들었습니다. 세 가지 중에 골라주세요.</p>
+  <div class="want">
+    <b>요청사항 반영</b> — ① 카드를 <b>더 크게</b> (높이 약 2배) · ② 진행률을 <b>큰 숫자</b>로 확실하게 ·
+    ③ <b>5단계 진행 표시</b> 추가 (접수 → 진단 → 작업 → 검수 → 출고) · ④ <b>예약 현황</b>을 카드 안에 함께 표시
+  </div>
+
+  <h2 class="sec">3가지 안 (아래 메뉴는 동일)</h2>
+  <p class="secd">전부 <b>작업중 + 다음 예약이 있는</b> 상태로 그렸습니다. 비교하기 쉽게 내용은 같습니다.</p>
+
+  <div class="row">
+
+    <!-- ================= A ================= -->
+    <div>
+      <div class="cap"><b>A. 2단 카드</b><i>위: 지금 작업 / 아래: 다음 예약 — 한 카드 안에서 선으로 나눔</i></div>
+      <div class="phone">
+        <div class="sbar"><span>7:02</span><span>5G ▮</span></div>
+        <div class="scr">
+          <div class="greet">
+            <h2>남미희님, 안녕하세요</h2>
+            <p>오늘 <span class="kw">비 예보</span>가 있어요. 와이퍼 상태 봐주세요.</p>
+          </div>
+          <div class="A">
+            <div class="up">
+              <div class="l1"><span class="pl">141오 7116</span><span class="bd">작업중</span></div>
+              <h3>BMW X3</h3>
+              <p class="sv">오일필터 하우징 가스켓 교환 · 안산점</p>
+              <div class="prog"><span><em>66<i>%</i></em></span><s>검수까지 약 2시간</s></div>
+              <div class="bar"><u></u></div>
+              <div class="stg onDark"><span class="done">접수</span><span class="done">진단</span><span class="now">작업</span><span>검수</span><span>출고</span></div>
+            </div>
+            <div class="dn">
+              <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2.5"/><path d="M8 3v4M16 3v4M3 10h18"/></svg></span>
+              <b>다음 예약</b>
+              <strong>8월 5일 (화) 오후 2:00</strong>
+              <span class="cv"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg></span>
+            </div>
+          </div>
+          <p class="glabel">내 차</p>
+          <div class="group">
+            <a class="mi"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M5 16.5h14M6.5 16.5V13l1.7-4.2A2 2 0 0 1 10 7.5h4a2 2 0 0 1 1.8 1.3L17.5 13v3.5"/><circle cx="8.5" cy="16.5" r="1.4"/><circle cx="15.5" cy="16.5" r="1.4"/></svg></span><b>내 차 관리</b><span class="v warn">타이어 교체 권장</span><span class="cv"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg></span></a>
+            <a class="mi"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h9l4 4v14H6z"/><path d="M9 12h7M9 16h5"/></svg></span><b>정비 이력</b><span class="v">8건</span><span class="cv"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg></span></a>
+          </div>
+        </div>
+        <div class="cut"></div>
+      </div>
+      <p class="note"><span class="plus">장점</span> 지금 작업과 다음 예약이 <em>확실히 구분</em>되면서 한 덩어리 · 가장 안정적<br><span class="minus">단점</span> 카드가 세로로 길어짐</p>
+    </div>
+
+    <!-- ================= B ================= -->
+    <div>
+      <div class="cap"><b>B. 숫자 강조 + 하단 2칸</b><i>진행률을 아주 크게 · 아래에 예약·견적 두 칸</i></div>
+      <div class="phone">
+        <div class="sbar"><span>7:02</span><span>5G ▮</span></div>
+        <div class="scr">
+          <div class="greet">
+            <h2>남미희님, 안녕하세요</h2>
+            <p>오늘 <span class="kw">비 예보</span>가 있어요. 와이퍼 상태 봐주세요.</p>
+          </div>
+          <div class="B">
+            <div class="up">
+              <div class="l1"><span class="pl">141오 7116</span><span class="bd">작업중</span></div>
+              <div class="mid">
+                <div>
+                  <b>BMW X3</b>
+                  <s>오일필터 하우징 가스켓<br>안산점 · 담당 김민수</s>
+                </div>
+                <div class="big"><em>66</em><u>% 진행</u></div>
+              </div>
+              <div class="bar"><u></u></div>
+              <div class="eta">검수까지 약 2시간</div>
+            </div>
+            <div class="duo">
+              <div class="cell acc"><s>다음 예약</s><b>8월 5일 14:00</b></div>
+              <div class="cell"><s>견적서</s><b>42만원 승인</b></div>
+            </div>
+          </div>
+          <p class="glabel">내 차</p>
+          <div class="group">
+            <a class="mi"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M5 16.5h14M6.5 16.5V13l1.7-4.2A2 2 0 0 1 10 7.5h4a2 2 0 0 1 1.8 1.3L17.5 13v3.5"/><circle cx="8.5" cy="16.5" r="1.4"/><circle cx="15.5" cy="16.5" r="1.4"/></svg></span><b>내 차 관리</b><span class="v warn">타이어 교체 권장</span><span class="cv"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg></span></a>
+            <a class="mi"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h9l4 4v14H6z"/><path d="M9 12h7M9 16h5"/></svg></span><b>정비 이력</b><span class="v">8건</span><span class="cv"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg></span></a>
+          </div>
+        </div>
+        <div class="cut"></div>
+      </div>
+      <p class="note"><span class="plus">장점</span> 진행률 <em>44px</em>로 가장 눈에 확 들어옴 · 견적서까지 같이 보임<br><span class="minus">단점</span> 5단계 진행 표시가 빠짐 (자리 부족)</p>
+    </div>
+
+    <!-- ================= C ================= -->
+    <div>
+      <div class="cap"><b>C. 흰 카드 (밝은 버전)</b><i>A와 구조는 같고 색만 흰색 — 아래 메뉴와 톤이 이어짐</i></div>
+      <div class="phone">
+        <div class="sbar"><span>7:02</span><span>5G ▮</span></div>
+        <div class="scr">
+          <div class="greet">
+            <h2>남미희님, 안녕하세요</h2>
+            <p>오늘 <span class="kw">비 예보</span>가 있어요. 와이퍼 상태 봐주세요.</p>
+          </div>
+          <div class="C">
+            <div class="up">
+              <div class="l1"><span class="pl dark">141오 7116</span><span class="bd nv">작업중</span></div>
+              <h3>BMW X3</h3>
+              <p class="sv">오일필터 하우징 가스켓 교환 · 안산점</p>
+              <div class="prog"><span><em>66<i>%</i></em></span><s>검수까지 약 2시간</s></div>
+              <div class="bar"><u></u></div>
+              <div class="stg onLight"><span class="done">접수</span><span class="done">진단</span><span class="now">작업</span><span>검수</span><span>출고</span></div>
+            </div>
+            <div class="dn">
+              <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2.5"/><path d="M8 3v4M16 3v4M3 10h18"/></svg></span>
+              <b>다음 예약</b>
+              <strong>8월 5일 (화) 오후 2:00</strong>
+              <span class="cv"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg></span>
+            </div>
+          </div>
+          <p class="glabel">내 차</p>
+          <div class="group">
+            <a class="mi"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M5 16.5h14M6.5 16.5V13l1.7-4.2A2 2 0 0 1 10 7.5h4a2 2 0 0 1 1.8 1.3L17.5 13v3.5"/><circle cx="8.5" cy="16.5" r="1.4"/><circle cx="15.5" cy="16.5" r="1.4"/></svg></span><b>내 차 관리</b><span class="v warn">타이어 교체 권장</span><span class="cv"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg></span></a>
+            <a class="mi"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h9l4 4v14H6z"/><path d="M9 12h7M9 16h5"/></svg></span><b>정비 이력</b><span class="v">8건</span><span class="cv"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg></span></a>
+          </div>
+        </div>
+        <div class="cut"></div>
+      </div>
+      <p class="note"><span class="plus">장점</span> 화면 전체가 <em>밝고 부드러움</em> · 어르신 고객이 읽기 편함<br><span class="minus">단점</span> 아래 흰 메뉴와 섞여서 “지금 내 차”가 덜 튐</p>
+    </div>
+  </div>
+
+  <h2 class="sec">A안의 상태별 변화</h2>
+  <p class="secd">예약이 없을 때와 입고 예정일 때는 이렇게 바뀝니다. (B·C를 고르셔도 같은 방식으로 바뀝니다)</p>
+  <div class="row">
+    <div>
+      <div class="cap"><b>예약이 없을 때</b><i>흰 카드 + 예약 버튼</i></div>
+      <div class="phone st">
+        <div class="sbar"><span>7:02</span><span>5G ▮</span></div>
+        <div class="scr">
+          <div class="greet"><h2>남미희님, 안녕하세요</h2><p>오늘 <span class="kw">비 예보</span>가 있어요.</p></div>
+          <div class="Anone">
+            <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2.5"/><path d="M8 3v4M16 3v4M3 10h18"/></svg></span>
+            <b>예약이 없어요</b>
+            <p>정비가 필요하시면 예약해 주세요</p>
+            <button>정비 예약하기</button>
+          </div>
+        </div>
+        <div class="cut"></div>
+      </div>
+    </div>
+    <div>
+      <div class="cap"><b>입고 예정일 때</b><i>D-day를 큰 숫자로</i></div>
+      <div class="phone st">
+        <div class="sbar"><span>7:02</span><span>5G ▮</span></div>
+        <div class="scr">
+          <div class="greet"><h2>남미희님, 안녕하세요</h2><p>예약일이 <span class="kw">3일</span> 남았어요.</p></div>
+          <div class="Asoon">
+            <div class="up">
+              <div class="l1"><span class="pl">141오 7116</span><span class="bd">입고 예정</span></div>
+              <div class="dday"><em>D-3</em><b>8월 5일 (화) 오후 2:00</b></div>
+              <p>안산점 · 정기점검 · 예상 2시간</p>
+              <div class="two"><button>일정 변경</button><button>예약 취소</button></div>
+            </div>
+          </div>
+        </div>
+        <div class="cut"></div>
+      </div>
+    </div>
+    <div>
+      <div class="cap"><b>입고했을 때</b><i>단계가 진단중으로</i></div>
+      <div class="phone st">
+        <div class="sbar"><span>7:02</span><span>5G ▮</span></div>
+        <div class="scr">
+          <div class="greet"><h2>남미희님, 안녕하세요</h2><p>차량이 <span class="kw">입고</span>되었어요.</p></div>
+          <div class="A">
+            <div class="up">
+              <div class="l1"><span class="pl">141오 7116</span><span class="bd">입고 완료</span></div>
+              <h3>차량이 도착했어요</h3>
+              <p class="sv">안산점 · 14:10 접수 · 68,200km</p>
+              <div class="stg onDark" style="margin-top:15px"><span class="done">접수</span><span class="now">진단</span><span>작업</span><span>검수</span><span>출고</span></div>
+            </div>
+          </div>
+        </div>
+        <div class="cut"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="tbl">
+    <h3>3가지 비교</h3>
+    <table>
+      <tr><th>안</th><th>진행률 크기</th><th>5단계 표시</th><th>예약 표시 방식</th><th>느낌</th></tr>
+      <tr><td class="k">A. 2단 카드</td><td class="m">34px (충분히 큼)</td><td class="m">있음</td><td class="m">카드 아래 한 줄 (다음 예약 8월 5일)</td><td class="m">안정적 · 정보가 잘 정리됨</td></tr>
+      <tr><td class="k">B. 숫자 강조</td><td class="m">44px (가장 큼)</td><td class="m">없음</td><td class="m">카드 아래 2칸 (예약 + 견적서)</td><td class="m">임팩트 최고 · 진행률이 주인공</td></tr>
+      <tr><td class="k">C. 흰 카드</td><td class="m">34px</td><td class="m">있음</td><td class="m">A와 동일</td><td class="m">밝고 편안 · 눈에 덜 튐</td></tr>
+    </table>
+    <div class="rec">
+      <b>제 추천은 A입니다.</b> 진행률도 충분히 크고, <b>5단계(접수→진단→작업→검수→출고)</b>가 보여서 “지금 어디까지 왔는지”가 확실합니다.
+      다음 예약도 아래 한 줄로 깔끔하게 들어가고, 네이비라서 아래 흰 메뉴들과 확실히 구분됩니다.<br>
+      진행률을 더 크게 하고 싶으시면 <b>A의 구조 + B의 44px 숫자</b>로 섞을 수도 있습니다.
+    </div>
+  </div>
+</div>
