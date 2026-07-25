@@ -1,0 +1,816 @@
+<!DOCTYPE html>
+<title>프로모터스 전체 화면 시안 — 2단 카드 스타일 적용</title>
+<style>
+  :root {
+    --navy: #1e2464;
+    --navy-2: #2a3170;
+    --navy-deep: #141939;
+    --yellow: #f5c400;
+    --yellow-d: #b08c00;
+    --yellow-soft: #fff8d8;
+    --green: #12805a;
+    --green-soft: #e7f6ef;
+    --amber: #b8730a;
+    --amber-soft: #fff2dd;
+    --red: #d93a34;
+    --red-soft: #fdecea;
+    --t1: #14161c;
+    --t2: #666f7d;
+    --t3: #a2adba;
+    --ln: #edeff3;
+    --ln2: #f4f6f9;
+    --bg: #f2f4f7;
+    --mono: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Noto Sans KR', sans-serif; background: #c3cad4; color: var(--t1); padding: 38px 26px 60px; }
+  .wrap { max-width: 1500px; margin: 0 auto; }
+  h1.top { font-size: 32px; font-weight: 900; color: var(--navy); letter-spacing: -1px; }
+  p.lead { margin-top: 9px; font-size: 15.5px; font-weight: 500; color: #4b5563; line-height: 1.6; }
+  .sys { margin-top: 16px; background: #fff; border-radius: 14px; padding: 17px 20px; box-shadow: 0 2px 10px rgba(15,23,42,.08);
+      border-left: 5px solid var(--yellow); font-size: 14px; font-weight: 700; line-height: 1.85; }
+  .sys b { color: var(--navy); }
+  .sys .kk { display: inline-block; background: var(--ln2); border-radius: 6px; padding: 1px 7px; font-family: var(--mono); font-size: 12.5px; }
+
+  h2.sec { margin: 36px 0 3px; font-size: 22px; font-weight: 900; color: var(--navy); }
+  p.secd { font-size: 13.5px; font-weight: 600; color: #5d6672; margin-bottom: 15px; }
+  .row { display: flex; gap: 20px; flex-wrap: wrap; align-items: flex-start; margin-bottom: 8px; }
+  .it { width: 340px; }
+  .it > .cp { margin-bottom: 9px; }
+  .it > .cp b { display: block; font-size: 14.5px; font-weight: 900; color: var(--navy); }
+  .it > .cp i { display: block; font-style: normal; margin-top: 2px; font-size: 12px; font-weight: 600; color: #5d6672; }
+
+  /* ================= 공통 컴포넌트 ================= */
+  .phone { position: relative; width: 340px; height: 748px; overflow: hidden; border-radius: 28px; background: var(--bg); box-shadow: 0 9px 26px rgba(15,23,42,.20); }
+  .sbar { height: 26px; display: flex; align-items: center; justify-content: space-between; padding: 0 16px; font-size: 10.5px; font-weight: 800; }
+  .scr { padding: 0 16px; }
+  .apphd { display: flex; align-items: center; gap: 4px; padding: 0 0 8px; }
+  .apphd .bk { width: 34px; height: 34px; display: grid; place-items: center; color: var(--navy); margin-left: -9px; }
+  .apphd .bk svg { width: 22px; height: 22px; }
+  .apphd b { font-size: 17px; font-weight: 900; color: var(--navy); letter-spacing: -.4px; }
+  .apphd .rt { margin-left: auto; font-size: 12px; font-weight: 800; color: var(--t3); }
+  .apphd .rt.acc { color: var(--navy); }
+
+  .greet { padding: 11px 4px 0; }
+  .greet h2 { font-size: 20px; font-weight: 900; color: var(--navy); letter-spacing: -.6px; }
+  .greet p { margin-top: 5px; font-size: 12.5px; font-weight: 700; color: var(--t2); }
+  .greet p .kw { color: var(--yellow-d); font-weight: 900; }
+
+  .sect { margin: 20px 5px 9px; display: flex; align-items: baseline; gap: 7px; }
+  .sect b { font-size: 15px; font-weight: 900; color: var(--navy); }
+  .sect s { text-decoration: none; font-size: 11.5px; font-weight: 800; color: var(--t3); }
+  .glabel { margin: 20px 6px 8px; font-size: 11.5px; font-weight: 900; color: var(--t3); }
+
+  .pl { border: 1.4px solid rgba(255,255,255,.85); border-radius: 4px; font-size: 10px; font-weight: 900; padding: 2px 6px; color: #fff; white-space: nowrap; }
+  .pl.dk { border-color: #23283a; color: #23283a; background: #fff; }
+  .bdg { display: inline-block; font-size: 10px; font-weight: 900; border-radius: 999px; padding: 3px 9px; white-space: nowrap; }
+  .bdg.y { background: var(--yellow); color: var(--navy); }
+  .bdg.n { background: var(--navy); color: var(--yellow); }
+  .bdg.ok { background: var(--green-soft); color: var(--green); }
+  .bdg.warn { background: var(--amber-soft); color: var(--amber); }
+  .bdg.bad { background: var(--red-soft); color: var(--red); }
+  .bdg.gy { background: var(--ln2); color: var(--t2); }
+
+  /* 확정: 2단 카드 */
+  .c2 { margin-top: 13px; border-radius: 20px; overflow: hidden;
+        background: linear-gradient(155deg, var(--navy-2) 0%, var(--navy) 48%, var(--navy-deep) 100%);
+        box-shadow: 0 9px 24px rgba(20,25,57,.28); }
+  .c2 .up { padding: 16px 16px 15px; }
+  .c2 .l1 { display: flex; align-items: center; gap: 7px; }
+  .c2 h3 { margin-top: 11px; color: #fff; font-size: 21px; font-weight: 900; letter-spacing: -.6px; }
+  .c2 p.sv { margin-top: 4px; color: rgba(255,255,255,.62); font-size: 12.5px; font-weight: 700; }
+  .c2 .prog { margin-top: 15px; display: flex; align-items: flex-end; justify-content: space-between; }
+  .c2 .prog em { font-style: normal; color: var(--yellow); font-size: 33px; font-weight: 900; letter-spacing: -1.6px; line-height: 1; }
+  .c2 .prog em i { font-style: normal; font-size: 15px; }
+  .c2 .prog s { text-decoration: none; color: rgba(255,255,255,.7); font-size: 12px; font-weight: 800; }
+  .c2 .bar { height: 7px; border-radius: 999px; background: rgba(255,255,255,.15); margin-top: 10px; overflow: hidden; }
+  .c2 .bar u { display: block; height: 100%; background: var(--yellow); border-radius: 999px; }
+  .c2 .dn { border-top: 1px solid rgba(255,255,255,.13); background: rgba(255,255,255,.055); padding: 12px 16px;
+            display: grid; grid-template-columns: 18px minmax(0,1fr) auto 11px; align-items: center; gap: 10px; }
+  .c2 .dn .ic { color: var(--yellow); display: grid; } .c2 .dn .ic svg { width: 17px; height: 17px; }
+  .c2 .dn b { color: rgba(255,255,255,.72); font-size: 11.5px; font-weight: 800; }
+  .c2 .dn strong { color: #fff; font-size: 12.5px; font-weight: 900; white-space: nowrap; }
+  .c2 .dn .cv { color: rgba(255,255,255,.4); display: grid; } .c2 .dn .cv svg { width: 12px; height: 12px; }
+  .stg { display: flex; gap: 4px; margin-top: 12px; }
+  .stg span { flex: 1; text-align: center; font-size: 9px; font-weight: 900; padding: 6px 0; border-radius: 6px;
+              background: rgba(255,255,255,.1); color: rgba(255,255,255,.45); }
+  .stg span.done { background: rgba(255,255,255,.9); color: var(--navy); }
+  .stg span.now { background: var(--yellow); color: var(--navy); }
+  .stg.lt span { background: var(--ln2); color: var(--t3); }
+  .stg.lt span.done { background: var(--navy); color: #fff; }
+  .stg.lt span.now { background: var(--yellow); color: var(--navy); }
+
+  /* 흰 카드 · 메뉴 */
+  .card { background: #fff; border-radius: 18px; box-shadow: 0 2px 11px rgba(15,23,42,.06); }
+  .group { background: #fff; border-radius: 16px; overflow: hidden; box-shadow: 0 2px 10px rgba(15,23,42,.05); }
+  .mi { display: grid; grid-template-columns: 24px minmax(0,1fr) auto 12px; align-items: center; gap: 12px; padding: 13px 15px; }
+  .mi + .mi { border-top: 1px solid var(--ln2); }
+  .mi .ic { color: var(--navy); display: grid; place-items: center; } .mi .ic svg { width: 20px; height: 20px; }
+  .mi b { font-size: 14px; font-weight: 800; }
+  .mi .v { font-size: 12px; font-weight: 800; color: var(--t3); white-space: nowrap; }
+  .mi .v.warn { color: var(--red); } .mi .v.acc { color: var(--navy); }
+  .mi .v .dt { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--red); margin-right: 5px; vertical-align: middle; }
+  .mi .cv { color: #ccd2db; display: grid; } .mi .cv svg { width: 13px; height: 13px; }
+
+  /* 버튼 */
+  .btn { width: 100%; border: none; font-family: inherit; font-weight: 900; border-radius: 999px; }
+  .btn.pri { background: var(--navy); color: var(--yellow); font-size: 14.5px; min-height: 50px;
+             box-shadow: 0 4px 0 var(--yellow), 0 10px 18px rgba(30,36,100,.20); }
+  .btn.sub { background: #f1f3f7; color: var(--navy); font-size: 13px; min-height: 42px; }
+  .btn.line { background: #fff; color: var(--navy); border: 1.5px solid var(--navy); font-size: 13px; min-height: 42px; }
+  .two { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .fixcta { position: absolute; left: 16px; right: 16px; bottom: 80px; z-index: 9; }
+
+  /* 칩 */
+  .chips { display: flex; gap: 7px; overflow: hidden; }
+  .chips span { border: 1px solid #dde2e9; background: #fff; color: #5d6672; font-size: 12.5px; font-weight: 800;
+                padding: 8px 13px; border-radius: 999px; white-space: nowrap; }
+  .chips span.on { background: var(--navy); border-color: var(--navy); color: var(--yellow); }
+
+  /* 달력 */
+  .calhd { display: flex; align-items: center; justify-content: space-between; padding: 3px 4px 10px; }
+  .calhd b { font-size: 15px; font-weight: 900; color: var(--navy); }
+  .calhd i { font-style: normal; width: 28px; height: 28px; display: grid; place-items: center; border-radius: 50%; background: var(--ln2); color: var(--navy); font-size: 13px; }
+  .cal { display: grid; grid-template-columns: repeat(7,1fr); gap: 3px; }
+  .cal .dw { text-align: center; font-size: 10px; font-weight: 800; color: var(--t3); padding: 3px 0 5px; }
+  .cal .dw.su { color: var(--red); }
+  .cal .d { position: relative; min-height: 40px; border-radius: 10px; display: grid; place-items: center; align-content: center;
+            font-size: 13px; font-weight: 700; color: var(--t1); background: #fff; }
+  .cal .d.off { background: transparent; color: #cfd5de; font-weight: 500; }
+  .cal .d.sel { background: var(--navy); color: #fff; font-weight: 900; }
+  .cal .d .dt { position: absolute; bottom: 6px; width: 4px; height: 4px; border-radius: 50%; background: var(--yellow-d); }
+  .cal .d.sel .dt { background: var(--yellow); }
+  .slots { display: grid; grid-template-columns: repeat(4,1fr); gap: 7px; }
+  .slots span { text-align: center; font-size: 12px; font-weight: 800; padding: 10px 0; border-radius: 10px; background: #fff; color: var(--t1); border: 1px solid var(--ln); }
+  .slots span.on { background: var(--navy); border-color: var(--navy); color: var(--yellow); }
+  .slots span.no { background: var(--ln2); border-color: var(--ln2); color: #cfd5de; text-decoration: line-through; }
+
+  /* 밀도 리스트 */
+  .lr { display: grid; grid-template-columns: minmax(0,1fr) auto; align-items: center; gap: 10px; padding: 12px 15px; }
+  .lr + .lr { border-top: 1px solid var(--ln2); }
+  .lr .tx b { font-size: 14.5px; font-weight: 800; }
+  .lr .tx b .dt { display: inline-block; width: 5px; height: 5px; border-radius: 50%; background: var(--yellow); margin-right: 6px; vertical-align: middle; }
+  .lr .tx s { text-decoration: none; display: block; margin-top: 3px; font-size: 11.5px; font-weight: 600; color: var(--t3);
+              overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .lr .rt { font-size: 12px; font-weight: 800; color: var(--t2); white-space: nowrap; text-align: right; }
+  .lr .rt em { font-style: normal; display: block; color: var(--navy); font-weight: 900; }
+
+  /* 정비사례 카드 */
+  .g2 { display: grid; grid-template-columns: 1fr 1fr; gap: 11px; }
+  .pc { background: #fff; border-radius: 15px; overflow: hidden; box-shadow: 0 2px 11px rgba(15,23,42,.07); }
+  .pc .im { position: relative; aspect-ratio: 4/3; background: linear-gradient(150deg,#2a3268,var(--navy) 55%,var(--navy-deep));
+            display: grid; place-items: center; color: rgba(255,255,255,.3); }
+  .pc .im svg { width: 28px; height: 28px; }
+  .pc .im .br { position: absolute; left: 8px; top: 8px; background: rgba(255,255,255,.92); color: var(--navy);
+                font-size: 9.5px; font-weight: 900; border-radius: 5px; padding: 3px 7px; }
+  .pc .bd { padding: 10px 11px 12px; }
+  .pc .bd b { display: block; font-size: 13px; font-weight: 900; line-height: 1.35; }
+  .pc .bd s { text-decoration: none; display: block; margin-top: 6px; font-size: 11px; font-weight: 700; color: var(--t3); }
+
+  /* 지점 카드 */
+  .br1 { background: #fff; border-radius: 16px; overflow: hidden; box-shadow: 0 2px 11px rgba(15,23,42,.06); margin-bottom: 11px; }
+  .br1 .im { aspect-ratio: 16/9; background: linear-gradient(150deg,#dfe5ee,#c9d2df); display: grid; place-items: center; color: #9aa7b6; font-size: 11px; font-weight: 800; }
+  .br1 .bd { padding: 13px 14px 14px; }
+  .br1 .bd .t { display: flex; align-items: center; gap: 7px; }
+  .br1 .bd b { font-size: 15px; font-weight: 900; }
+  .br1 .bd .tel { display: block; margin-top: 7px; font-size: 16px; font-weight: 900; color: var(--navy); }
+  .br1 .bd .ad { display: block; margin-top: 4px; font-size: 11.5px; font-weight: 600; color: var(--t3); line-height: 1.5; }
+  .br1 .bd .two { margin-top: 11px; }
+
+  /* 로그인 */
+  .lg { padding: 26px 4px 0; text-align: center; }
+  .lg .lo { font-size: 25px; font-weight: 900; color: var(--navy); letter-spacing: -1px; }
+  .lg .lo em { font-style: normal; color: var(--yellow-d); }
+  .lg p { margin-top: 7px; font-size: 12.5px; font-weight: 700; color: var(--t3); }
+  .fld { margin-top: 22px; }
+  .fld input { width: 100%; border: 1px solid #dde2e9; border-radius: 12px; padding: 14px 15px; font-family: inherit;
+               font-size: 13.5px; font-weight: 600; background: #fff; color: var(--t3); }
+  .fld input + input { margin-top: 8px; }
+  .lgl { margin-top: 15px; display: flex; align-items: center; justify-content: center; gap: 12px; font-size: 12px; font-weight: 800; color: var(--t3); }
+  .lgl b { color: var(--navy); }
+  .lgl i { font-style: normal; color: #dde2e9; }
+
+  /* 예약 완료 */
+  .done1 { padding: 30px 4px 0; text-align: center; }
+  .done1 .ck { width: 62px; height: 62px; margin: 0 auto; border-radius: 50%; background: var(--navy); display: grid; place-items: center; color: var(--yellow); }
+  .done1 .ck svg { width: 30px; height: 30px; }
+  .done1 h3 { margin-top: 16px; font-size: 21px; font-weight: 900; color: var(--navy); letter-spacing: -.6px; }
+  .done1 p { margin-top: 7px; font-size: 12.5px; font-weight: 700; color: var(--t2); line-height: 1.55; }
+  .kv { margin-top: 20px; background: #fff; border-radius: 16px; padding: 4px 15px; box-shadow: 0 2px 11px rgba(15,23,42,.06); text-align: left; }
+  .kv .k { display: flex; justify-content: space-between; padding: 12px 0; font-size: 12.5px; }
+  .kv .k + .k { border-top: 1px solid var(--ln2); }
+  .kv .k s { text-decoration: none; color: var(--t3); font-weight: 800; }
+  .kv .k b { font-weight: 900; }
+
+  /* 채팅 목록 */
+  .cl { display: grid; grid-template-columns: 34px minmax(0,1fr) auto; align-items: center; gap: 11px; padding: 13px 15px; }
+  .cl + .cl { border-top: 1px solid var(--ln2); }
+  .cl .av { width: 34px; height: 34px; border-radius: 50%; background: var(--ln2); display: grid; place-items: center; font-size: 12px; font-weight: 900; color: var(--navy); }
+  .cl.un .av { background: var(--navy); color: var(--yellow); }
+  .cl .tx b { font-size: 14px; font-weight: 800; }
+  .cl .tx s { text-decoration: none; display: block; margin-top: 3px; font-size: 11.5px; font-weight: 600; color: var(--t3);
+              overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .cl .rt { text-align: right; }
+  .cl .rt time { display: block; font-size: 10.5px; font-weight: 700; color: var(--t3); }
+  .cl .rt em { font-style: normal; display: inline-block; margin-top: 5px; min-width: 17px; height: 17px; line-height: 17px;
+               border-radius: 999px; background: var(--red); color: #fff; font-size: 10px; font-weight: 900; padding: 0 5px; }
+
+  /* 작업현황 카드 */
+  .wk { background: #fff; border-radius: 16px; padding: 14px; box-shadow: 0 2px 11px rgba(15,23,42,.06); margin-bottom: 10px; }
+  .wk .t { display: flex; align-items: center; gap: 7px; }
+  .wk b { display: block; margin-top: 9px; font-size: 15px; font-weight: 900; }
+  .wk s { text-decoration: none; display: block; margin-top: 3px; font-size: 11.5px; font-weight: 700; color: var(--t3); }
+
+  /* 탭바 */
+  .tb { position: absolute; left: 13px; right: 13px; bottom: 13px; z-index: 10; border-radius: 999px;
+        background: #fff; box-shadow: 0 8px 24px rgba(20,25,57,.16);
+        display: grid; grid-template-columns: repeat(5,1fr); padding: 8px 5px 7px; }
+  .tb span { display: grid; justify-items: center; gap: 2px; font-size: 9.5px; font-weight: 800; color: var(--t3); }
+  .tb span svg { width: 19px; height: 19px; }
+  .tb span.on { color: var(--navy); }
+  .vf { position: absolute; left: 0; right: 0; bottom: 0; height: 76px; z-index: 9;
+        background: linear-gradient(180deg, rgba(242,244,247,0), var(--bg) 50%); pointer-events: none; }
+  .bp { height: 86px; }
+</style>
+<script>
+  // 탭바 · 아이콘 반복을 줄이기 위한 조립 (렌더 전 실행)
+  const ICN = {
+    home:'<path d="M3 10.5L12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/>',
+    pin:'<path d="M12 21s-7-5.6-7-11a7 7 0 0 1 14 0c0 5.4-7 11-7 11z"/><circle cx="12" cy="10" r="2.6"/>',
+    wr:'<path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.8-3.8a6 6 0 0 1-8 8l-6.9 6.9a2.1 2.1 0 0 1-3-3l6.9-6.9a6 6 0 0 1 8-8l-3.8 3.8z"/>',
+    spk:'<path d="M3 11v2a1 1 0 0 0 1 1h2l5 4V6l-5 4H4a1 1 0 0 0-1 1z"/><path d="M15 9a4 4 0 0 1 0 6"/>',
+    me:'<circle cx="12" cy="8" r="4"/><path d="M4 20c0-3.3 3.6-5 8-5s8 1.7 8 5"/>',
+    cal:'<rect x="3" y="5" width="18" height="16" rx="2.5"/><path d="M8 3v4M16 3v4M3 10h18"/>',
+    car:'<path d="M5 16.5h14M6.5 16.5V13l1.7-4.2A2 2 0 0 1 10 7.5h4a2 2 0 0 1 1.8 1.3L17.5 13v3.5"/><circle cx="8.5" cy="16.5" r="1.4"/><circle cx="15.5" cy="16.5" r="1.4"/>',
+    doc:'<path d="M6 3h9l4 4v14H6z"/><path d="M9 12h7M9 16h5"/>',
+    chat:'<path d="M20 15a3 3 0 0 1-3 3H8l-4 3V6a3 3 0 0 1 3-3h10a3 3 0 0 1 3 3z"/>',
+    ph:'<path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a1 1 0 0 1-1 1A16 16 0 0 1 4 5a1 1 0 0 1 1-1z"/>',
+    q:'<circle cx="12" cy="12" r="9"/><path d="M9.6 9.5a2.5 2.5 0 1 1 3.4 2.3c-.6.2-1 .7-1 1.4v.3"/>',
+    bell:'<path d="M18 15V10a6 6 0 0 0-12 0v5l-1.5 3h15z"/><path d="M10 21h4"/>',
+    clock:'<circle cx="12" cy="12" r="9"/><path d="M12 7.5V12l3 2"/>',
+    chev:'<path d="M9 5l7 7-7 7"/>',
+    box:'<path d="M3 8l9-5 9 5v8l-9 5-9-5z"/><path d="M3 8l9 5 9-5"/>',
+    lock:'<rect x="4" y="10" width="16" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/>',
+    img:'<rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="12" cy="12" r="3"/>',
+    ck:'<path d="M5 13l4 4L19 7"/>',
+    won:'<path d="M4 8l3 8 3-8 2.5 8L18 8"/><path d="M3 12h18"/>'
+  };
+  function sv(n, w) { return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${w||1.9}" stroke-linecap="round" stroke-linejoin="round">${ICN[n]}</svg>`; }
+  function tabbar(active) {
+    const t = [['home','소개'],['pin','매장안내'],['wr','정비사례'],['spk','게시판'],['me','마이']];
+    return `<div class="tb">${t.map(([k,l]) => `<span class="${k===active?'on':''}">${sv(k, k===active?2.1:1.9)}${l}</span>`).join('')}</div>`;
+  }
+  function mi(icon, label, val, cls) {
+    return `<a class="mi"><span class="ic">${sv(icon)}</span><b>${label}</b><span class="v ${cls||''}">${val||''}</span><span class="cv">${sv('chev',2.8)}</span></a>`;
+  }
+  document.addEventListener('DOMContentLoaded', () => {
+    document.querySelectorAll('[data-tab]').forEach(el => el.outerHTML = tabbar(el.dataset.tab));
+    document.querySelectorAll('[data-mi]').forEach(el => {
+      const [i,l,v,c] = el.dataset.mi.split('|');
+      el.outerHTML = mi(i,l,v,c);
+    });
+    document.querySelectorAll('[data-ic]').forEach(el => {
+      const [n,w] = el.dataset.ic.split('|');
+      el.innerHTML = sv(n, w);
+    });
+  });
+</script>
+
+<div class="wrap">
+  <h1 class="top">전체 화면 시안 — 2단 카드 스타일 적용</h1>
+  <p class="lead">확정하신 <b>A. 2단 카드</b> 스타일을 앱 전체에 적용했습니다. 고객 화면 8개 + 관리자 화면 6개, 전부입니다.</p>
+  <div class="sys">
+    <b>공통 규칙</b> —
+    진한 카드 <span class="kk">네이비 그라데이션 + 20px 라운딩</span> 은 “지금 중요한 것” 하나에만 ·
+    흰 카드 <span class="kk">16~18px + 은은한 그림자</span> 는 목록과 정보 ·
+    주 버튼 <span class="kk">네이비 + 아래 노란 두께</span> ·
+    상태 배지 <span class="kk">양호=초록 / 점검=노랑 / 교체·미결제=빨강</span> ·
+    떠 있는 알약 탭바 · <b>금색 미사용</b> · PC 화면과 모바일 소개 첫 화면은 그대로.
+  </div>
+
+  <!-- ============================================================
+       고객 화면
+       ============================================================ -->
+  <h2 class="sec">고객 화면</h2>
+  <p class="secd">로그인한 고객이 보는 화면입니다.</p>
+
+  <div class="row">
+
+    <!-- 1. 마이페이지 -->
+    <div class="it">
+      <div class="cp"><b>① 마이페이지 (확정본)</b><i>2단 카드 + 메뉴 4묶음</i></div>
+      <div class="phone">
+        <div class="sbar"><span>7:02</span><span>5G ▮</span></div>
+        <div class="scr">
+          <div class="greet"><h2>남미희님, 안녕하세요</h2><p>오늘 <span class="kw">비 예보</span>가 있어요. 와이퍼 상태 봐주세요.</p></div>
+          <div class="c2">
+            <div class="up">
+              <div class="l1"><span class="pl">141오 7116</span><span class="bdg y">작업중</span></div>
+              <h3>BMW X3</h3>
+              <p class="sv">오일필터 하우징 가스켓 교환 · 안산점</p>
+              <div class="prog"><span><em>66<i>%</i></em></span><s>검수까지 약 2시간</s></div>
+              <div class="bar"><u style="width:66%"></u></div>
+              <div class="stg"><span class="done">접수</span><span class="done">진단</span><span class="now">작업</span><span>검수</span><span>출고</span></div>
+            </div>
+            <div class="dn">
+              <span class="ic" data-ic="cal|2"></span><b>다음 예약</b><strong>8월 5일 (화) 오후 2:00</strong><span class="cv" data-ic="chev|2.8"></span>
+            </div>
+          </div>
+          <p class="glabel">내 차</p>
+          <div class="group">
+            <a data-mi="car|내 차 관리|타이어 교체 권장|warn"></a>
+            <a data-mi="doc|정비 이력|8건"></a>
+            <a data-mi="chat|공업사에 한마디|<i class='dt'></i>답변 1|acc"></a>
+          </div>
+          <p class="glabel">예약</p>
+          <div class="group">
+            <a data-mi="cal|정비 예약하기|"></a>
+            <a data-mi="clock|예약 내역|다음 8월 5일"></a>
+          </div>
+          <p class="glabel">고객센터</p>
+          <div class="group">
+            <a data-mi="ph|전화 · 채팅 문의|<i class='dt'></i>답변 1|acc"></a>
+            <a data-mi="q|자주 묻는 질문|"></a>
+          </div>
+          <div class="bp"></div>
+        </div>
+        <div class="vf"></div><div data-tab="me"></div>
+      </div>
+    </div>
+
+    <!-- 2. 정비 예약 -->
+    <div class="it">
+      <div class="cp"><b>② 정비 예약</b><i>지점 → 날짜 → 시간 · 하단 버튼 고정</i></div>
+      <div class="phone">
+        <div class="sbar"><span>7:02</span><span>5G ▮</span></div>
+        <div class="scr">
+          <div class="apphd"><span class="bk" data-ic="chev|2.4" style="transform:scaleX(-1)"></span><b>정비 예약</b></div>
+          <p class="glabel">지점 선택</p>
+          <div class="chips"><span class="on">안산점</span><span>새솔점</span><span>부천점</span></div>
+          <p class="glabel">날짜 선택</p>
+          <div class="card" style="padding:12px 12px 14px">
+            <div class="calhd"><i>‹</i><b>2026. 08</b><i>›</i></div>
+            <div class="cal">
+              <span class="dw su">일</span><span class="dw">월</span><span class="dw">화</span><span class="dw">수</span><span class="dw">목</span><span class="dw">금</span><span class="dw">토</span>
+              <span class="d off">26</span><span class="d off">27</span><span class="d off">28</span><span class="d off">29</span><span class="d off">30</span><span class="d off">31</span><span class="d">1</span>
+              <span class="d off">2</span><span class="d">3</span><span class="d">4</span><span class="d sel">5<i class="dt"></i></span><span class="d">6</span><span class="d">7</span><span class="d">8</span>
+              <span class="d off">9</span><span class="d">10</span><span class="d">11</span><span class="d">12</span><span class="d">13</span><span class="d">14</span><span class="d">15</span>
+            </div>
+          </div>
+          <p class="glabel">시간 선택</p>
+          <div class="slots">
+            <span class="no">09:00</span><span>10:00</span><span>11:00</span><span class="no">13:00</span>
+            <span class="on">14:00</span><span>15:00</span><span>16:00</span><span>17:00</span>
+          </div>
+          <p class="glabel">정비 항목</p>
+          <div class="chips" style="flex-wrap:wrap"><span class="on">정기점검</span><span>엔진오일</span><span>타이어</span></div>
+        </div>
+        <div class="fixcta"><button class="btn pri">8월 5일 오후 2:00 예약하기</button></div>
+        <div class="vf"></div><div data-tab="me"></div>
+      </div>
+    </div>
+
+    <!-- 3. 예약 완료 -->
+    <div class="it">
+      <div class="cp"><b>③ 예약 완료</b><i>확인 화면 · 예약 정보 요약</i></div>
+      <div class="phone">
+        <div class="sbar"><span>7:02</span><span>5G ▮</span></div>
+        <div class="scr">
+          <div class="done1">
+            <span class="ck" data-ic="ck|3.2"></span>
+            <h3>예약이 완료됐어요</h3>
+            <p>예약 하루 전에 알림으로 알려드려요.<br>변경은 마이 → 예약 내역에서 가능합니다.</p>
+            <div class="kv">
+              <div class="k"><s>차량</s><b>BMW X3 · 141오 7116</b></div>
+              <div class="k"><s>지점</s><b>안산점</b></div>
+              <div class="k"><s>일시</s><b>8월 5일 (화) 오후 2:00</b></div>
+              <div class="k"><s>항목</s><b>정기점검</b></div>
+              <div class="k"><s>예상 시간</s><b>약 2시간</b></div>
+            </div>
+            <div class="two" style="margin-top:16px">
+              <button class="btn line">예약 내역</button>
+              <button class="btn pri" style="min-height:42px;font-size:13px;box-shadow:none">확인</button>
+            </div>
+          </div>
+        </div>
+        <div class="vf"></div><div data-tab="me"></div>
+      </div>
+    </div>
+
+    <!-- 4. 정비사례 -->
+    <div class="it">
+      <div class="cp"><b>④ 정비사례</b><i>브랜드 칩 + 2열 카드</i></div>
+      <div class="phone">
+        <div class="sbar"><span>7:02</span><span>5G ▮</span></div>
+        <div class="scr">
+          <div class="greet" style="padding-bottom:2px"><h2>프로모터스의 작업 기록</h2><p>수입차 전문 · 실제 정비사례 1,240건</p></div>
+          <div class="chips" style="margin-top:14px"><span class="on">전체</span><span>BMW</span><span>벤츠</span><span>아우디</span><span>포르쉐</span></div>
+          <div class="g2" style="margin-top:14px">
+            <div class="pc"><div class="im"><span class="br">BMW</span><span data-ic="car|1.5"></span></div><div class="bd"><b>X3 오일필터<br>하우징 가스켓</b><s>안산점 · 07.24</s></div></div>
+            <div class="pc"><div class="im"><span class="br">AUDI</span><span data-ic="car|1.5"></span></div><div class="bd"><b>Q5 미션오일<br>교환 작업</b><s>새솔점 · 07.22</s></div></div>
+            <div class="pc"><div class="im"><span class="br">BENZ</span><span data-ic="car|1.5"></span></div><div class="bd"><b>E300 브레이크<br>패드 교환</b><s>부천점 · 07.20</s></div></div>
+            <div class="pc"><div class="im"><span class="br">PORSCHE</span><span data-ic="car|1.5"></span></div><div class="bd"><b>카이엔 냉각수<br>라인 점검</b><s>안산점 · 07.18</s></div></div>
+          </div>
+        </div>
+        <div class="vf"></div><div data-tab="wr"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="row">
+
+    <!-- 5. 정비사례 상세 -->
+    <div class="it">
+      <div class="cp"><b>⑤ 정비사례 상세</b><i>사진 · 본문 · 하단 버튼 2개</i></div>
+      <div class="phone">
+        <div class="sbar"><span>7:02</span><span>5G ▮</span></div>
+        <div class="scr">
+          <div class="apphd"><span class="bk" data-ic="chev|2.4" style="transform:scaleX(-1)"></span><span class="rt">공유</span></div>
+          <div class="card" style="overflow:hidden">
+            <div style="aspect-ratio:4/3;background:linear-gradient(150deg,#2a3268,#1e2464 55%,#141939);display:grid;place-items:center;color:rgba(255,255,255,.3)"><span data-ic="img|1.5"></span></div>
+            <div style="padding:14px 15px 16px">
+              <div style="display:flex;align-items:center;gap:7px"><span class="bdg n">BMW</span><span style="font-size:11.5px;font-weight:800;color:var(--t3)">안산점 · 2026.07.24</span></div>
+              <b style="display:block;margin-top:11px;font-size:17px;font-weight:900;line-height:1.35">X3 · 오일필터 하우징 가스켓 교환</b>
+              <p style="margin-top:10px;font-size:12.5px;font-weight:600;color:var(--t2);line-height:1.65">차량 하부에 오일이 맺히고 엔진룸에서 누유 흔적이 확인되어 점검을 진행했습니다. 진단 결과 가스켓 노후로 엔진오일이 누유되고 있었으며, 관련 부품을 탈거하여 교환했습니다.</p>
+              <div class="two" style="margin-top:14px"><button class="btn line">블로그에서 보기</button><button class="btn sub">닫기</button></div>
+            </div>
+          </div>
+        </div>
+        <div class="vf"></div><div data-tab="wr"></div>
+      </div>
+    </div>
+
+    <!-- 6. 오시는길 -->
+    <div class="it">
+      <div class="cp"><b>⑥ 오시는길</b><i>지점 카드 · 전화/지도 버튼</i></div>
+      <div class="phone">
+        <div class="sbar"><span>7:02</span><span>5G ▮</span></div>
+        <div class="scr">
+          <div class="greet" style="padding-bottom:2px"><h2>프로모터스 지점 안내</h2><p>수입차 전문 정비센터 3개 지점</p></div>
+          <div style="margin-top:14px">
+            <div class="br1">
+              <div class="im">매장 사진</div>
+              <div class="bd">
+                <div class="t"><b>프로모터스 안산점</b><span class="bdg ok">영업중</span></div>
+                <span class="tel">031-831-9738</span>
+                <span class="ad">경기 안산시 단원구 ○○로 123<br>평일 09:00–18:00 · 토 09:00–15:00</span>
+                <div class="two"><button class="btn sub">전화</button><button class="btn line">지도 보기</button></div>
+              </div>
+            </div>
+            <div class="br1">
+              <div class="im">매장 사진</div>
+              <div class="bd">
+                <div class="t"><b>프로모터스 새솔점</b><span class="bdg ok">영업중</span></div>
+                <span class="tel">031-000-0000</span>
+                <span class="ad">경기 화성시 새솔동 ○○로 45</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="vf"></div><div data-tab="pin"></div>
+      </div>
+    </div>
+
+    <!-- 7. 공지사항 -->
+    <div class="it">
+      <div class="cp"><b>⑦ 공지사항 (게시판)</b><i>밀도 리스트 · 고정 공지 위</i></div>
+      <div class="phone">
+        <div class="sbar"><span>7:02</span><span>5G ▮</span></div>
+        <div class="scr">
+          <div class="greet" style="padding-bottom:2px"><h2>프로모터스 소식</h2><p>공지 · 이벤트 · 안내</p></div>
+          <div class="c2" style="border-radius:16px">
+            <div class="up" style="padding:15px 16px">
+              <div class="l1"><span class="bdg y">필독</span><span style="font-size:11px;font-weight:800;color:rgba(255,255,255,.6)">2026.07.20</span></div>
+              <h3 style="font-size:17px;margin-top:10px">여름 휴가 기간 운영 안내</h3>
+              <p class="sv">8월 3일(월) ~ 8월 5일(수) 전 지점 휴무입니다.</p>
+            </div>
+          </div>
+          <div class="group" style="margin-top:14px">
+            <div class="lr"><span class="tx"><b>에어컨 점검 이벤트</b><s>냉매 충전 20% 할인 · 8월 한정</s></span><span class="rt">07.18</span></div>
+            <div class="lr"><span class="tx"><b>부천점 오픈 안내</b><s>3호점이 새롭게 문을 열었습니다</s></span><span class="rt">07.10</span></div>
+            <div class="lr"><span class="tx"><b>정비 보증 정책 변경</b><s>부품 보증 기간이 12개월로 확대</s></span><span class="rt">06.28</span></div>
+            <div class="lr"><span class="tx"><b>예약 시스템 개선 안내</b><s>앱에서 실시간 예약이 가능해졌어요</s></span><span class="rt">06.15</span></div>
+            <div class="lr"><span class="tx"><b>장마철 차량 관리 팁</b><s>와이퍼 · 타이어 점검하세요</s></span><span class="rt">06.02</span></div>
+          </div>
+        </div>
+        <div class="vf"></div><div data-tab="spk"></div>
+      </div>
+    </div>
+
+    <!-- 8. 로그인 -->
+    <div class="it">
+      <div class="cp"><b>⑧ 로그인</b><i>간단한 폼 · 카카오/네이버</i></div>
+      <div class="phone">
+        <div class="sbar"><span>7:02</span><span>5G ▮</span></div>
+        <div class="scr">
+          <div class="apphd"><span class="bk" data-ic="chev|2.4" style="transform:scaleX(-1)"></span></div>
+          <div class="lg">
+            <div class="lo">PRO<em>MOTORS</em></div>
+            <p>수입차 전문 정비센터</p>
+          </div>
+          <div class="fld">
+            <input value="아이디 또는 휴대폰번호" readonly>
+            <input value="비밀번호" readonly>
+          </div>
+          <button class="btn pri" style="margin-top:14px">로그인</button>
+          <div class="lgl"><b>회원가입</b><i>|</i><span>아이디 찾기</span><i>|</i><span>비밀번호 재설정</span></div>
+          <p style="margin-top:22px;text-align:center;font-size:11px;font-weight:800;color:var(--t3)">또는</p>
+          <div style="margin-top:12px;display:grid;gap:8px">
+            <button class="btn sub" style="min-height:46px;background:#fee500;color:#3c1e1e">카카오로 시작하기</button>
+            <button class="btn sub" style="min-height:46px;background:#03c75a;color:#fff">네이버로 시작하기</button>
+          </div>
+        </div>
+        <div class="vf"></div><div data-tab="me"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================================
+       관리자 화면
+       ============================================================ -->
+  <h2 class="sec">관리자 화면</h2>
+  <p class="secd">사장님·직원이 보는 화면입니다. 같은 스타일이지만 숫자와 목록이 중심입니다.</p>
+
+  <div class="row">
+
+    <!-- 9. 관리 홈 -->
+    <div class="it">
+      <div class="cp"><b>⑨ 관리 홈 (설정)</b><i>오늘 숫자 + 관리 메뉴</i></div>
+      <div class="phone">
+        <div class="sbar"><span>7:02</span><span>5G ▮</span></div>
+        <div class="scr">
+          <div class="greet"><h2>안산점 관리자님</h2><p>오늘 예약 <span class="kw">3건</span> · 작업중 <span class="kw">1대</span></p></div>
+          <div class="c2">
+            <div class="up">
+              <div class="l1"><span class="bdg y">오늘</span><span style="font-size:11px;font-weight:800;color:rgba(255,255,255,.6)">7월 24일 (금)</span></div>
+              <div style="margin-top:14px;display:grid;grid-template-columns:repeat(3,1fr);gap:10px">
+                <div><s style="text-decoration:none;display:block;font-size:10.5px;font-weight:900;color:rgba(255,255,255,.6)">예약</s><em style="font-style:normal;display:block;margin-top:5px;color:#fff;font-size:26px;font-weight:900;letter-spacing:-1.2px">3</em></div>
+                <div><s style="text-decoration:none;display:block;font-size:10.5px;font-weight:900;color:rgba(255,255,255,.6)">작업중</s><em style="font-style:normal;display:block;margin-top:5px;color:var(--yellow);font-size:26px;font-weight:900;letter-spacing:-1.2px">1</em></div>
+                <div><s style="text-decoration:none;display:block;font-size:10.5px;font-weight:900;color:rgba(255,255,255,.6)">미결제</s><em style="font-style:normal;display:block;margin-top:5px;color:#fff;font-size:26px;font-weight:900;letter-spacing:-1.2px">2</em></div>
+              </div>
+            </div>
+            <div class="dn"><span class="ic" data-ic="won|2"></span><b>이번 달 매출</b><strong>4,280만원</strong><span class="cv" data-ic="chev|2.8"></span></div>
+          </div>
+          <p class="glabel">운영</p>
+          <div class="group">
+            <a data-mi="cal|예약관리|오늘 3건|acc"></a>
+            <a data-mi="wr|작업현황|진행 1대|acc"></a>
+            <a data-mi="ck|작업승인|대기 2건|warn"></a>
+          </div>
+          <p class="glabel">고객 · 상품</p>
+          <div class="group">
+            <a data-mi="me|고객관리|128명"></a>
+            <a data-mi="box|상품관리|12개"></a>
+            <a data-mi="chat|고객문의|<i class='dt'></i>3"></a>
+          </div>
+          <p class="glabel">설정</p>
+          <div class="group"><a data-mi="lock|보안 · 작업기록|"></a></div>
+          <div class="bp"></div>
+        </div>
+        <div class="vf"></div><div data-tab="me"></div>
+      </div>
+    </div>
+
+    <!-- 10. 예약관리 -->
+    <div class="it">
+      <div class="cp"><b>⑩ 예약관리</b><i>달력 + 시간대별 예약</i></div>
+      <div class="phone">
+        <div class="sbar"><span>7:02</span><span>5G ▮</span></div>
+        <div class="scr">
+          <div class="apphd"><span class="bk" data-ic="chev|2.4" style="transform:scaleX(-1)"></span><b>예약관리</b><span class="rt acc">+ 추가</span></div>
+          <div class="chips"><span class="on">안산점</span><span>새솔점</span><span>부천점</span></div>
+          <div class="card" style="margin-top:12px;padding:12px 12px 14px">
+            <div class="calhd"><i>‹</i><b>2026. 07</b><i>›</i></div>
+            <div class="cal">
+              <span class="dw su">일</span><span class="dw">월</span><span class="dw">화</span><span class="dw">수</span><span class="dw">목</span><span class="dw">금</span><span class="dw">토</span>
+              <span class="d off">19</span><span class="d">20</span><span class="d">21<i class="dt"></i></span><span class="d">22<i class="dt"></i></span><span class="d">23</span><span class="d sel">24<i class="dt"></i></span><span class="d">25</span>
+              <span class="d off">26</span><span class="d">27</span><span class="d">28</span><span class="d">29</span><span class="d">30</span><span class="d">31</span><span class="d off">1</span>
+            </div>
+          </div>
+          <p class="glabel">7월 24일 (금) · 3건</p>
+          <div class="group">
+            <div class="lr"><span class="tx"><b><i class="dt"></i>남미희</b><s>아우디 Q5 · 정기점검</s></span><span class="rt"><em>14:00</em>2시간</span></div>
+            <div class="lr"><span class="tx"><b><i class="dt"></i>박준영</b><s>포르쉐 카이엔 · 엔진오일</s></span><span class="rt"><em>15:30</em>1시간</span></div>
+            <div class="lr"><span class="tx"><b><i class="dt"></i>최은지</b><s>벤츠 E300 · 브레이크</s></span><span class="rt"><em>17:00</em>2시간</span></div>
+          </div>
+          <p class="glabel">비어있는 시간</p>
+          <div class="slots"><span>09:00</span><span>10:00</span><span>11:00</span><span>13:00</span><span class="no">14:00</span><span class="no">15:00</span><span>16:00</span><span class="no">17:00</span></div>
+        </div>
+        <div class="vf"></div><div data-tab="me"></div>
+      </div>
+    </div>
+
+    <!-- 11. 작업현황 -->
+    <div class="it">
+      <div class="cp"><b>⑪ 작업현황</b><i>오늘 차량 · 단계 이동</i></div>
+      <div class="phone">
+        <div class="sbar"><span>7:02</span><span>5G ▮</span></div>
+        <div class="scr">
+          <div class="apphd"><span class="bk" data-ic="chev|2.4" style="transform:scaleX(-1)"></span><b>작업현황</b><span class="rt">안산점</span></div>
+          <div class="c2" style="margin-top:4px">
+            <div class="up">
+              <div class="l1"><span class="pl">141오 7116</span><span class="bdg y">작업중</span></div>
+              <h3 style="font-size:18px">BMW X3 · 김동우</h3>
+              <p class="sv">오일필터 가스켓 · 담당 김민수</p>
+              <div class="prog"><span><em>66<i>%</i></em></span><s>사진 12장 등록</s></div>
+              <div class="bar"><u style="width:66%"></u></div>
+              <div class="stg"><span class="done">접수</span><span class="done">진단</span><span class="now">작업</span><span>검수</span><span>출고</span></div>
+            </div>
+            <div class="dn"><span class="ic" data-ic="img|2"></span><b>다음 단계</b><strong>검수로 넘기기</strong><span class="cv" data-ic="chev|2.8"></span></div>
+          </div>
+          <p class="glabel">오늘 입고 예정 2대</p>
+          <div class="wk">
+            <div class="t"><span class="pl dk">88주 2019</span><span class="bdg gy">입고 전</span></div>
+            <b>포르쉐 카이엔 · 박준영</b>
+            <s>15:30 예약 · 엔진오일 · 1시간</s>
+            <div class="two" style="margin-top:11px"><button class="btn sub">전화</button><button class="btn line">입고 접수</button></div>
+          </div>
+          <div class="wk">
+            <div class="t"><span class="pl dk">07가 1155</span><span class="bdg gy">입고 전</span></div>
+            <b>벤츠 E300 · 최은지</b>
+            <s>17:00 예약 · 브레이크 패드 · 2시간</s>
+          </div>
+        </div>
+        <div class="vf"></div><div data-tab="me"></div>
+      </div>
+    </div>
+
+    <!-- 12. 고객관리 -->
+    <div class="it">
+      <div class="cp"><b>⑫ 고객관리 (확정본)</b><i>밀도 리스트 · 9명 한눈에</i></div>
+      <div class="phone">
+        <div class="sbar"><span>7:02</span><span>5G ▮</span></div>
+        <div class="scr">
+          <div class="apphd"><span class="bk" data-ic="chev|2.4" style="transform:scaleX(-1)"></span><b>고객관리</b><span class="rt">128명</span></div>
+          <div style="display:flex;align-items:center;gap:8px;border:1px solid #e6e9ee;border-radius:11px;padding:11px 13px;font-size:13px;font-weight:600;color:var(--t3)">
+            <span data-ic="q|2.2" style="display:grid;width:16px;height:16px"></span>이름 · 번호판 · 전화번호
+          </div>
+          <div style="display:flex;gap:18px;padding:14px 4px 0">
+            <span style="font-size:13.5px;font-weight:800;color:var(--navy);border-bottom:2px solid var(--navy);padding-bottom:9px">전체 <sup style="font-size:10px;color:var(--yellow-d)">128</sup></span>
+            <span style="font-size:13.5px;font-weight:800;color:var(--t3);padding-bottom:9px">오늘 <sup style="font-size:10px">3</sup></span>
+            <span style="font-size:13.5px;font-weight:800;color:var(--t3);padding-bottom:9px">미결제 <sup style="font-size:10px">2</sup></span>
+          </div>
+          <div style="height:1px;background:var(--ln)"></div>
+          <p class="glabel" style="margin-top:16px">오늘 예약</p>
+          <div class="group">
+            <div class="lr"><span class="tx"><b><i class="dt"></i>남미희</b><s>아우디 Q5 · 291마6511</s></span><span class="rt">14:00</span></div>
+            <div class="lr"><span class="tx"><b><i class="dt"></i>박준영</b><s>포르쉐 카이엔 · 88주2019</s></span><span class="rt">15:30</span></div>
+            <div class="lr"><span class="tx"><b><i class="dt"></i>최은지</b><s>벤츠 E300 · 07가1155</s></span><span class="rt">17:00</span></div>
+          </div>
+          <p class="glabel">이번 주 방문</p>
+          <div class="group">
+            <div class="lr"><span class="tx"><b>김동우</b><s>BMW X4 · 141오7116</s></span><span class="rt">07.22</span></div>
+            <div class="lr"><span class="tx"><b>이승현</b><s>에스컬레이드 · 130라4609</s></span><span class="rt">07.21</span></div>
+            <div class="lr"><span class="tx"><b>정하늘</b><s>랜드로버 · 55다903</s></span><span class="rt">07.20</span></div>
+            <div class="lr"><span class="tx"><b>한지민</b><s>미니 쿠퍼 S · 12모4488</s></span><span class="rt">07.20</span></div>
+          </div>
+        </div>
+        <div class="vf"></div><div data-tab="me"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="row">
+
+    <!-- 13. 고객문의 -->
+    <div class="it">
+      <div class="cp"><b>⑬ 고객문의</b><i>대화 목록 · 안읽음 배지</i></div>
+      <div class="phone">
+        <div class="sbar"><span>7:02</span><span>5G ▮</span></div>
+        <div class="scr">
+          <div class="apphd"><span class="bk" data-ic="chev|2.4" style="transform:scaleX(-1)"></span><b>고객문의</b><span class="rt acc">3건 대기</span></div>
+          <div class="group">
+            <div class="cl un"><span class="av">남</span><span class="tx"><b>남미희</b><s>실내 세차도 같이 부탁드려요</s></span><span class="rt"><time>오후 2:05</time><em>2</em></span></div>
+            <div class="cl un"><span class="av">박</span><span class="tx"><b>박준영</b><s>오늘 몇 시까지 가면 되나요?</s></span><span class="rt"><time>오후 1:12</time><em>1</em></span></div>
+            <div class="cl"><span class="av">최</span><span class="tx"><b>최은지</b><s>네 감사합니다!</s></span><span class="rt"><time>오전 11:40</time></span></div>
+            <div class="cl"><span class="av">김</span><span class="tx"><b>김동우</b><s>보증 기간이 얼마나 되나요?</s></span><span class="rt"><time>어제</time></span></div>
+            <div class="cl"><span class="av">이</span><span class="tx"><b>이승현</b><s>견적서 확인했습니다</s></span><span class="rt"><time>07.22</time></span></div>
+          </div>
+        </div>
+        <div class="vf"></div><div data-tab="me"></div>
+      </div>
+    </div>
+
+    <!-- 14. 내 차 관리 -->
+    <div class="it">
+      <div class="cp"><b>⑭ 내 차 관리 (고객)</b><i>급한 것부터 위로</i></div>
+      <div class="phone">
+        <div class="sbar"><span>7:02</span><span>5G ▮</span></div>
+        <div class="scr">
+          <div class="apphd"><span class="bk" data-ic="chev|2.4" style="transform:scaleX(-1)"></span><b>내 차 관리</b></div>
+          <div class="card" style="padding:13px 14px;display:flex;align-items:center;gap:8px">
+            <span class="pl dk">141오 7116</span><b style="font-size:14.5px;font-weight:900">BMW X3</b>
+            <s style="text-decoration:none;margin-left:auto;font-size:11.5px;font-weight:800;color:var(--t3);font-family:var(--mono)">68,200 km</s>
+          </div>
+          <div class="card" style="margin-top:11px;padding:2px 15px">
+            <div style="padding:13px 0">
+              <div style="display:flex;align-items:center"><b style="font-size:13.5px;font-weight:900">타이어</b><span class="bdg bad" style="margin-left:auto">교체 권장</span></div>
+              <div style="margin-top:6px;display:flex;justify-content:space-between;font-size:11px;font-weight:700;color:var(--t3)"><span>2024.03.15 · 2년 4개월</span><em style="font-style:normal;font-family:var(--mono)">42,000km</em></div>
+              <div style="height:5px;border-radius:999px;background:var(--ln);margin-top:7px;overflow:hidden"><u style="display:block;height:100%;width:94%;background:var(--red);border-radius:999px"></u></div>
+            </div>
+            <div style="padding:13px 0;border-top:1px solid var(--ln2)">
+              <div style="display:flex;align-items:center"><b style="font-size:13.5px;font-weight:900">에어컨 필터</b><span class="bdg warn" style="margin-left:auto">점검 필요</span></div>
+              <div style="margin-top:6px;display:flex;justify-content:space-between;font-size:11px;font-weight:700;color:var(--t3)"><span>2025.11.20 · 8개월</span><em style="font-style:normal;font-family:var(--mono)">9,400km</em></div>
+              <div style="height:5px;border-radius:999px;background:var(--ln);margin-top:7px;overflow:hidden"><u style="display:block;height:100%;width:80%;background:var(--amber);border-radius:999px"></u></div>
+            </div>
+            <div style="padding:13px 0;border-top:1px solid var(--ln2)">
+              <div style="display:flex;align-items:center"><b style="font-size:13.5px;font-weight:900">엔진오일</b><span class="bdg ok" style="margin-left:auto">양호</span></div>
+              <div style="margin-top:6px;display:flex;justify-content:space-between;font-size:11px;font-weight:700;color:var(--t3)"><span>2026.05.02 교체</span><em style="font-style:normal;font-family:var(--mono)">다음 1,800km</em></div>
+              <div style="height:5px;border-radius:999px;background:var(--ln);margin-top:7px;overflow:hidden"><u style="display:block;height:100%;width:72%;background:var(--green);border-radius:999px"></u></div>
+            </div>
+            <div style="padding:13px 0;border-top:1px solid var(--ln2)">
+              <div style="display:flex;align-items:center"><b style="font-size:13.5px;font-weight:900">브레이크 패드</b><span class="bdg ok" style="margin-left:auto">양호</span></div>
+              <div style="margin-top:6px;display:flex;justify-content:space-between;font-size:11px;font-weight:700;color:var(--t3)"><span>2026.05.02 교체</span><em style="font-style:normal;font-family:var(--mono)">잔량 7.2mm</em></div>
+              <div style="height:5px;border-radius:999px;background:var(--ln);margin-top:7px;overflow:hidden"><u style="display:block;height:100%;width:38%;background:var(--green);border-radius:999px"></u></div>
+            </div>
+          </div>
+          <div style="margin-top:11px;background:var(--yellow-soft);border:1px solid #ece0a6;border-radius:14px;padding:12px 14px">
+            <b style="font-size:12.5px;font-weight:900;color:#6b5300">다음 정비 추천</b>
+            <p style="margin-top:5px;font-size:11.5px;font-weight:700;color:#5c5a3f;line-height:1.5">타이어 4짝 + 에어컨 필터를 함께 하시면 공임이 절약됩니다.</p>
+          </div>
+          <button class="btn pri" style="margin-top:11px">이 항목으로 예약하기</button>
+        </div>
+        <div class="vf"></div><div data-tab="me"></div>
+      </div>
+    </div>
+
+    <!-- 15. 공업사에 한마디 -->
+    <div class="it">
+      <div class="cp"><b>⑮ 공업사에 한마디</b><i>대화 · 입력창 고정</i></div>
+      <div class="phone">
+        <div class="sbar"><span>7:02</span><span>5G ▮</span></div>
+        <div class="scr">
+          <div class="apphd"><span class="bk" data-ic="chev|2.4" style="transform:scaleX(-1)"></span><b>공업사에 한마디</b></div>
+          <p style="text-align:center;font-size:10.5px;font-weight:800;color:var(--t3);margin:6px 0 12px">2026년 7월 20일</p>
+          <div style="max-width:84%;margin-left:auto;margin-bottom:12px">
+            <div style="background:var(--navy);color:#fff;border-radius:15px;border-bottom-right-radius:5px;padding:11px 13px;font-size:12.5px;font-weight:600;line-height:1.55">브레이크 밟을 때 “끼익” 소리가 나요. 한번 봐주세요.</div>
+            <time style="display:block;margin-top:4px;text-align:right;font-size:10px;font-weight:800;color:var(--t3)">오후 9:14</time>
+          </div>
+          <div style="max-width:84%;margin-bottom:12px">
+            <div style="font-size:10.5px;font-weight:900;color:var(--navy);margin-bottom:4px">안산점</div>
+            <div style="background:#fff;border:1px solid var(--ln);border-radius:15px;border-bottom-left-radius:5px;padding:11px 13px;font-size:12.5px;font-weight:600;line-height:1.55">패드 잔량은 충분한데 이물질 가능성이 있어요. 입고 시 함께 점검하겠습니다.</div>
+            <time style="display:block;margin-top:4px;font-size:10px;font-weight:800;color:var(--t3)">오후 9:38</time>
+          </div>
+          <p style="text-align:center;font-size:10.5px;font-weight:800;color:var(--t3);margin:6px 0 12px">2026년 7월 24일</p>
+          <div style="max-width:84%;margin-left:auto;margin-bottom:12px">
+            <div style="background:var(--navy);color:#fff;border-radius:15px;border-bottom-right-radius:5px;padding:11px 13px;font-size:12.5px;font-weight:600;line-height:1.55">실내 세차도 같이 부탁드려요. 아이 카시트는 그대로 둬주세요.</div>
+            <time style="display:block;margin-top:4px;text-align:right;font-size:10px;font-weight:800;color:var(--t3)">오후 2:05</time>
+          </div>
+          <div style="max-width:84%">
+            <div style="font-size:10.5px;font-weight:900;color:var(--navy);margin-bottom:4px">안산점</div>
+            <div style="background:#fff;border:1px solid var(--ln);border-radius:15px;border-bottom-left-radius:5px;padding:11px 13px;font-size:12.5px;font-weight:600;line-height:1.55">네, 카시트는 그대로 두고 진행하겠습니다.</div>
+          </div>
+        </div>
+        <div style="position:absolute;left:16px;right:16px;bottom:80px;z-index:10;display:grid;grid-template-columns:1fr auto;gap:7px">
+          <span style="background:#fff;border:1px solid #e2e6ec;border-radius:999px;padding:12px 15px;font-size:12.5px;font-weight:600;color:var(--t3)">요청사항을 남겨주세요</span>
+          <button style="border:none;background:var(--navy);color:var(--yellow);font-family:inherit;font-size:12.5px;font-weight:900;padding:0 17px;border-radius:999px">보내기</button>
+        </div>
+        <div class="vf"></div><div data-tab="me"></div>
+      </div>
+    </div>
+
+    <!-- 16. 고객센터 -->
+    <div class="it">
+      <div class="cp"><b>⑯ 고객센터</b><i>영업중 표시 · 전화 크게</i></div>
+      <div class="phone">
+        <div class="sbar"><span>7:02</span><span>5G ▮</span></div>
+        <div class="scr">
+          <div class="apphd"><span class="bk" data-ic="chev|2.4" style="transform:scaleX(-1)"></span></div>
+          <div style="padding:4px 4px 12px">
+            <b style="font-size:20px;font-weight:900;color:var(--navy);letter-spacing:-.6px">무엇을 도와드릴까요?</b>
+            <p style="margin-top:6px;font-size:12.5px;font-weight:700;color:var(--t2)">지금은 <b style="color:var(--green)">영업중</b>이에요 · 18:00까지</p>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:9px">
+            <div class="card" style="padding:15px;background:var(--navy)">
+              <span style="width:34px;height:34px;border-radius:11px;background:rgba(255,255,255,.14);display:grid;place-items:center;color:var(--yellow)" data-ic="ph|1.9"></span>
+              <b style="display:block;margin-top:11px;font-size:13.5px;font-weight:900;color:#fff">전화 문의</b>
+              <s style="text-decoration:none;display:block;margin-top:3px;font-size:11px;font-weight:700;color:rgba(255,255,255,.6)">031-831-9738</s>
+            </div>
+            <div class="card" style="padding:15px">
+              <span style="width:34px;height:34px;border-radius:11px;background:var(--ln2);display:grid;place-items:center;color:var(--navy)" data-ic="chat|1.9"></span>
+              <b style="display:block;margin-top:11px;font-size:13.5px;font-weight:900">채팅 문의</b>
+              <s style="text-decoration:none;display:block;margin-top:3px;font-size:11px;font-weight:700;color:var(--t3)">답변 1건 · 즉시</s>
+            </div>
+          </div>
+          <div class="card" style="margin-top:11px;padding:13px 15px">
+            <div style="display:flex;justify-content:space-between;font-size:12.5px;font-weight:800;padding:5px 0"><s style="text-decoration:none;color:var(--t3)">평일</s><span>09:00 – 18:00</span></div>
+            <div style="display:flex;justify-content:space-between;font-size:12.5px;font-weight:800;padding:5px 0"><s style="text-decoration:none;color:var(--t3)">토요일</s><span>09:00 – 15:00</span></div>
+            <div style="display:flex;justify-content:space-between;font-size:12.5px;font-weight:800;padding:5px 0"><s style="text-decoration:none;color:var(--t3)">일요일 · 공휴일</s><em style="font-style:normal;color:var(--red)">휴무</em></div>
+          </div>
+          <div class="group" style="margin-top:11px">
+            <div class="lr"><span class="tx"><b style="font-size:13px">예약을 변경하고 싶어요</b></span><span class="cv" data-ic="chev|2.8" style="color:#ccd2db;display:grid;width:13px"></span></div>
+            <div class="lr"><span class="tx"><b style="font-size:13px">정비 보증 기간이 궁금해요</b></span><span class="cv" data-ic="chev|2.8" style="color:#ccd2db;display:grid;width:13px"></span></div>
+            <div class="lr"><span class="tx"><b style="font-size:13px">결제는 어떻게 하나요?</b></span><span class="cv" data-ic="chev|2.8" style="color:#ccd2db;display:grid;width:13px"></span></div>
+            <div class="lr"><span class="tx"><b style="font-size:13px">대차 서비스가 있나요?</b></span><span class="cv" data-ic="chev|2.8" style="color:#ccd2db;display:grid;width:13px"></span></div>
+          </div>
+        </div>
+        <div class="vf"></div><div data-tab="me"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="sys" style="margin-top:34px;border-left-color:var(--navy)">
+    <b>손대지 않는 화면</b> — PC 화면 전체(사선 시트·로고·정비예약·브랜드 로고)와 <b>모바일 소개 첫 화면</b>은 지금 그대로 유지합니다.
+    위 16개는 모두 <b>그 안쪽 화면들</b>입니다.
+  </div>
+</div>
