@@ -1,0 +1,520 @@
+<title>프로모터스 시안 3 — PC는 그대로, 모바일 내부 화면만 개편</title>
+<style>
+  :root {
+    --navy: #1e2464;
+    --yellow: #f5c400;
+    --gold: #c9a544;
+    --ink: #151b2e;
+    --blue: #2f6fe4;
+    --blue-soft: #eaf2ff;
+    --bg: #f4f6f9;
+    --t1: #111827;
+    --t2: #6b7280;
+    --t3: #9aa7b6;
+    --line: #eef1f5;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Noto Sans KR', sans-serif;
+    background: #d9dee6;
+    color: var(--t1);
+    padding: 40px 30px 60px;
+  }
+  .wrap { max-width: 1620px; margin: 0 auto; }
+
+  h1.top { font-size: 34px; font-weight: 900; color: var(--navy); letter-spacing: -1px; }
+  p.lead { margin-top: 10px; font-size: 16px; font-weight: 500; color: #4b5563; line-height: 1.65; }
+  .rule {
+    margin-top: 18px; padding: 18px 22px; background: #fff; border-radius: 14px;
+    border-left: 5px solid var(--yellow);
+    box-shadow: 0 2px 12px rgba(15,23,42,.07);
+    font-size: 15.5px; font-weight: 700; line-height: 1.8; color: #2b2f33;
+  }
+  .rule b { color: var(--navy); }
+  .rule .no { color: #0f7b4f; }
+  .rule .yes { color: var(--blue); }
+
+  /* 섹션 제목 */
+  .sec { margin-top: 40px; }
+  .sec > h2 {
+    font-size: 23px; font-weight: 900; color: var(--navy);
+    display: flex; align-items: center; gap: 12px;
+  }
+  .sec > h2 .stamp {
+    font-size: 12.5px; font-weight: 900; padding: 6px 13px; border-radius: 999px;
+  }
+  .stamp.keep { background: #e3f5ea; color: #0f7b4f; }
+  .stamp.change { background: var(--blue); color: #fff; }
+  .sec > p.d { margin-top: 8px; font-size: 14.5px; font-weight: 600; color: #5d6672; line-height: 1.6; }
+
+  /* ============ PC 프레임 ============ */
+  .pc {
+    margin-top: 18px;
+    width: 1060px;
+    height: 640px;
+    border-radius: 14px;
+    overflow: hidden;
+    position: relative;
+    display: flex;
+    box-shadow: 0 12px 34px rgba(15,23,42,.20);
+    background:
+      radial-gradient(120% 90% at 85% 10%, rgba(255,255,255,.7) 0%, transparent 45%),
+      linear-gradient(165deg, #dde1e7 0%, #cdd3db 45%, #c3cad3 100%);
+  }
+  .pc .sheet { position: absolute; inset: 0; z-index: 1; pointer-events: none; filter: drop-shadow(8px 0 18px rgba(30,36,100,.22)); }
+  .pc .sheet::before, .pc .sheet::after { content: ''; position: absolute; inset: 0; }
+  .pc .sheet::before {
+    background: linear-gradient(180deg, #ecd98f 0%, var(--gold) 45%, #a8862e 100%);
+    clip-path: polygon(0 0, 46% 0, 37% 100%, 0 100%);
+  }
+  .pc .sheet::after {
+    background:
+      linear-gradient(115deg, transparent 20%, rgba(255,255,255,.85) 26%, transparent 32%,
+        transparent 44%, rgba(200,205,214,.35) 50%, transparent 56%,
+        transparent 64%, rgba(255,255,255,.9) 72%, transparent 80%),
+      linear-gradient(115deg, #fff 0%, #f3f4f6 22%, #fff 40%, #e9ebef 58%, #f8f9fa 75%, #fff 100%);
+    clip-path: polygon(0 0, calc(46% - 5px) 0, calc(37% - 5px) 100%, 0 100%);
+  }
+  .pc .lp {
+    position: relative; z-index: 2; flex: 0 0 41.67%;
+    padding: 30px 44px 26px 34px;
+    display: flex; flex-direction: column; align-items: flex-start;
+  }
+  .pc .lp img.logo { display: block; width: 330px; height: auto; }
+  .pc .ybar { width: 48px; height: 6px; background: var(--yellow); border-radius: 3px; margin: 34px 0 18px 2px; }
+  .pc .lp h3 {
+    font-size: 84px; font-weight: 900; color: var(--navy);
+    letter-spacing: -2px; line-height: 1.05;
+    text-shadow: 3px 4px 6px rgba(30,36,100,.18);
+  }
+  .pc .lp p.desc { margin-top: 14px; font-size: 17px; font-weight: 500; color: #2b2f33; line-height: 1.5; }
+  .pc .lp .btn {
+    position: relative; margin-top: 20px;
+    display: flex; align-items: center; justify-content: center;
+    width: 100%; max-width: 380px;
+    padding: 19px 30px;
+    background: var(--navy); color: var(--yellow);
+    font-size: 24px; font-weight: 700; border-radius: 12px;
+    box-shadow: 0 6px 0 var(--yellow), 0 12px 24px rgba(30,36,100,.3);
+  }
+  .pc .lp .btn i { position: absolute; right: 18px; font-style: normal; font-size: 1.3em; line-height: 1; }
+  .pc .lp .brands { margin-top: auto; width: 100%; max-width: 380px; }
+  .pc .lp .brands img { display: block; width: 100%; height: auto; }
+
+  .pc .rp {
+    position: relative; z-index: 0; flex: 1;
+    display: flex; flex-direction: column;
+    padding: 20px 44px 18px 78px;
+  }
+  .pc .navrow { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-bottom: 24px; }
+  .pc .navrow ul { list-style: none; display: flex; gap: 8px; }
+  .pc .navrow li {
+    font-size: 14px; font-weight: 700; color: var(--navy);
+    padding: 8px 15px; border-bottom: 3px solid transparent; white-space: nowrap;
+  }
+  .pc .navrow li.on { border-bottom-color: var(--yellow); color: #10154a; }
+  .pc .navrow .auth {
+    border: 1.5px solid var(--navy); color: var(--navy);
+    font-size: 11.5px; font-weight: 700; padding: 6px 13px; border-radius: 8px; white-space: nowrap;
+  }
+  .pc .intro { text-align: center; }
+  .pc .intro h4 {
+    font-size: 48px; font-weight: 900; color: var(--navy);
+    letter-spacing: -1px; text-shadow: 2px 3px 5px rgba(30,36,100,.15);
+  }
+  .pc .intro .sub {
+    margin-top: 13px; display: flex; align-items: center; justify-content: center; gap: 16px;
+    font-size: 18px; font-weight: 500; color: #33373c;
+  }
+  .pc .intro .sub i { width: 62px; height: 2px; background: #6b7280; display: block; }
+  .pc .photo {
+    margin: 24px auto 0; width: 100%; aspect-ratio: 16/9;
+    border-radius: 4px 4px 0 0; overflow: hidden;
+    background: linear-gradient(140deg,#e3e8ef,#cbd3de);
+    display: grid; place-items: center; color: #93a0b0;
+    font-size: 14px; font-weight: 800;
+    box-shadow: 0 -8px 32px rgba(0,0,0,.12);
+  }
+
+  /* ============ 폰 프레임 ============ */
+  .phones { display: flex; gap: 24px; margin-top: 20px; flex-wrap: wrap; }
+  .item { width: 372px; }
+  .item > .cap { margin-bottom: 11px; display: flex; align-items: center; gap: 9px; flex-wrap: wrap; }
+  .item > .cap b { font-size: 15.5px; font-weight: 900; color: var(--navy); }
+  .item > .cap .stamp { font-size: 11.5px; font-weight: 900; padding: 5px 11px; border-radius: 999px; }
+  .item > .note { margin-top: 10px; font-size: 13px; font-weight: 700; line-height: 1.55; color: #5d6672; }
+
+  .phone {
+    position: relative; height: 748px; overflow: hidden;
+    border-radius: 30px; background: var(--bg);
+    box-shadow: 0 10px 30px rgba(15,23,42,.18);
+  }
+  .sbar { height: 28px; display: flex; align-items: center; justify-content: space-between; padding: 0 18px; font-size: 11px; font-weight: 800; }
+  .scr { padding: 0 20px; height: calc(100% - 28px); overflow: hidden; }
+
+  /* --- 모바일 소개(히어로) : 현재 그대로 --- */
+  .hero-m {
+    height: 100%;
+    background: linear-gradient(115deg, #fff 0%, #f3f4f6 30%, #fff 55%, #e9ebef 80%, #fff 100%);
+    border-bottom: 5px solid var(--gold);
+    padding: 16px 20px 20px;
+    display: flex; flex-direction: column; align-items: flex-start;
+  }
+  .hero-m img.logo { display: block; width: 100%; max-width: 320px; height: auto; }
+  .hero-m .ybar { width: 68px; height: 8px; background: var(--yellow); border-radius: 3px; margin: 16px 0 30px; }
+  .hero-m h3 { font-size: 66px; font-weight: 900; color: var(--navy); letter-spacing: -1px; line-height: .95; text-shadow: 3px 4px 6px rgba(30,36,100,.18); }
+  .hero-m p.desc { margin-top: 26px; max-width: 300px; font-size: 13.5px; font-weight: 500; color: #2b2f33; line-height: 1.35; word-break: keep-all; }
+  .hero-m .btn {
+    position: relative; margin-top: 26px; width: 100%;
+    display: flex; align-items: center; justify-content: center;
+    min-height: 60px; background: var(--navy); color: var(--yellow);
+    font-size: 22px; font-weight: 700; border-radius: 12px;
+    box-shadow: 0 6px 0 var(--yellow), 0 12px 24px rgba(30,36,100,.3);
+  }
+  .hero-m .btn i { position: absolute; right: 20px; font-style: normal; font-size: 1.3em; line-height: 1; }
+  .hero-m .brands { margin-top: 26px; width: 100%; }
+  .hero-m .brands img { display: block; width: 100%; height: auto; }
+  .hero-m .cue {
+    width: 16px; height: 16px; margin: auto auto 4px;
+    border-right: 1.5px solid rgba(30,36,100,.7);
+    border-bottom: 1.5px solid rgba(30,36,100,.7);
+    transform: rotate(45deg);
+  }
+
+  /* --- 정비사례 : 현재 그대로 --- */
+  .kicker {
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+    font-size: 17px; font-weight: 900; color: var(--navy);
+    margin: 8px 0 22px; white-space: nowrap;
+  }
+  .kicker i { flex: 1 1 28px; max-width: 44px; height: 4px; border-radius: 999px; background: #6b7280; display: block; }
+  .tabs2 { display: flex; gap: 8px; border-bottom: 2px solid #dfe3e8; margin-bottom: 16px; }
+  .tabs2 span { font-size: 15px; font-weight: 700; color: #8a94a0; padding: 10px 16px; border-bottom: 3px solid transparent; margin-bottom: -2px; }
+  .tabs2 span.on { color: var(--navy); border-bottom-color: var(--yellow); }
+  .bfilter { display: flex; gap: 7px; margin-bottom: 14px; overflow: hidden; }
+  .bfilter span {
+    border: 1px solid #d4dae1; background: #fff; color: #555f6b;
+    font-size: 12.5px; font-weight: 700; padding: 8px 11px; border-radius: 999px; white-space: nowrap;
+  }
+  .bfilter span.on { border-color: var(--navy); background: var(--navy); color: var(--yellow); }
+  .g2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .oldcard { background: #fff; border: 1px solid #e2e6ea; border-radius: 12px; overflow: hidden; }
+  .oldcard .im { aspect-ratio: 16/9; background: linear-gradient(135deg,#273261,#1e2464 55%,#161a4a); display: grid; place-items: center; color: rgba(255,255,255,.5); font-size: 11px; }
+  .oldcard .bd { padding: 11px 11px 13px; }
+  .oldcard .bd time { font-size: 11px; color: #8a94a0; font-weight: 700; }
+  .oldcard .bd b { display: block; margin-top: 6px; font-size: 13.5px; font-weight: 700; color: var(--navy); line-height: 1.35; }
+  .oldcard .bd s { text-decoration: none; display: block; margin-top: 6px; font-size: 11.5px; color: #555f6b; line-height: 1.45; }
+
+  /* --- 개편 화면 공통 (헤이딜러) --- */
+  .back { width: 40px; height: 40px; display: grid; place-items: center; margin-left: -8px; color: var(--t1); }
+  .back svg { width: 24px; height: 24px; }
+  h2.hl { font-size: 25px; font-weight: 900; line-height: 1.36; letter-spacing: -1px; color: var(--t1); margin: 10px 0 20px; word-break: keep-all; }
+  h2.hl em { font-style: normal; color: var(--blue); }
+  .search {
+    display: flex; align-items: center; gap: 9px; background: #fff;
+    border-radius: 999px; padding: 13px 17px; margin-bottom: 14px;
+    box-shadow: 0 2px 10px rgba(15,23,42,.05);
+    color: var(--t3); font-size: 14px; font-weight: 600;
+  }
+  .search svg { width: 18px; height: 18px; flex-shrink: 0; }
+  .lcard {
+    background: #fff; border-radius: 18px; padding: 15px;
+    box-shadow: 0 2px 12px rgba(15,23,42,.06);
+    display: grid; grid-template-columns: 46px minmax(0,1fr) auto; align-items: center; gap: 12px;
+    margin-bottom: 10px;
+  }
+  .lcard .tile { width: 46px; height: 46px; border-radius: 14px; background: #eef2f7; display: grid; place-items: center; color: #7c8798; }
+  .lcard .tile svg { width: 25px; height: 25px; }
+  .lcard .tx { display: grid; gap: 4px; min-width: 0; }
+  .lcard .tx b { font-size: 16px; font-weight: 900; }
+  .lcard .tx s { text-decoration: none; font-size: 12.5px; font-weight: 600; color: var(--t2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .lcard .tx u { text-decoration: none; font-size: 13px; font-weight: 800; color: var(--blue); }
+  .pill { border: none; background: #f1f4f8; color: #5d6672; font-family: inherit; font-size: 13.5px; font-weight: 900; padding: 10px 15px; border-radius: 999px; white-space: nowrap; }
+  .more { display: flex; align-items: center; gap: 9px; margin-top: 14px; padding-left: 4px; color: var(--t3); font-size: 14px; font-weight: 700; }
+
+  .hero-dark { background: var(--ink); border-radius: 20px; padding: 19px; margin: 8px 0 13px; }
+  .hero-dark .st { display: inline-block; background: rgba(255,255,255,.14); color: #fff; font-size: 11px; font-weight: 900; border-radius: 999px; padding: 5px 11px; }
+  .hero-dark b { display: block; margin-top: 12px; color: #fff; font-size: 20px; font-weight: 900; letter-spacing: -.5px; }
+  .hero-dark s { text-decoration: none; display: block; margin-top: 5px; color: rgba(255,255,255,.62); font-size: 12.5px; font-weight: 700; }
+  .hero-dark .pct { display: flex; align-items: baseline; gap: 4px; margin-top: 18px; }
+  .hero-dark .pct em { font-style: normal; color: #fff; font-size: 38px; font-weight: 900; letter-spacing: -2px; line-height: 1; }
+  .hero-dark .pct i { font-style: normal; color: rgba(255,255,255,.6); font-size: 14px; font-weight: 800; }
+  .hero-dark .bar { height: 7px; border-radius: 999px; background: rgba(255,255,255,.16); margin-top: 11px; overflow: hidden; }
+  .hero-dark .bar u { display: block; height: 100%; width: 66%; border-radius: 999px; background: var(--yellow); }
+
+  .steps { background: #fff; border-radius: 18px; padding: 17px 15px; box-shadow: 0 2px 12px rgba(15,23,42,.06); }
+  .steps > b { display: block; font-size: 15px; font-weight: 900; margin-bottom: 12px; }
+  .steps ul { list-style: none; }
+  .steps li { display: grid; grid-template-columns: 29px 1fr auto; align-items: center; gap: 11px; padding: 10px 0; border-bottom: 1px solid var(--line); }
+  .steps li:last-child { border-bottom: none; }
+  .steps li .dot { width: 29px; height: 29px; border-radius: 50%; display: grid; place-items: center; background: #f1f4f8; color: var(--t3); }
+  .steps li .dot svg { width: 15px; height: 15px; }
+  .steps li.done .dot { background: var(--blue-soft); color: var(--blue); }
+  .steps li.now .dot { background: var(--blue); color: #fff; box-shadow: 0 5px 12px rgba(47,111,228,.34); }
+  .steps li strong { font-size: 14px; font-weight: 800; color: var(--t2); }
+  .steps li.done strong, .steps li.now strong { color: var(--t1); font-weight: 900; }
+  .steps li time { font-size: 11.5px; font-weight: 700; color: var(--t3); }
+  .wide-pill { width: 100%; margin-top: 13px; border: none; background: var(--blue); color: #fff; font-family: inherit; font-size: 15px; font-weight: 900; min-height: 52px; border-radius: 999px; }
+
+  /* 하단 탭바 2종 */
+  .tb-sq {
+    position: absolute; left: 0; right: 0; bottom: 0;
+    background: #fff; border-top: 1px solid #e5e8ec;
+    box-shadow: 0 -6px 18px rgba(15,23,42,.08);
+    display: grid; grid-template-columns: repeat(5,1fr); padding: 7px 4px 9px;
+  }
+  .tb-fl {
+    position: absolute; left: 14px; right: 14px; bottom: 14px;
+    background: #fff; border-radius: 999px;
+    box-shadow: 0 8px 26px rgba(15,23,42,.16);
+    display: grid; grid-template-columns: repeat(5,1fr); padding: 9px 6px 8px;
+  }
+  .tb-sq span, .tb-fl span { display: grid; justify-items: center; gap: 3px; color: var(--t3); font-size: 10.5px; font-weight: 800; }
+  .tb-sq span svg, .tb-fl span svg { width: 21px; height: 21px; }
+  .tb-sq span.on, .tb-fl span.on { color: var(--blue); }
+  .fade { position: absolute; left: 0; right: 0; bottom: 0; height: 105px; background: linear-gradient(180deg, transparent, var(--bg) 62%); pointer-events: none; }
+
+  /* 탭바 선택 블록 */
+  .choice { margin-top: 40px; background: #fff; border-radius: 18px; padding: 26px 28px; box-shadow: 0 2px 14px rgba(15,23,42,.07); }
+  .choice h3 { font-size: 20px; font-weight: 900; color: var(--navy); margin-bottom: 8px; }
+  .choice p { font-size: 14.5px; font-weight: 600; color: #5d6672; line-height: 1.6; margin-bottom: 18px; }
+  .choice .two { display: flex; gap: 26px; flex-wrap: wrap; }
+  .choice .one { width: 340px; }
+  .choice .one > b { display: block; font-size: 14px; font-weight: 900; margin-bottom: 9px; }
+  .choice .one .box { position: relative; height: 96px; background: var(--bg); border-radius: 18px; overflow: hidden; }
+  .choice .one small { display: block; margin-top: 9px; font-size: 12.5px; font-weight: 700; color: #6b7280; line-height: 1.5; }
+
+  /* 표 */
+  .tbl { margin-top: 34px; background: #fff; border-radius: 18px; padding: 26px 28px; box-shadow: 0 2px 14px rgba(15,23,42,.07); }
+  .tbl h3 { font-size: 20px; font-weight: 900; color: var(--navy); margin-bottom: 14px; }
+  .tbl table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  .tbl th, .tbl td { text-align: left; padding: 11px 8px; border-bottom: 1px solid var(--line); }
+  .tbl th { font-size: 12.5px; font-weight: 900; color: var(--t3); }
+  .tbl td.k { font-weight: 900; color: var(--navy); width: 26%; }
+  .tbl td.s { width: 16%; font-weight: 900; }
+  .tbl td.s.keep { color: #0f7b4f; }
+  .tbl td.s.chg { color: var(--blue); }
+  .tbl td.m { color: var(--t2); }
+</style>
+
+<div class="wrap">
+  <h1 class="top">시안 3 — PC는 그대로, 모바일 내부 화면만 개편</h1>
+  <p class="lead">지적하신 대로 <b>소개 첫 화면은 프로모터스의 얼굴</b>이라 손대지 않습니다. 헤이딜러 스타일은 마이·관리자 내부 화면에만 적용합니다.</p>
+  <div class="rule">
+    <span class="no">■ 손대지 않는 것</span> — <b>PC 화면 전체</b>(사선 시트·로고·정비예약·브랜드 로고), <b>모바일 소개 첫 화면</b>, <b>정비사례 목록</b>.<br>
+    <span class="yes">■ 바꾸는 것</span> — <b>마이(내예약) · 관리자 내부 화면만</b> (고객관리 · 작업현황 · 예약관리 · 작업기록 등). 사용자가 처음 보는 화면은 하나도 바뀌지 않습니다.
+  </div>
+
+  <!-- ================= PC ================= -->
+  <div class="sec">
+    <h2>PC 화면 <span class="stamp keep">변경 0% · 그대로</span></h2>
+    <p class="d">사선 시트, 금색 띠, 505px 로고, 125px "정비예약", 노란 그림자 버튼, 브랜드 로고, 오른쪽 탭과 사진 — 전부 지금 그대로입니다. CSS도 건드리지 않습니다.</p>
+    <div class="pc">
+      <div class="sheet"></div>
+      <div class="lp">
+        <img class="logo" src="../../images/logo-lockup.png" alt="프로모터스">
+        <span class="ybar"></span>
+        <h3>정비예약</h3>
+        <p class="desc">사진으로 확인하고, 기록으로 관리하세요.<br>소중한 내 차를 위한 맞춤형 프리미엄 케어 서비스.</p>
+        <div class="btn"><span>예약하기</span><i>›</i></div>
+        <div class="brands"><img src="../../images/brands-color.png" alt="취급 브랜드"></div>
+      </div>
+      <div class="rp">
+        <div class="navrow">
+          <ul>
+            <li class="on">프로모터스</li><li>오시는길</li><li>정비사례</li><li>공지사항</li>
+          </ul>
+          <span class="auth">로그인</span>
+        </div>
+        <div class="intro">
+          <h4>프로모터스 소개</h4>
+          <p class="sub"><i></i>수입차 전문 정비센터<i></i></p>
+        </div>
+        <div class="photo">매장 소개 사진 (16:9)</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= 모바일 ================= -->
+  <div class="sec">
+    <h2>모바일 화면</h2>
+    <p class="d">앞의 2개는 지금 그대로, 뒤의 2개만 헤이딜러 스타일로 바뀝니다.</p>
+    <div class="phones">
+
+      <!-- ① 소개 : 그대로 -->
+      <div class="item">
+        <div class="cap"><b>① 소개 첫 화면</b><span class="stamp keep">그대로</span></div>
+        <div class="phone">
+          <div class="sbar"><span>7:02</span><span>5G ▮</span></div>
+          <div class="scr" style="padding:0">
+            <div class="hero-m">
+              <img class="logo" src="../../images/logo-lockup.png" alt="프로모터스">
+              <span class="ybar"></span>
+              <h3>정비예약</h3>
+              <p class="desc">사진으로 확인하고, 기록으로 관리하세요. 소중한 내 차를 위한 맞춤형 프리미엄 케어 서비스.</p>
+              <div class="btn"><span>예약하기</span><i>›</i></div>
+              <div class="brands"><img src="../../images/brands-color.png" alt="취급 브랜드"></div>
+              <span class="cue"></span>
+            </div>
+          </div>
+        </div>
+        <p class="note">로고 · 노란 바 · 정비예약 · 예약하기 버튼 · 브랜드 로고 · 금색 하단선 모두 유지</p>
+      </div>
+
+      <!-- ② 정비사례 : 그대로 -->
+      <div class="item">
+        <div class="cap"><b>② 정비사례</b><span class="stamp keep">그대로</span></div>
+        <div class="phone">
+          <div class="sbar"><span>7:02</span><span>5G ▮</span></div>
+          <div class="scr">
+            <p class="kicker"><i></i>프로모터스의 작업 기록<i></i></p>
+            <div class="tabs2"><span class="on">실제 정비사례</span><span>브랜드별 매거진</span></div>
+            <div class="bfilter"><span class="on">전체</span><span>BMW</span><span>벤츠</span><span>아우디</span><span>포르쉐</span></div>
+            <div class="g2">
+              <div class="oldcard"><div class="im">사진</div><div class="bd"><time>2026.07.24</time><b>BMW X3 · 오일필터 하우징 가스켓 교환</b><s>차량 하부에 오일이 맺히고 누유 흔적이…</s></div></div>
+              <div class="oldcard"><div class="im">사진</div><div class="bd"><time>2026.07.22</time><b>아우디 Q5 · 미션오일 교환</b><s>주행 중 변속 충격이 느껴진다는 요청으로…</s></div></div>
+              <div class="oldcard"><div class="im">사진</div><div class="bd"><time>2026.07.20</time><b>벤츠 E300 · 브레이크 패드 교환</b><s>패드 잔량 점검 후 전륜 패드를 교환했…</s></div></div>
+              <div class="oldcard"><div class="im">사진</div><div class="bd"><time>2026.07.18</time><b>포르쉐 카이엔 · 냉각수 라인</b><s>냉각수 부족 경고 원인을 점검했습니다…</s></div></div>
+            </div>
+          </div>
+          <div class="fade"></div>
+          <div class="tb-fl">
+            <span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5L12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/></svg>소개</span>
+            <span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-5.6-7-11a7 7 0 0 1 14 0c0 5.4-7 11-7 11z"/><circle cx="12" cy="10" r="2.6"/></svg>매장안내</span>
+            <span class="on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.8-3.8a6 6 0 0 1-8 8l-6.9 6.9a2.1 2.1 0 0 1-3-3l6.9-6.9a6 6 0 0 1 8-8l-3.8 3.8z"/></svg>정비사례</span>
+            <span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11v2a1 1 0 0 0 1 1h2l5 4V6l-5 4H4a1 1 0 0 0-1 1z"/><path d="M15 9a4 4 0 0 1 0 6"/></svg>게시판</span>
+            <span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-3.3 3.6-5 8-5s8 1.7 8 5"/></svg>마이</span>
+          </div>
+        </div>
+        <p class="note">라인—텍스트—라인 제목, 노란 밑줄 탭, 네이비 필터 칩, 기존 카드 모두 유지</p>
+      </div>
+
+      <!-- ③ 고객관리 : 개편 -->
+      <div class="item">
+        <div class="cap"><b>③ 고객관리 (관리자)</b><span class="stamp change">개편</span></div>
+        <div class="phone">
+          <div class="sbar"><span>7:02</span><span>5G ▮</span></div>
+          <div class="scr">
+            <span class="back"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg></span>
+            <h2 class="hl">고객 <em>128명</em>을<br>관리하고 있어요</h2>
+            <div class="search"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4.3-4.3"/></svg>이름 · 번호판으로 찾기</div>
+            <div class="lcard">
+              <span class="tile"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M5 16.5h14M6.5 16.5V13l1.7-4.2A2 2 0 0 1 10 7.5h4a2 2 0 0 1 1.8 1.3L17.5 13v3.5"/><circle cx="8.5" cy="16.5" r="1.4"/><circle cx="15.5" cy="16.5" r="1.4"/></svg></span>
+              <span class="tx"><b>남미희</b><s>아우디Q5 · 291마6511</s><u>07.24 14:00 예약</u></span>
+              <button class="pill">상세</button>
+            </div>
+            <div class="lcard">
+              <span class="tile"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M5 16.5h14M6.5 16.5V13l1.7-4.2A2 2 0 0 1 10 7.5h4a2 2 0 0 1 1.8 1.3L17.5 13v3.5"/><circle cx="8.5" cy="16.5" r="1.4"/><circle cx="15.5" cy="16.5" r="1.4"/></svg></span>
+              <span class="tx"><b>김동우</b><s>BMW X4 · 141오7116</s><u style="color:#9aa7b6">예약 없음</u></span>
+              <button class="pill">상세</button>
+            </div>
+            <div class="lcard">
+              <span class="tile"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M5 16.5h14M6.5 16.5V13l1.7-4.2A2 2 0 0 1 10 7.5h4a2 2 0 0 1 1.8 1.3L17.5 13v3.5"/><circle cx="8.5" cy="16.5" r="1.4"/><circle cx="15.5" cy="16.5" r="1.4"/></svg></span>
+              <span class="tx"><b>이승현</b><s>에스컬레이드 · 130라4609</s><u style="color:#9aa7b6">예약 없음</u></span>
+              <button class="pill">상세</button>
+            </div>
+            <div class="more"><b>⋯</b> 고객 128명 전체보기</div>
+          </div>
+          <div class="fade"></div>
+          <div class="tb-fl">
+            <span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5L12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/></svg>소개</span>
+            <span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-5.6-7-11a7 7 0 0 1 14 0c0 5.4-7 11-7 11z"/><circle cx="12" cy="10" r="2.6"/></svg>매장안내</span>
+            <span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.8-3.8a6 6 0 0 1-8 8l-6.9 6.9a2.1 2.1 0 0 1-3-3l6.9-6.9a6 6 0 0 1 8-8l-3.8 3.8z"/></svg>정비사례</span>
+            <span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11v2a1 1 0 0 0 1 1h2l5 4V6l-5 4H4a1 1 0 0 0-1 1z"/><path d="M15 9a4 4 0 0 1 0 6"/></svg>게시판</span>
+            <span class="on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-3.3 3.6-5 8-5s8 1.7 8 5"/></svg>마이</span>
+          </div>
+        </div>
+        <p class="note">관리자만 보는 화면 · 글자 5줄 나열 → 아이콘 + 이름 + 상태 한 줄로</p>
+      </div>
+
+      <!-- ④ 작업현황 : 개편 -->
+      <div class="item">
+        <div class="cap"><b>④ 내 차 작업현황</b><span class="stamp change">개편</span></div>
+        <div class="phone">
+          <div class="sbar"><span>7:02</span><span>5G ▮</span></div>
+          <div class="scr">
+            <span class="back"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg></span>
+            <div class="hero-dark">
+              <span class="st">안산점 · 작업중</span>
+              <b>BMW X3</b>
+              <s>141오7116 · 오일필터 가스켓 교환</s>
+              <div class="pct"><em>66</em><i>% 진행</i></div>
+              <div class="bar"><u></u></div>
+            </div>
+            <div class="steps">
+              <b>작업은 이렇게 진행돼요</b>
+              <ul>
+                <li class="done"><span class="dot"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg></span><strong>입고 접수</strong><time>07.24 14:10</time></li>
+                <li class="done"><span class="dot"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg></span><strong>진단 완료</strong><time>07.24 15:02</time></li>
+                <li class="now"><span class="dot"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.8-3.8a6 6 0 0 1-8 8l-6.9 6.9a2.1 2.1 0 0 1-3-3l6.9-6.9a6 6 0 0 1 8-8l-3.8 3.8z"/></svg></span><strong>정비 작업중</strong><time>지금</time></li>
+                <li><span class="dot"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4.3-4.3"/></svg></span><strong>검수</strong><time>예정</time></li>
+                <li><span class="dot"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 16.5h14M6.5 16.5V13l1.7-4.2A2 2 0 0 1 10 7.5h4a2 2 0 0 1 1.8 1.3L17.5 13v3.5"/></svg></span><strong>출고</strong><time>예정</time></li>
+              </ul>
+              <button class="wide-pill">작업사진 12장 보기</button>
+            </div>
+          </div>
+          <div class="fade"></div>
+          <div class="tb-fl">
+            <span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5L12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/></svg>소개</span>
+            <span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-5.6-7-11a7 7 0 0 1 14 0c0 5.4-7 11-7 11z"/><circle cx="12" cy="10" r="2.6"/></svg>매장안내</span>
+            <span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.8-3.8a6 6 0 0 1-8 8l-6.9 6.9a2.1 2.1 0 0 1-3-3l6.9-6.9a6 6 0 0 1 8-8l-3.8 3.8z"/></svg>정비사례</span>
+            <span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11v2a1 1 0 0 0 1 1h2l5 4V6l-5 4H4a1 1 0 0 0-1 1z"/><path d="M15 9a4 4 0 0 1 0 6"/></svg>게시판</span>
+            <span class="on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-3.3 3.6-5 8-5s8 1.7 8 5"/></svg>마이</span>
+          </div>
+        </div>
+        <p class="note">내 차 맡긴 고객이 보는 화면 · 진행 상황을 큰 숫자로 바로 이해</p>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ================= 탭바 선택 ================= -->
+  <div class="choice">
+    <h3>하나만 결정해 주세요 — 하단 탭바</h3>
+    <p>탭바는 <b>모든 화면이 함께 쓰는 부품</b>입니다. 떠 있는 모양으로 바꾸면 소개 화면 아래에도 같이 적용됩니다. 어느 쪽으로 할까요?</p>
+    <div class="two">
+      <div class="one">
+        <b>A. 지금 그대로 (사각 바)</b>
+        <div class="box">
+          <div class="tb-sq">
+            <span class="on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5L12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/></svg>소개</span>
+            <span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-5.6-7-11a7 7 0 0 1 14 0c0 5.4-7 11-7 11z"/><circle cx="12" cy="10" r="2.6"/></svg>매장안내</span>
+            <span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.8-3.8a6 6 0 0 1-8 8l-6.9 6.9a2.1 2.1 0 0 1-3-3l6.9-6.9a6 6 0 0 1 8-8l-3.8 3.8z"/></svg>정비사례</span>
+            <span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11v2a1 1 0 0 0 1 1h2l5 4V6l-5 4H4a1 1 0 0 0-1 1z"/><path d="M15 9a4 4 0 0 1 0 6"/></svg>게시판</span>
+            <span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-3.3 3.6-5 8-5s8 1.7 8 5"/></svg>마이</span>
+          </div>
+        </div>
+        <small>화면 아래에 딱 붙는 형태. 소개 화면이 지금과 100% 동일하게 유지됩니다.</small>
+      </div>
+      <div class="one">
+        <b>B. 떠 있는 알약 바 (헤이딜러식)</b>
+        <div class="box">
+          <div class="tb-fl">
+            <span class="on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5L12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/></svg>소개</span>
+            <span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-5.6-7-11a7 7 0 0 1 14 0c0 5.4-7 11-7 11z"/><circle cx="12" cy="10" r="2.6"/></svg>매장안내</span>
+            <span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.8-3.8a6 6 0 0 1-8 8l-6.9 6.9a2.1 2.1 0 0 1-3-3l6.9-6.9a6 6 0 0 1 8-8l-3.8 3.8z"/></svg>정비사례</span>
+            <span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11v2a1 1 0 0 0 1 1h2l5 4V6l-5 4H4a1 1 0 0 0-1 1z"/><path d="M15 9a4 4 0 0 1 0 6"/></svg>게시판</span>
+            <span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-3.3 3.6-5 8-5s8 1.7 8 5"/></svg>마이</span>
+          </div>
+        </div>
+        <small>양옆이 떠 있는 둥근 형태. 앱 느낌이 크게 올라가지만 소개 화면 아래도 함께 바뀝니다.</small>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= 화면별 정리 ================= -->
+  <div class="tbl">
+    <h3>화면별로 바뀌는지 정리</h3>
+    <table>
+      <tr><th>화면</th><th>바뀌나</th><th>내용</th></tr>
+      <tr><td class="k">PC 전체</td><td class="s keep">그대로</td><td class="m">사선 시트·로고·정비예약·브랜드·탭·사진 전부 유지. CSS 손대지 않음</td></tr>
+      <tr><td class="k">모바일 소개 첫 화면</td><td class="s keep">그대로</td><td class="m">로고·노란 바·정비예약·예약하기·브랜드·금색 하단선 유지</td></tr>
+      <tr><td class="k">모바일 오시는길</td><td class="s keep">그대로</td><td class="m">지점 카드 유지 (원하시면 그림자만 정리)</td></tr>
+      <tr><td class="k">모바일 정비사례</td><td class="s keep">그대로</td><td class="m">라인 제목·노란 밑줄 탭·필터 칩·카드 유지</td></tr>
+      <tr><td class="k">모바일 공지사항</td><td class="s keep">그대로</td><td class="m">기존 앨범형 카드 유지</td></tr>
+      <tr><td class="k">마이 (내예약·작업현황)</td><td class="s chg">개편</td><td class="m">진한 카드 + 큰 진행률 숫자 + 세로 단계 리스트 + 파란 알약 버튼</td></tr>
+      <tr><td class="k">관리자 내부 화면</td><td class="s chg">개편</td><td class="m">고객관리·예약관리·작업기록 등 목록을 아이콘 카드로, 뒤로가기 굵은 화살표로</td></tr>
+      <tr><td class="k">팝업 닫기 버튼</td><td class="s chg">수정</td><td class="m">글자가 세로로 깨지는 문제만 고침 (모양은 최소 변경)</td></tr>
+    </table>
+  </div>
+</div>
