@@ -232,6 +232,7 @@ values
   ('pm-admin-notifications', '[]'::jsonb, 'https://www.promotors.kr/'),
   ('pm-branch-transfer-requests', '[]'::jsonb, 'https://www.promotors.kr/'),
   ('pm-work-audit', '[]'::jsonb, 'https://www.promotors.kr/'),
+  ('pm-branch-hours', '{}'::jsonb, 'https://www.promotors.kr/'),
   ('pm-banned-members', '[]'::jsonb, 'https://www.promotors.kr/'),
   ('pm-event-banners', '[]'::jsonb, 'https://www.promotors.kr/')
 on conflict (data_key) do nothing;

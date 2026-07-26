@@ -13,13 +13,14 @@ as $fn$
 declare
   required_tables text[] := array[
     'site_data','site_logs','members','bookings','customer_records','customer_memos',
-    'messages','products','service_runs','service_steps','admin_accounts','site_settings','admin_notifications'
+    'messages','products','service_runs','service_steps','admin_accounts','site_settings','admin_notifications',
+    'pm_accounts','pm_sessions','pm_assets'
   ];
   required_keys text[] := array[
     'pm-branches','pm-notices','promotors-cases','pm-products','pm-blocked','pm-customers',
     'pm-bookings','pm-members','pm-blog-settings','pm-intro-slides','pm-assets','pm-service-runs',
     'pm-messages','pm-sub-admin','pm-main-admin','pm-security-settings','pm-home-view','pm-admin-notifications',
-    'pm-branch-transfer-requests','pm-work-audit'
+    'pm-branch-transfer-requests','pm-work-audit','pm-banned-members','pm-event-banners','pm-branch-hours'
   ];
   required_settings text[] := array['home_view','realtime_service'];
   t text;
@@ -29,7 +30,12 @@ begin
   foreach t in array required_tables loop
     return query select '1. 테이블'::text, t,
       case when to_regclass('public.' || t) is null then '누락' else 'OK' end,
-      case when to_regclass('public.' || t) is null then 'supabase-schema.sql을 실행해 생성하세요' else '' end;
+      case
+        when to_regclass('public.' || t) is not null then ''
+        when t = 'pm_assets' then 'supabase-asset-storage-migration.sql 실행 필요'
+        when t in ('pm_accounts','pm_sessions') then 'supabase-security-migration.sql 실행 필요'
+        else 'supabase-schema.sql을 실행해 생성하세요'
+      end;
   end loop;
 
   -- 2. 필수 컬럼 (누락된 컬럼이 있는 테이블만 표시) ---------------------
@@ -59,7 +65,11 @@ begin
       ('service_steps','approved'),('service_steps','approved_at'),('service_steps','rejected_at'),('service_steps','reject_reason'),
       ('admin_accounts','role'),('admin_accounts','password_hash'),('admin_accounts','active'),('admin_accounts','updated_at'),
       ('site_settings','setting_key'),('site_settings','payload'),('site_settings','updated_at'),
-      ('admin_notifications','message'),('admin_notifications','payload'),('admin_notifications','read')
+      ('admin_notifications','message'),('admin_notifications','payload'),('admin_notifications','read'),
+      ('pm_accounts','login_id'),('pm_accounts','password_hash'),('pm_accounts','role'),('pm_accounts','branches'),
+      ('pm_accounts','profile'),('pm_accounts','active'),
+      ('pm_sessions','token_hash'),('pm_sessions','login_id'),('pm_sessions','expires_at'),
+      ('pm_assets','asset_key'),('pm_assets','payload'),('pm_assets','updated_at')
     ) as r(tbl, col)
     left join information_schema.columns c
       on c.table_schema = 'public' and c.table_name = r.tbl and c.column_name = r.col
@@ -135,6 +145,32 @@ begin
            and position('role_name is null' in pg_get_functiondef(to_regprocedure('public.pm_asset_put(text,text,jsonb)')))>0
          then 'OK' else '위험' end,
     '유효하지 않은 토큰은 ADMIN_REQUIRED로 차단되어야 합니다'::text;
+
+  -- 8. 현재 사이트 기능 RPC/저장 구조 ---------------------------------
+  return query select '8. 기능 RPC'::text, '비회원 예약'::text,
+    case when to_regprocedure('public.pm_guest_booking_create(jsonb,text)') is not null then 'OK' else '누락' end,
+    case when to_regprocedure('public.pm_guest_booking_create(jsonb,text)') is not null then ''
+         else 'supabase-guest-booking-migration.sql 실행 필요' end;
+
+  return query select '8. 기능 RPC'::text, '영업시간 읽기/저장'::text,
+    case when to_regprocedure('public.pm_branch_hours_read()') is not null
+           and to_regprocedure('public.pm_branch_hours_write(text,text,jsonb,text)') is not null
+         then 'OK' else '누락' end,
+    case when to_regprocedure('public.pm_branch_hours_read()') is not null
+           and to_regprocedure('public.pm_branch_hours_write(text,text,jsonb,text)') is not null
+         then '' else 'supabase-guest-booking-migration.sql 실행 필요' end;
+
+  return query select '8. 기능 RPC'::text, '단계별 사진 저장소'::text,
+    case when to_regclass('public.pm_assets') is not null
+           and to_regprocedure('public.pm_asset_get(text,text)') is not null
+           and to_regprocedure('public.pm_asset_put(text,text,jsonb)') is not null
+           and position('public.pm_assets' in pg_get_functiondef(to_regprocedure('public.pm_asset_put(text,text,jsonb)'))) > 0
+         then 'OK' else '누락' end,
+    case when to_regclass('public.pm_assets') is not null
+           and to_regprocedure('public.pm_asset_put(text,text,jsonb)') is not null
+           and position('public.pm_assets' in pg_get_functiondef(to_regprocedure('public.pm_asset_put(text,text,jsonb)'))) > 0
+         then '' else 'supabase-asset-storage-migration.sql 실행 필요' end;
+
 end
 $fn$;
 

@@ -3,12 +3,13 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="only light">
 <title>프로모터스 - 수입차 정비 전문</title>
-<meta name="description" content="프로모터스는 수입차 정비예약, 지점 안내, 실제 정비사례와 공지사항을 제공하는 수입차 전문 정비센터입니다.">
+<meta name="description" content="안산·화성(새솔)·부천 수입차 정비 전문 프로모터스. 실제 정비사례를 확인하고 가까운 지점에 예약하세요. 입고부터 작업·검수·완료까지 진행 상황과 작업사진, 지난 정비기록을 한곳에서 관리할 수 있습니다.">
 <meta name="robots" content="index, follow">
 <meta property="og:type" content="website">
 <meta property="og:title" content="프로모터스 - 수입차 정비 전문">
-<meta property="og:description" content="수입차 전문 정비센터 프로모터스. 정비예약, 지점 안내, 실제 정비사례를 확인하세요.">
+<meta property="og:description" content="안산·화성(새솔)·부천 수입차 정비 전문 프로모터스. 실제 정비사례를 확인하고 가까운 지점에 예약하세요. 입고부터 작업·검수·완료까지 진행 상황과 작업사진, 지난 정비기록을 한곳에서 관리할 수 있습니다.">
 <meta property="og:url" content="https://www.promotors.kr/">
 <meta property="og:image" content="https://www.promotors.kr/images/logo-lockup.png">
 <meta property="og:site_name" content="프로모터스">
@@ -27,12 +28,12 @@
   "@context": "https://schema.org",
   "@type": "AutoRepair",
   "name": "프로모터스",
-  "description": "수입차 전문 정비센터. 벤츠·BMW·아우디·포르쉐 등 수입차 정비 및 정비예약.",
+  "description": "안산·화성(새솔)·부천 수입차 정비 전문 프로모터스. 실제 정비사례를 확인하고 가까운 지점에 예약하세요. 입고부터 작업·검수·완료까지 진행 상황과 작업사진, 지난 정비기록을 한곳에서 관리할 수 있습니다.",
   "url": "https://www.promotors.kr/",
   "logo": "https://www.promotors.kr/images/logo-lockup.png",
   "image": "https://www.promotors.kr/images/logo-lockup.png",
   "telephone": "+82-31-831-9738",
-  "areaServed": "안산",
+  "areaServed": ["안산시", "화성시", "부천시"],
   "address": {
     "@type": "PostalAddress",
     "addressCountry": "KR",
@@ -44,7 +45,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#0f1f3d">
 <link rel="apple-touch-icon" href="images/logo-icon.png">
-<link rel="stylesheet" href="style.css?v=20260726-2200">
+<link rel="stylesheet" href="style.css?v=20260725-branch-preview">
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700;900&display=swap" rel="stylesheet">
 </head>
 <body>
@@ -100,8 +101,8 @@
         <li>
           <button class="nav-btn" data-view="cases">정비사례</button>
           <div class="dropdown">
-            <button data-view="cases" data-tab="tab-blog">실제 정비사례</button>
-            <button data-view="cases" data-tab="tab-web">브랜드별 정비 가이드</button>
+            <button data-view="cases">지점별 정비사례</button>
+            <button data-view="guide">브랜드별 정비 가이드</button>
           </div>
         </li>
         <li>
@@ -117,6 +118,7 @@
             <button class="main-admin-only" data-view="adm-prod">상품관리</button>
             <button data-view="adm-inquiry">고객문의</button>
             <button class="main-admin-only" data-view="adm-settings">보안</button>
+            <button class="developer-only" data-view="adm-activity">분석</button>
           </div>
         </li>
       </ul>
@@ -160,26 +162,31 @@
     <!-- ③ 정비사례 -->
     <div class="view" id="view-cases">
       <p class="section-kicker case-kicker"><span class="line"></span><strong>프로모터스의 작업 기록</strong><span class="line"></span></p>
-      <div class="tabs" role="tablist">
-        <button class="tab active" data-tab="tab-blog">실제 정비사례</button>
-        <button class="tab" data-tab="tab-web">브랜드별 정비 가이드</button>
+      <div class="case-section-nav">
+        <nav class="case-branch-tabs" aria-label="지점별 정비사례">
+          <button type="button" class="case-branch-tab active" data-blog-branch="ansan" aria-pressed="true">안산점</button>
+          <button type="button" class="case-branch-tab" data-blog-branch="saesol" aria-pressed="false">새솔점</button>
+          <button type="button" class="case-branch-tab" data-blog-branch="bucheon" aria-pressed="false">부천점</button>
+        </nav>
       </div>
 
       <div class="tab-panel active" id="tab-blog">
         <div class="blog-feed" id="blog-feed"></div>
       </div>
-
-      <div class="tab-panel" id="tab-web">
-        <div class="admin-tools admin-only main-admin-only">
-          <button type="button" class="mini-btn add" id="btn-add-case">+ 정비사례 작성</button>
-        </div>
-        <div class="brand-filter" id="case-brand-filter"></div>
-        <div id="case-list" aria-live="polite"></div>
-        <p class="hint" id="case-empty">등록된 정비사례가 없습니다.</p>
-      </div>
     </div>
 
-    <!-- ④ 공지사항 -->
+    <!-- ④ 브랜드별 정비 가이드 -->
+    <div class="view" id="view-guide">
+      <p class="section-kicker case-kicker"><span class="line"></span><strong>브랜드별 정비 가이드</strong><span class="line"></span></p>
+      <div class="admin-tools admin-only main-admin-only">
+        <button type="button" class="mini-btn add" id="btn-add-case">+ 정비 가이드 작성</button>
+      </div>
+      <div class="brand-filter" id="case-brand-filter"></div>
+      <div id="case-list" aria-live="polite"></div>
+      <p class="hint" id="case-empty">등록된 정비 가이드가 없습니다.</p>
+    </div>
+
+    <!-- ⑤ 공지사항 -->
     <div class="view" id="view-notice">
       <p class="section-kicker"><span class="line"></span>프로모터스 소식<span class="line"></span></p>
       <div class="admin-tools admin-only main-admin-only">
@@ -282,6 +289,19 @@
       <div class="adm-body" id="adm-settings-body"></div>
     </div>
 
+    <!-- ⑫ 개발자 전용: 방문·전환 활동 -->
+    <div class="view" id="view-adm-activity">
+      <div class="adm-mobile-bar">
+        <button type="button" class="adm-back" aria-label="관리 메뉴로 돌아가기">‹</button>
+        <strong>분석</strong>
+      </div>
+      <header class="intro">
+        <h2>분석</h2>
+        <p class="intro-sub"><span class="line"></span>매출 · 예약 · 유입 · 고객 이탈<span class="line"></span></p>
+      </header>
+      <div class="adm-body" id="adm-activity-body"></div>
+    </div>
+
     <footer class="site-footer" aria-label="사업자 및 법적 고지">
       <div class="site-footer__inner">
         <div class="site-footer__brand">
@@ -339,7 +359,7 @@
   <div class="modal-card" id="modal-card" role="dialog" aria-modal="true"></div>
 </div>
 
-<script src="config.js?v=20260726-2200"></script>
-<script src="app.js?v=20260726-2200"></script>
+<script src="config.js?v=20260713-2030"></script>
+<script src="app.js?v=20260725-branch-preview"></script>
 </body>
 </html>

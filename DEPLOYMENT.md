@@ -64,6 +64,18 @@ npx wrangler login
 npm run deploy:cloudflare
 ```
 
+### Naver Search Ads connection
+
+In Cloudflare Dashboard, open the `promotors-site` Pages project, then go to
+Settings > Variables and Secrets. Add these three values as encrypted secrets:
+
+- `NAVER_SEARCHADS_CUSTOMER_ID`: 광고계정 번호
+- `NAVER_SEARCHADS_API_KEY`: 액세스 라이선스
+- `NAVER_SEARCHADS_SECRET_KEY`: 비밀키
+
+The values are issued in Naver Search Ads > Tools > API Manager. Never place
+these values in `config.js`, `app.js`, or any other browser-delivered file.
+
 ### GitHub encrypted secrets
 
 In GitHub repository settings, add these encrypted Actions secrets:
@@ -82,4 +94,3 @@ For the domain, use Cloudflare DNS as the source of truth:
 - Root domain: use Cloudflare Pages custom domain flow, then add the DNS record Cloudflare provides.
 - `www`: add it as a second Pages custom domain and redirect root to `www` or `www` to root, but choose only one canonical URL.
 - Firebase custom domain can remain backup unless you explicitly want traffic split.
-
