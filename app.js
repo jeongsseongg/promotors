@@ -823,7 +823,11 @@ const MYPAGE_ICONS = {
   search: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.35-4.35"/></svg>',
   flag: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M8.5 12.2l2.4 2.4 4.6-4.8"/></svg>',
   car: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 11l1.5-4.5A2 2 0 0 1 8.4 5h7.2a2 2 0 0 1 1.9 1.5L19 11"/><path d="M3 17v-4a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v4"/><circle cx="7.5" cy="16.5" r="1.5"/><circle cx="16.5" cy="16.5" r="1.5"/></svg>',
-  lock: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>'
+  lock: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>',
+  chat: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 15a3 3 0 0 1-3 3H8l-4 3V6a3 3 0 0 1 3-3h10a3 3 0 0 1 3 3z"/></svg>',
+  clock: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7.5V12l3 2"/></svg>',
+  phone: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a1 1 0 0 1-1 1A16 16 0 0 1 4 5a1 1 0 0 1 1-1z"/></svg>',
+  chevron: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg>'
 };
 const WORK_STAGES = [
   { label: '접수완료', icon: 'check' },
@@ -832,84 +836,167 @@ const WORK_STAGES = [
   { label: '완료', icon: 'flag' }
 ];
 
+/* 시안 공용 부품 — 메뉴 한 줄: 아이콘 / 라벨 / 값 / 화살표 */
+function pmItem(id, icon, label, value = '', tone = '') {
+  return `
+    <button type="button" class="pm-item" data-pm="${id}">
+      <span class="pm-item-ic">${MYPAGE_ICONS[icon] || MYPAGE_ICONS.doc}</span>
+      <b>${esc(label)}</b>
+      <span class="pm-item-v ${tone}">${value}</span>
+      <span class="pm-item-cv">${MYPAGE_ICONS.chevron}</span>
+    </button>`;
+}
+
+/* '2026.08.05' → 8월 5일 (화) 형식과 남은 날짜 */
+function pmDateParts(dateKeyStr, time = '') {
+  const [y, m, d] = String(dateKeyStr || '').split('.').map(Number);
+  if (!y || !m || !d) return { label: esc(`${dateKeyStr} ${time}`.trim()), dday: null };
+  const target = new Date(y, m - 1, d);
+  const now = new Date();
+  const dday = Math.round((target - new Date(now.getFullYear(), now.getMonth(), now.getDate())) / 86400000);
+  const week = ['일', '월', '화', '수', '목', '금', '토'][target.getDay()];
+  return { label: `${m}월 ${d}일 (${week})${time ? ` ${time}` : ''}`, dday };
+}
+
 async function openMyPageModal() {
   if (!member) return openMemberModal('login');
   const bookings = getBookings().filter(b => b.car === member.car || b.memberId === member.id);
   const serviceRuns = store.get('pm-service-runs', []).filter(r => r.car === member.car || r.memberId === member.id);
   const notices = getMessagesFor(member).filter(m => m.serviceContext?.runId);
-  const latestBooking = bookings.slice().sort((a, b) => bookingTimestamp(b) - bookingTimestamp(a))[0];
-  const latestRun = serviceRuns.slice().sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0))[0];
+  const unreadReplies = getMessagesFor(member).filter(m => m.from === 'admin').length;
+  const customer = getCustomers()[member.car] || { records: [] };
+  const historyCount = (customer.records || []).length + bookings.length;
+  const upcoming = bookings
+    .filter(b => b.status !== '취소' && String(b.date || '') >= todayKey())
+    .sort((a, b) => String(a.date + a.time).localeCompare(String(b.date + b.time)))[0];
+  const latestRun = serviceRuns
+    .filter(r => !r.completedAt && !/완료/.test(r.status || ''))
+    .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0))[0];
 
-  /* 진행 단계: 0 접수완료 → 1 작업중 → 2 검수중 → 3 완료 (-1: 예약 없음) */
-  let stageIndex = -1;
-  let statusText = '진행 중인 예약이 없어요';
+  /* ── 맨 위 카드: 작업중 → 입고예정 → 예약없음 순으로 형태가 바뀐다 ── */
+  let heroHtml;
+  let greetLine;
+
   if (latestRun) {
-    const current = (latestRun.steps || [])[latestRun.currentStep] || {};
-    const serviceName = latestRun.serviceName || latestRun.service || (latestBooking?.services || [])[0] || '정비';
-    if (latestRun.completedAt || /완료/.test(latestRun.status || '')) {
-      stageIndex = 3;
-      statusText = progressServiceText(serviceName, true);
-    } else if (current.submitted && !current.approved) {
-      stageIndex = 2;
-      statusText = `${serviceName} 검수 중이에요`;
-    } else {
-      stageIndex = 1;
-      statusText = progressServiceText(serviceName);
-    }
-  } else if (latestBooking) {
-    stageIndex = 0;
-    statusText = `${latestBooking.branch} ${latestBooking.date} ${latestBooking.time} 예약이 접수되었어요`;
+    const steps = latestRun.steps || [];
+    const cur = Math.max(0, Math.min(latestRun.currentStep || 0, steps.length - 1));
+    const current = steps[cur] || {};
+    const serviceName = latestRun.serviceName || latestRun.service || (upcoming?.services || [])[0] || '정비';
+    const inspecting = current.submitted && !current.approved;
+    const pct = steps.length ? Math.round(((cur + (current.approved ? 1 : 0.5)) / steps.length) * 100) : 0;
+    const stateChip = inspecting ? '검수중' : '작업중';
+    greetLine = inspecting ? `${esc(serviceName)} <mark>검수 중</mark>이에요.` : `${esc(serviceName)} <mark>작업 중</mark>이에요.`;
+    const nextLabel = upcoming ? pmDateParts(upcoming.date, upcoming.time).label : '예약 없음';
+    heroHtml = `
+      <article class="pm-tier">
+        <div class="pm-tier-top">
+          <div class="pm-tier-r1">
+            <span class="pm-plate">${esc(member.car || '차량번호 미등록')}</span>
+            <span class="pm-chip y">${stateChip}</span>
+          </div>
+          <h4>${esc(member.model || '차량 정보를 등록해주세요')}</h4>
+          <p class="pm-tier-svc">${esc(serviceName)}${latestRun.branch ? ` · ${esc(latestRun.branch)}` : ''}</p>
+          <div class="pm-tier-pg">
+            <strong>${pct}<i>%</i></strong>
+            <span>${esc(current.name ? `${current.name} 단계` : '진행 중')}</span>
+          </div>
+          <div class="pm-track"><i style="width:${pct}%"></i></div>
+          <div class="pm-steps">${steps.map((s, i) => `
+            <span class="${i < cur ? 'done' : ''}${i === cur ? 'now' : ''}">${esc(s.name || `${i + 1}단계`)}</span>`).join('')}</div>
+        </div>
+        <button type="button" class="pm-tier-foot" data-pm="bookings">
+          <span class="pm-foot-ic">${MYPAGE_ICONS.calendar}</span>
+          <b>다음 예약</b>
+          <strong>${esc(nextLabel)}</strong>
+          <span class="pm-foot-cv">${MYPAGE_ICONS.chevron}</span>
+        </button>
+      </article>`;
+  } else if (upcoming) {
+    const { label, dday } = pmDateParts(upcoming.date, upcoming.time);
+    const services = (upcoming.services || []).join(' · ');
+    greetLine = dday === 0
+      ? '오늘이 <mark>예약일</mark>이에요.'
+      : `예약일이 <mark>${dday}일</mark> 남았어요.`;
+    heroHtml = `
+      <article class="pm-tier">
+        <div class="pm-tier-top">
+          <div class="pm-tier-r1">
+            <span class="pm-plate">${esc(member.car || '차량번호 미등록')}</span>
+            <span class="pm-chip y">입고 예정</span>
+          </div>
+          <div class="pm-dday">
+            <strong>${dday === 0 ? 'D-DAY' : `D-${dday}`}</strong>
+            <b>${esc(label)}</b>
+          </div>
+          <p class="pm-tier-svc">${esc(upcoming.branch || '')}${services ? ` · ${esc(services)}` : ''}</p>
+          <div class="pm-pair pm-pair-onnavy">
+            <button type="button" class="pm-press pm-soft-navy" data-pm="bookings">일정 변경</button>
+            <button type="button" class="pm-press pm-soft-navy" data-pm="cancel">예약 취소</button>
+          </div>
+        </div>
+      </article>`;
+  } else {
+    greetLine = '정비가 필요하시면 언제든 예약해 주세요.';
+    heroHtml = `
+      <article class="pm-empty">
+        <span class="pm-empty-ic">${MYPAGE_ICONS.calendar}</span>
+        <b>예약이 없어요</b>
+        <p>정비가 필요하시면 예약해 주세요</p>
+        <button type="button" class="pm-press pm-main" data-pm="reserve">정비 예약하기</button>
+      </article>`;
   }
-  const stepsHtml = WORK_STAGES.map((stage, i) => `
-    <div class="ws ${stageIndex >= i ? 'done' : ''} ${stageIndex === i ? 'now' : ''}">
-      <span class="ws-icon">${MYPAGE_ICONS[stage.icon]}</span>
-      <em>${stage.label}</em>
-    </div>${i < WORK_STAGES.length - 1 ? `<i class="${stageIndex > i ? 'done' : ''}"></i>` : ''}`).join('');
-  const hasRunPhotos = latestRun && (latestRun.steps || []).some(s => s.approved && (s.photoKeys || []).length);
-  const carMeta = [member.year, member.car].filter(Boolean).join(' · ');
 
   openModal(`
-    <h3>내예약</h3>
-    <section class="mypage-account-card">
-      <button type="button" class="mypage-profile" id="mypage-info">
-        <span class="profile-avatar" aria-hidden="true">${MYPAGE_ICONS.user}</span>
-        <span class="profile-text"><strong>${esc(member.name || '고객')}님</strong><span>안녕하세요!</span></span>
-        <b>›</b>
-      </button>
-      <div class="mypage-account-divider"></div>
-      <div class="mypage-car-text">
-        <span class="mypage-car-label">내 차량</span>
-        <strong>${esc(member.model || '차량 정보를 등록해주세요')}</strong>
-        <span>${esc(carMeta || '-')}</span>
+    <h3 class="pm-sr">내예약</h3>
+    <div class="pm-scr">
+      <div class="pm-hi">
+        <h3>${esc(member.name || '고객')}님, 안녕하세요</h3>
+        <p>${greetLine}</p>
       </div>
-    </section>
-    <nav class="mypage-quick" aria-label="내예약 바로가기">
-      <button type="button" id="quick-work"><span class="quick-icon">${MYPAGE_ICONS.wrench}</span><strong>작업현황</strong></button>
-      <button type="button" id="mypage-alerts"><span class="quick-icon">${MYPAGE_ICONS.bell}</span><strong>알림</strong>${notices.length ? `<em>${notices.length}</em>` : ''}</button>
-      <button type="button" id="mypage-bookings"><span class="quick-icon">${MYPAGE_ICONS.calendar}</span><strong>예약 내역</strong></button>
-      <button type="button" id="customer-detail-page"><span class="quick-icon">${MYPAGE_ICONS.doc}</span><strong>이용 내역</strong></button>
-    </nav>
-    <h4 class="mypage-sec-title">작업 현황</h4>
-    <article class="mypage-progress-card" id="work-status-card">
-      <p class="work-status-text">${esc(statusText)}</p>
-      <div class="work-steps">${stepsHtml}</div>
-      ${hasRunPhotos ? `<button type="button" class="mini-btn view-run-photos" data-run="${esc(latestRun.id)}">작업사진 보기</button>` : ''}
-    </article>
-    <button type="button" class="mypage-cs-btn" id="mypage-center">
-      <span class="cs-icon" aria-hidden="true">${MYPAGE_ICONS.headset}</span>
-      <span class="cs-text"><strong>고객센터</strong><span>실시간 채팅으로 문의하세요</span></span>
-      <b>›</b>
-    </button>
+
+      ${heroHtml}
+
+      <p class="pm-lab">내 차</p>
+      <div class="pm-list">
+        ${pmItem('work', 'wrench', '작업현황', latestRun ? '진행 중' : '', latestRun ? 'acc' : '')}
+        ${pmItem('history', 'doc', '이용 내역', historyCount ? `${historyCount}건` : '')}
+      </div>
+
+      <p class="pm-lab">예약</p>
+      <div class="pm-list">
+        ${pmItem('reserve', 'calendar', '정비 예약하기')}
+        ${pmItem('bookings', 'clock', '예약 내역', upcoming ? `다음 ${esc(pmDateParts(upcoming.date).label)}` : '')}
+      </div>
+
+      <p class="pm-lab">고객센터</p>
+      <div class="pm-list">
+        ${pmItem('center', 'chat', '전화 · 채팅 문의', unreadReplies ? '<u></u>답변 ' + unreadReplies : '', unreadReplies ? 'acc' : '')}
+        ${pmItem('alerts', 'bell', '알림', notices.length ? '<u></u>' + notices.length : '', notices.length ? 'acc' : '')}
+      </div>
+
+      <p class="pm-lab">내 정보</p>
+      <div class="pm-list">
+        ${pmItem('info', 'user', '회원정보 수정')}
+        ${pmItem('logout', 'lock', '로그아웃')}
+      </div>
+      <div class="pm-bp"></div>
+    </div>
   `, true);
-  modalCard.classList.add('mypage-card');
-  $('#customer-detail-page').addEventListener('click', openCustomerHistoryModal);
-  $('#mypage-alerts').addEventListener('click', openMyAlertsPage);
-  $('#mypage-info').addEventListener('click', openMyInfoPage);
-  $('#mypage-bookings').addEventListener('click', openMyBookingsPage);
-  $('#mypage-center').addEventListener('click', () => openCustomerCenterModal(member));
-  $('#quick-work').addEventListener('click', openWorkStatusPage);
-  modalCard.querySelectorAll('.view-run-photos').forEach(btn => {
-    btn.addEventListener('click', () => openRunPhotosModal(btn.dataset.run));
+  modalCard.classList.add('mypage-card', 'pm-page');
+
+  const actions = {
+    work: openWorkStatusPage,
+    history: openCustomerHistoryModal,
+    reserve: () => { closeModal(); openReserveFlow(); },
+    bookings: openMyBookingsPage,
+    center: () => openCustomerCenterModal(member),
+    alerts: openMyAlertsPage,
+    info: openMyInfoPage,
+    logout: () => { closeModal(); logout(); },
+    cancel: () => { if (cancelMemberBooking(upcoming)) openMyPageModal(); }
+  };
+  modalCard.querySelectorAll('[data-pm]').forEach(btn => {
+    btn.addEventListener('click', () => actions[btn.dataset.pm]?.());
   });
 }
 

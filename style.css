@@ -3763,3 +3763,252 @@ button.step-photo-slot {
 @media (max-width: 520px) {
   .admin-settings-quick { grid-template-columns: repeat(3, 1fr); }
 }
+
+/* ============================================================
+   마이페이지 개편 (시안 2단 카드) — .pm-page 안에서만 적용
+   여백은 4의 배수 8단계(4·8·12·16·20·24·28·32)만 사용한다.
+   ============================================================ */
+.modal-card.pm-page {
+  --pm-pad: 20px;    /* 화면 좌우 */
+  --pm-cpad: 20px;   /* 카드 안쪽 */
+  --pm-rowpad: 17px; /* 목록 한 줄 위아래 */
+  --pm-gap: 14px;    /* 카드 사이 */
+  --pm-slab: 28px;   /* 섹션 라벨 위 */
+  --pm-slabb: 12px;  /* 섹션 라벨 아래 */
+  --pm-rad: 18px;
+  --pm-radb: 22px;
+  --pm-fmenu: 15px;
+  --pm-fbody: 13px;
+  --pm-icon: 22px;
+  --pm-btnh: 54px;
+
+  --pm-nv: #1e2464;
+  --pm-nv2: #2a3170;
+  --pm-nvd: #141939;
+  --pm-yl: #f5c400;
+  --pm-yld: #b08c00;
+  --pm-rd: #d93a34;
+  --pm-k1: #14161c;
+  --pm-k2: #666f7d;
+  --pm-k3: #a2adba;
+  --pm-ln: #eceef2;
+  --pm-ln2: #f5f6f9;
+  --pm-scbg: #f2f4f7;
+
+  padding: 0;
+  border: 0;
+  background: var(--pm-scbg);
+  color: var(--pm-k1);
+  border-radius: var(--pm-radb);
+}
+.pm-page .pm-sr {
+  position: absolute;
+  width: 1px; height: 1px;
+  margin: -1px; padding: 0; border: 0;
+  overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%);
+  white-space: nowrap;
+}
+.pm-page .pm-scr { padding: 0 var(--pm-pad) var(--pm-slab); }
+.pm-page .pm-bp { height: 24px; }
+/* 닫기 버튼은 시안의 상태바 자리에 놓아 인사말과 겹치지 않게 한다 */
+.pm-page > .modal-x {
+  position: sticky;
+  z-index: 12;
+  top: var(--pm-slabb);
+  margin: var(--pm-slabb) var(--pm-slabb) 0 auto;
+  background: #fff;
+  color: var(--pm-k2);
+  box-shadow: 0 2px 10px rgba(15,23,42,.14);
+}
+
+/* 인사말 */
+.pm-page .pm-hi { padding: var(--pm-gap) 4px 0; }
+.pm-page .pm-hi h3 {
+  margin: 0;
+  font-size: 21px; font-weight: 900;
+  color: var(--pm-nv); letter-spacing: -.6px;
+}
+.pm-page .pm-hi p {
+  margin: 8px 0 0;
+  font-size: var(--pm-fbody); font-weight: 700;
+  color: var(--pm-k2); line-height: 1.55;
+}
+.pm-page .pm-hi mark { background: none; color: var(--pm-yld); font-weight: 900; }
+
+/* 섹션 라벨 */
+.pm-page .pm-lab {
+  margin: var(--pm-slab) 6px var(--pm-slabb);
+  font-size: 12px; font-weight: 900;
+  color: var(--pm-k3); letter-spacing: .3px;
+}
+
+/* 배지 */
+.pm-page .pm-plate {
+  border: 1.4px solid rgba(255,255,255,.85);
+  border-radius: 5px;
+  padding: 3px 7px;
+  font-size: 10.5px; font-weight: 900;
+  color: #fff; white-space: nowrap;
+}
+.pm-page .pm-chip {
+  display: inline-block;
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 10.5px; font-weight: 900;
+  white-space: nowrap;
+}
+.pm-page .pm-chip.y { background: var(--pm-yl); color: var(--pm-nv); }
+
+/* 2단 카드 */
+.pm-page .pm-tier {
+  margin-top: var(--pm-gap);
+  border-radius: var(--pm-radb);
+  overflow: hidden;
+  background: linear-gradient(155deg, var(--pm-nv2) 0%, var(--pm-nv) 48%, var(--pm-nvd) 100%);
+  box-shadow: 0 10px 26px rgba(20,25,57,.26);
+}
+.pm-page .pm-tier-top { padding: var(--pm-cpad); }
+.pm-page .pm-tier-r1 { display: flex; align-items: center; gap: 8px; }
+.pm-page .pm-tier h4 {
+  margin: var(--pm-gap) 0 0;
+  color: #fff; font-size: 22px; font-weight: 900; letter-spacing: -.6px;
+}
+.pm-page .pm-tier-svc {
+  margin: 6px 0 0;
+  color: rgba(255,255,255,.64);
+  font-size: var(--pm-fbody); font-weight: 700;
+}
+.pm-page .pm-tier-pg {
+  margin-top: 18px;
+  display: flex; align-items: flex-end; justify-content: space-between; gap: 12px;
+}
+.pm-page .pm-tier-pg strong {
+  color: var(--pm-yl);
+  font-size: 34px; font-weight: 900; line-height: 1;
+  letter-spacing: -1.6px; font-variant-numeric: tabular-nums;
+}
+.pm-page .pm-tier-pg strong i { font-style: normal; font-size: 15px; }
+.pm-page .pm-tier-pg span {
+  color: rgba(255,255,255,.72);
+  font-size: 12.5px; font-weight: 800; text-align: right;
+}
+.pm-page .pm-track {
+  height: 8px; margin-top: var(--pm-slabb);
+  border-radius: 999px; overflow: hidden;
+  background: rgba(255,255,255,.15);
+}
+.pm-page .pm-track i { display: block; height: 100%; border-radius: 999px; background: var(--pm-yl); }
+.pm-page .pm-steps { display: flex; gap: 5px; margin-top: var(--pm-gap); }
+.pm-page .pm-steps span {
+  flex: 1; min-width: 0;
+  text-align: center;
+  font-size: 9.5px; font-weight: 900;
+  padding: 7px 2px; border-radius: 7px;
+  background: rgba(255,255,255,.1); color: rgba(255,255,255,.45);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.pm-page .pm-steps span.done { background: rgba(255,255,255,.9); color: var(--pm-nv); }
+.pm-page .pm-steps span.now { background: var(--pm-yl); color: var(--pm-nv); }
+
+/* 2단 카드 아래칸 */
+.pm-page .pm-tier-foot {
+  width: 100%;
+  border: 0; border-top: 1px solid rgba(255,255,255,.13);
+  background: rgba(255,255,255,.055);
+  padding: 16px var(--pm-cpad);
+  display: grid; grid-template-columns: 19px minmax(0,1fr) auto 12px;
+  align-items: center; gap: 11px;
+  font-family: inherit; text-align: left; cursor: pointer;
+}
+.pm-page .pm-foot-ic { color: var(--pm-yl); display: grid; }
+.pm-page .pm-foot-ic svg { width: 18px; height: 18px; }
+.pm-page .pm-tier-foot b { color: rgba(255,255,255,.72); font-size: 12px; font-weight: 800; }
+.pm-page .pm-tier-foot strong { color: #fff; font-size: 13px; font-weight: 900; white-space: nowrap; }
+.pm-page .pm-foot-cv { color: rgba(255,255,255,.4); display: grid; }
+.pm-page .pm-foot-cv svg { width: 13px; height: 13px; }
+
+/* 입고 예정: D-day */
+.pm-page .pm-dday { margin-top: var(--pm-gap); display: flex; align-items: baseline; gap: 9px; flex-wrap: wrap; }
+.pm-page .pm-dday strong {
+  color: var(--pm-yl);
+  font-size: 31px; font-weight: 900; line-height: 1; letter-spacing: -1.4px;
+  font-variant-numeric: tabular-nums;
+}
+.pm-page .pm-dday b { color: #fff; font-size: 18px; font-weight: 900; }
+
+/* 예약 없음 카드 */
+.pm-page .pm-empty {
+  margin-top: var(--pm-gap);
+  background: #fff; border-radius: var(--pm-rad);
+  box-shadow: 0 2px 12px rgba(15,23,42,.06);
+  padding: 26px var(--pm-cpad) 22px;
+  text-align: center;
+}
+.pm-page .pm-empty-ic {
+  width: 50px; height: 50px; margin: 0 auto;
+  border-radius: 50%; background: var(--pm-ln2);
+  display: grid; place-items: center; color: var(--pm-k3);
+}
+.pm-page .pm-empty-ic svg { width: 24px; height: 24px; }
+.pm-page .pm-empty b { display: block; margin-top: var(--pm-gap); font-size: 17px; font-weight: 900; }
+.pm-page .pm-empty p { margin: 6px 0 0; font-size: 12.5px; font-weight: 700; color: var(--pm-k2); }
+.pm-page .pm-empty .pm-press { margin-top: 18px; }
+
+/* 메뉴 목록 */
+.pm-page .pm-list {
+  background: #fff;
+  border-radius: var(--pm-rad);
+  overflow: hidden;
+  box-shadow: 0 2px 12px rgba(15,23,42,.055);
+}
+.pm-page .pm-item {
+  width: 100%;
+  display: grid; grid-template-columns: var(--pm-icon) minmax(0,1fr) auto 13px;
+  align-items: center; gap: var(--pm-gap);
+  padding: var(--pm-rowpad) var(--pm-cpad);
+  min-height: 44px;
+  border: 0; background: none; font-family: inherit;
+  text-align: left; cursor: pointer; color: var(--pm-k1);
+}
+.pm-page .pm-item + .pm-item { border-top: 1px solid var(--pm-ln2); }
+.pm-page .pm-item-ic { color: var(--pm-nv); display: grid; place-items: center; }
+.pm-page .pm-item-ic svg { width: var(--pm-icon); height: var(--pm-icon); }
+.pm-page .pm-item b { font-size: var(--pm-fmenu); font-weight: 800; letter-spacing: -.2px; }
+.pm-page .pm-item-v {
+  font-size: 12.5px; font-weight: 800;
+  color: var(--pm-k3); white-space: nowrap;
+}
+.pm-page .pm-item-v.acc { color: var(--pm-nv); }
+.pm-page .pm-item-v.warn { color: var(--pm-rd); }
+.pm-page .pm-item-v u {
+  text-decoration: none;
+  display: inline-block; width: 6px; height: 6px;
+  border-radius: 50%; background: var(--pm-rd);
+  margin-right: 6px; vertical-align: middle;
+}
+.pm-page .pm-item-cv { color: #ccd2db; display: grid; }
+.pm-page .pm-item-cv svg { width: 14px; height: 14px; }
+
+/* 버튼 */
+.pm-page .pm-press {
+  width: 100%; border: 0;
+  font-family: inherit; font-weight: 900;
+  border-radius: 999px; cursor: pointer;
+}
+.pm-page .pm-press.pm-main {
+  background: var(--pm-nv); color: var(--pm-yl);
+  font-size: 15px; min-height: var(--pm-btnh);
+  box-shadow: 0 4px 0 var(--pm-yl), 0 10px 18px rgba(30,36,100,.2);
+}
+.pm-page .pm-press.pm-soft-navy {
+  background: rgba(255,255,255,.12); color: #fff;
+  font-size: 13.5px; min-height: 46px;
+}
+.pm-page .pm-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; }
+.pm-page .pm-pair-onnavy { margin-top: 16px; }
+
+/* 모바일 전체화면일 때는 하단 탭바만큼 비워둔다 */
+@media (max-width: 900px) {
+  .modal-card.pm-page { border-radius: 0; }
+  .pm-page .pm-bp { height: 94px; }
+}
