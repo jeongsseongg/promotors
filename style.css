@@ -4637,3 +4637,22 @@ button.step-photo-slot {
 
 /* 지점 사진이 없을 때는 시안과 같은 16:9로 (등록되면 JS가 실제 비율로 덮어쓴다) */
 .branch-large-media { aspect-ratio: 16 / 9; }
+
+/* ---------- 시안 부품 12: 로그인 링크 · 소셜 버튼 ---------- */
+.pm-page .pm-links {
+  margin-top: var(--pm-s4, 16px);
+  display: flex; align-items: center; justify-content: center; gap: var(--pm-slabb);
+  font-size: 12px; font-weight: 800; color: var(--pm-k3);
+}
+.pm-page .pm-links b { color: var(--pm-nv); cursor: pointer; }
+.pm-page .pm-links span { cursor: pointer; }
+.pm-page .pm-links i { font-style: normal; color: #dde2e9; }
+.pm-page .pm-or {
+  margin: 26px 0 0; text-align: center;
+  font-size: 11px; font-weight: 800; color: var(--pm-k3);
+}
+.pm-page .pm-social { margin-top: var(--pm-gap); display: grid; gap: 9px; }
+.pm-page .pm-press.pm-kakao { background: #fee500; color: #3c1e1e; font-size: 14px; min-height: 48px; }
+.pm-page .pm-press.pm-naver { background: #03c75a; color: #fff; font-size: 14px; min-height: 48px; }
+.pm-page .pm-press.pm-cancel { margin-top: 9px; }
+.pm-page .form-error.ok { color: #12805a; }

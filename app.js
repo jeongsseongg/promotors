@@ -700,6 +700,180 @@ function validMemberPassword(value) {
   return value.length >= 8 && /[A-Za-z가-힣]/.test(value) && /\d/.test(value);
 }
 
+/* ============================================================
+   카카오 · 네이버 로그인
+   앱 ID는 config.js, 비밀키는 Cloudflare Pages 환경변수에 둔다.
+   ============================================================ */
+const socialConfig = () => window.PROMOTORS_SOCIAL || {};
+const socialRedirectUri = () => `${location.origin}${location.pathname}`;
+
+const SOCIAL_LABEL = { kakao: '카카오', naver: '네이버' };
+
+function startSocialLogin(provider) {
+  const cfg = socialConfig();
+  const redirectUri = socialRedirectUri();
+  const state = `${provider}:${Math.random().toString(36).slice(2)}`;
+  sessionStorage.setItem('pm-social-state', state);
+
+  if (provider === 'kakao') {
+    if (!cfg.kakaoRestKey) return socialNotReady('kakao');
+    location.href = 'https://kauth.kakao.com/oauth/authorize?' + new URLSearchParams({
+      response_type: 'code',
+      client_id: cfg.kakaoRestKey,
+      redirect_uri: redirectUri,
+      state
+    });
+    return;
+  }
+  if (provider === 'naver') {
+    if (!cfg.naverClientId) return socialNotReady('naver');
+    location.href = 'https://nid.naver.com/oauth2.0/authorize?' + new URLSearchParams({
+      response_type: 'code',
+      client_id: cfg.naverClientId,
+      redirect_uri: redirectUri,
+      state
+    });
+  }
+}
+
+function socialNotReady(provider) {
+  const label = SOCIAL_LABEL[provider] || provider;
+  openModal(`
+    <h3>${esc(label)} 로그인 준비 중</h3>
+    <p class="confirm-copy">${esc(label)} 로그인은 앱 등록이 끝나면 바로 사용할 수 있습니다.<br>
+    그때까지는 아이디로 로그인해주세요.</p>
+    <div class="modal-actions">
+      <button type="button" class="modal-submit" onclick="openMemberModal('login')">아이디로 로그인</button>
+      <button type="button" class="modal-cancel" onclick="closeModal()">닫기</button>
+    </div>
+  `);
+}
+
+/* 소셜 로그인에서 돌아왔을 때 처리 — 시작 시 한 번 호출한다 */
+async function handleSocialReturn() {
+  const params = new URLSearchParams(location.search);
+  const code = params.get('code');
+  const state = params.get('state') || '';
+  if (!code || !state.includes(':')) return false;
+
+  const expected = sessionStorage.getItem('pm-social-state');
+  const provider = state.split(':')[0];
+  /* 주소창을 먼저 정리해 새로고침 시 재시도되지 않게 한다 */
+  history.replaceState(null, '', location.pathname);
+  sessionStorage.removeItem('pm-social-state');
+  if (!expected || expected !== state) return false;
+
+  try {
+    const res = await fetch('/api/social-login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ provider, code, state, redirectUri: socialRedirectUri() })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || '로그인에 실패했습니다.');
+    applySocialLogin(data);
+  } catch (err) {
+    alert(err.message || '로그인에 실패했습니다.');
+  }
+  return true;
+}
+
+/* 소셜 계정으로 회원을 찾거나 새로 만든다. 차량번호는 나중에 채운다. */
+function applySocialLogin(profile) {
+  const members = store.get('pm-members', []);
+  const socialKey = `${profile.provider}:${profile.socialId}`;
+
+  /* 차단된 번호는 소셜로도 들어올 수 없다 */
+  const phone = normPhone(profile.phone);
+  const banned = getBannedMembers().some(b =>
+    b.type === 'blocked' && (b.member?.socialKey === socialKey ||
+      (phone && normPhone(b.member?.phone) === phone)));
+  if (banned) { alert('차단된 계정입니다. 매장에 문의해주세요.'); return; }
+
+  let found = members.find(m => m.socialKey === socialKey)
+    || (phone && members.find(m => normPhone(m.phone) === phone))
+    || (profile.email && members.find(m => m.email && m.email === profile.email));
+
+  if (found) {
+    found.socialKey = socialKey;
+  } else {
+    found = {
+      id: socialKey,
+      password: '',
+      socialKey,
+      provider: profile.provider,
+      name: profile.name || '고객',
+      phone: profile.phone || '',
+      email: profile.email || '',
+      car: '',
+      model: '',
+      role: 'customer'
+    };
+    members.push(found);
+  }
+  store.set('pm-members', members);
+  member = found;
+  store.set('pm-member', member);
+  applyAuthUI();
+  logEvent('social_login', { provider: profile.provider });
+
+  /* 차량 정보가 없으면 바로 회원정보 입력으로 안내한다 */
+  if (!member.car) {
+    alert(`${SOCIAL_LABEL[profile.provider] || ''} 로그인이 완료됐습니다.\n예약을 위해 차량 정보를 입력해주세요.`);
+    openMyInfoPage();
+  } else {
+    openMyPageModal();
+  }
+}
+
+/* 아이디 / 비밀번호 찾기 */
+function openFindAccount(mode) {
+  const isId = mode === 'id';
+  openModal(`
+    <h3 class="pm-sr">${isId ? '아이디 찾기' : '비밀번호 재설정'}</h3>
+    <div class="pm-scr">
+      <div class="pm-hd">
+        <button type="button" class="pm-bk" id="find-back">${MYPAGE_ICONS.chevron}</button>
+        <b>${isId ? '아이디 찾기' : '비밀번호 재설정'}</b>
+      </div>
+      <p class="pm-note">가입할 때 등록한 ${isId ? '핸드폰번호' : '아이디와 핸드폰번호'}를 입력해주세요.</p>
+      <form id="find-form" class="pm-form">
+        ${isId ? '' : '<input type="text" id="f-id" class="pm-input" placeholder="아이디" required>'}
+        <input type="tel" id="f-phone" class="pm-input" placeholder="핸드폰번호 (예: 010-1234-5678)" required>
+        ${isId ? '' : '<input type="password" id="f-pw" class="pm-input" placeholder="새 비밀번호" required>'}
+        <p class="form-error" id="f-error"></p>
+        <button type="submit" class="pm-press pm-main">${isId ? '아이디 찾기' : '비밀번호 변경'}</button>
+      </form>
+      <div class="pm-bp"></div>
+    </div>
+  `, true);
+  modalCard.classList.add('mobile-full', 'pm-page');
+  $('#find-back').addEventListener('click', () => openMemberModal('login'));
+  $('#find-form').addEventListener('submit', e => {
+    e.preventDefault();
+    const err = $('#f-error');
+    const phone = normPhone($('#f-phone').value);
+    const members = store.get('pm-members', []);
+    if (isId) {
+      const hit = members.find(m => normPhone(m.phone) === phone);
+      err.textContent = hit
+        ? `가입된 아이디: ${hit.socialKey ? SOCIAL_LABEL[hit.provider] + ' 로그인 계정' : hit.id}`
+        : '해당 번호로 가입된 계정이 없습니다.';
+      err.classList.toggle('ok', !!hit);
+      return;
+    }
+    const id = $('#f-id').value.trim();
+    const next = $('#f-pw').value;
+    const idx = members.findIndex(m => m.id === id && normPhone(m.phone) === phone);
+    if (idx === -1) { err.classList.remove('ok'); err.textContent = '아이디와 핸드폰번호가 일치하는 계정이 없습니다.'; return; }
+    if (!validMemberPassword(next)) { err.classList.remove('ok'); err.textContent = '비밀번호는 영어 또는 한글과 숫자를 포함해 8자 이상이어야 합니다.'; return; }
+    members[idx].password = next;
+    store.set('pm-members', members);
+    err.classList.add('ok');
+    err.textContent = '비밀번호가 변경되었습니다. 다시 로그인해주세요.';
+  });
+}
+
 function openMemberModal(tab) {
   const draft = store.get('pm-signup-draft', {});
   const rememberedId = store.get('pm-remember-id', '');
@@ -744,8 +918,19 @@ function openMemberModal(tab) {
       `}
       <p class="form-error" id="m-error"></p>
       <button type="submit" class="pm-press pm-main">${tab === 'login' ? '로그인' : '가입하기'}</button>
-      <button type="button" class="pm-press pm-soft" onclick="closeModal()">취소</button>
     </form>
+      ${tab === 'login' ? `
+        <div class="pm-links">
+          <b data-t="signup">회원가입</b><i>|</i>
+          <span id="find-id">아이디 찾기</span><i>|</i>
+          <span id="find-pw">비밀번호 재설정</span>
+        </div>
+        <p class="pm-or">또는</p>
+        <div class="pm-social">
+          <button type="button" class="pm-press pm-kakao" data-social="kakao">카카오로 시작하기</button>
+          <button type="button" class="pm-press pm-naver" data-social="naver">네이버로 시작하기</button>
+        </div>
+      ` : '<button type="button" class="pm-press pm-soft pm-cancel" onclick="closeModal()">취소</button>'}
       <div class="pm-bp"></div>
     </div>
   `);
@@ -754,6 +939,10 @@ function openMemberModal(tab) {
   modalCard.classList.add('mobile-full', 'pm-page');
   modalCard.querySelectorAll('[data-t]').forEach(b =>
     b.addEventListener('click', () => openMemberModal(b.dataset.t)));
+  modalCard.querySelectorAll('[data-social]').forEach(b =>
+    b.addEventListener('click', () => startSocialLogin(b.dataset.social)));
+  $('#find-id')?.addEventListener('click', () => openFindAccount('id'));
+  $('#find-pw')?.addEventListener('click', () => openFindAccount('pw'));
   $('#m-id').value = tab === 'signup' ? (draft.id || '') : rememberedId;
   if (tab === 'login') $('#m-remember') && ($('#m-remember').checked = !!rememberedId);
 
@@ -2197,33 +2386,17 @@ async function renderNotices() {
     return;
   }
 
-  /* 시안: 맨 위 공지 하나는 진한 2단 카드(필독), 나머지는 목록 줄 */
-  album.className = 'album pm-page';
   for (const [i, n] of notices.entries()) {
     const card = document.createElement('article');
     const imageHtml = await renderImageStrip(n.imageKeys || [], n.title);
-    if (i === 0) {
-      card.className = 'pm-tier pm-notice-top';
-      card.innerHTML = `
-        <div class="pm-tier-top">
-          <div class="pm-tier-r1">
-            <span class="pm-chip y">필독</span>
-            <span class="pm-tier-date">${esc(n.date || '')}</span>
-          </div>
-          <h4 class="pm-notice-title">${esc(n.title || '')}</h4>
-          <p class="pm-tier-svc">${esc(plainFromHtml(n.bodyHtml || n.body).slice(0, 120))}</p>
-        </div>`;
-    } else {
-      card.className = 'pm-notice-row';
-      card.innerHTML = `
-        <div class="pm-rw">
-          <span class="pm-rw-t">
-            <b>${esc(n.title || '')}</b>
-            <s>${esc(plainFromHtml(n.bodyHtml || n.body).slice(0, 80))}</s>
-          </span>
-          <span class="pm-rw-m">${esc((n.date || '').replace(/^\d{4}\./, ''))}</span>
-        </div>`;
-    }
+    card.className = `notice-card post-card ${imageHtml ? 'has-image' : 'text-only'}`;
+    card.innerHTML = `
+      ${imageHtml ? `<div class="post-images">${imageHtml}</div>` : ''}
+      <div class="notice-body">
+        <time>${esc(n.date || '')}</time>
+        <h3>${esc(n.title || '')}</h3>
+        <p>${esc(plainFromHtml(n.bodyHtml || n.body).slice(0, 260))}</p>
+      </div>`;
     card.addEventListener('click', e => {
       if (!e.target.closest('button, a')) openPostView(n, { kind: 'notice', index: allNotices.indexOf(n) });
     });
@@ -4855,6 +5028,9 @@ async function startApp() {
   await migrateLocalAssetsToSupabase();
   applyAuthUI();
   renderIntroSlides();
+
+  /* 카카오·네이버에서 돌아온 경우 로그인 마무리 */
+  await handleSocialReturn();
 }
 
 startApp();
