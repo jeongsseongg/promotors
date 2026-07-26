@@ -73,9 +73,11 @@ jobs:
         if: ${{ env.FIREBASE_SERVICE_ACCOUNT_JSON != '' && env.FIREBASE_PROJECT_ID != '' }}
         run: npx firebase-tools deploy --only hosting --project "$FIREBASE_PROJECT_ID"
 
-      - name: Skip Firebase deploy
+      - name: Fail when Firebase secrets are missing
         if: ${{ env.FIREBASE_SERVICE_ACCOUNT_JSON == '' || env.FIREBASE_PROJECT_ID == '' }}
-        run: echo "Firebase secrets are not configured. Skipping Firebase deploy."
+        run: |
+          echo "::error::FIREBASE_PROJECT_ID and FIREBASE_SERVICE_ACCOUNT_JSON must be set. Refusing to skip the deploy silently."
+          exit 1
 
   deploy-cloudflare:
     needs: build
@@ -106,6 +108,8 @@ jobs:
         if: ${{ env.CLOUDFLARE_API_TOKEN != '' && env.CLOUDFLARE_ACCOUNT_ID != '' }}
         run: npx wrangler pages deploy dist --project-name promotors-site
 
-      - name: Skip Cloudflare deploy
+      - name: Fail when Cloudflare secrets are missing
         if: ${{ env.CLOUDFLARE_API_TOKEN == '' || env.CLOUDFLARE_ACCOUNT_ID == '' }}
-        run: echo "Cloudflare secrets are not configured. Skipping Cloudflare deploy."
+        run: |
+          echo "::error::CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN must be set. Refusing to skip the deploy silently."
+          exit 1
