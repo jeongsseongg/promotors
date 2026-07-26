@@ -4606,3 +4606,34 @@ button.step-photo-slot {
   font-size: 12.5px; font-weight: 600; color: var(--pm-k2); line-height: 1.7;
 }
 .pm-page .pm-faq-a[hidden] { display: none; }
+
+/* ---------- 시안 부품 11: 모달 밖(우측 패널)에서도 쓰는 칩·그리드 ---------- */
+/* 브랜드 칩: 정비사례 화면은 .pm-page 밖이라 범위 없이 정의한다 */
+.brand-filter.pm-pills {
+  display: flex; flex-wrap: nowrap;
+  gap: 8px; margin-top: 18px;
+  overflow-x: auto; scrollbar-width: none;
+  padding-bottom: 2px;
+}
+.brand-filter.pm-pills::-webkit-scrollbar { display: none; }
+.brand-filter.pm-pills span {
+  border: 1px solid #dde2e9; background: #fff; color: #5d6672;
+  font-size: 13px; font-weight: 800;
+  padding: 10px 15px; border-radius: 999px;
+  white-space: nowrap; cursor: pointer;
+  min-height: 44px; display: inline-flex; align-items: center; flex: none;
+}
+.brand-filter.pm-pills span.on { background: #1e2464; border-color: #1e2464; color: #f5c400; }
+
+/* 정비사례 2열 카드 — 기존 #case-list 규칙(아이디)보다 우선하도록 아이디로 맞춘다 */
+#case-list.pm-cases { grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 16px; }
+@media (min-width: 901px) {
+  #case-list.pm-cases { grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); }
+}
+@media (max-width: 900px) {
+  #case-list.pm-cases { grid-template-columns: 1fr 1fr; }
+}
+#case-list.pm-cases .card-actions { padding: 0 12px 12px; }
+
+/* 지점 사진이 없을 때는 시안과 같은 16:9로 (등록되면 JS가 실제 비율로 덮어쓴다) */
+.branch-large-media { aspect-ratio: 16 / 9; }
