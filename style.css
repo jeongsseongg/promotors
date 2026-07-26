@@ -392,6 +392,48 @@ body {
   scrollbar-width: thin;
   scrollbar-color: var(--navy) rgba(255,255,255,.48);
 }
+
+/* ===== 하단 푸터 ===== */
+.site-footer {
+  position: relative;
+  z-index: 2;
+  flex: 0 0 auto;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(30, 36, 100, .18);
+  color: #4b5563;
+  font-size: 12px;
+  line-height: 1.55;
+}
+.site-footer__inner { display: flex; align-items: center; gap: 12px 18px; }
+.site-footer__brand { display: flex; flex: 0 0 auto; flex-direction: column; color: var(--navy); }
+.site-footer__brand strong { font-size: 13px; }
+.site-footer__brand span { font-size: 11px; }
+/* 2줄 고정: 1줄 대표·사업자번호·주소 / 2줄 전화·이메일·약관 */
+.site-footer__business { display: grid; flex: 1; gap: 4px; min-width: 0; font-style: normal; }
+.site-footer__line { display: flex; flex-wrap: wrap; align-items: center; gap: 0 10px; }
+.site-footer__business span::after,
+.site-footer__business a::after { content: '·'; margin-left: 10px; color: #a0a8b2; }
+.site-footer__line > :last-child::after { content: none; margin: 0; }
+.site-footer a { color: inherit; text-decoration: none; }
+.site-footer a:hover, .site-footer a:focus-visible { color: var(--navy); text-decoration: underline; }
+/* 약관 버튼을 이메일 오른쪽에 같은 줄로 이어 배치 (address의 flex 흐름에 합류) */
+.site-footer__legal { display: contents; }
+.site-footer__legal button {
+  border: 0; padding: 4px 0; background: none; color: var(--navy); cursor: pointer;
+  font: inherit; font-weight: 700; text-decoration: underline; text-underline-offset: 3px;
+}
+.site-footer__legal button:focus-visible { outline: 2px solid var(--navy); outline-offset: 3px; }
+.site-footer__copyright { margin-top: 3px; color: #7b8490; font-size: 11px; }
+
+.legal-modal { max-width: 760px; }
+.legal-modal h3 { padding-right: 36px; }
+.legal-modal__updated { margin: 6px 0 20px; color: #6b7280; font-size: 13px; }
+.legal-modal__content { display: grid; gap: 20px; color: #374151; font-size: 14px; line-height: 1.7; }
+.legal-modal__content section { display: grid; gap: 6px; }
+.legal-modal__content h4 { color: var(--navy); font-size: 16px; }
+.legal-modal__content ul { padding-left: 20px; }
+.legal-modal__content a { color: var(--navy); }
 .view.active::-webkit-scrollbar,
 .modal-card::-webkit-scrollbar,
 .message-list::-webkit-scrollbar {
@@ -1995,16 +2037,29 @@ body:not(.main-admin) .main-admin-only { display: none !important; }
   flex-wrap: wrap;
   margin-top: 10px;
 }
-.service-steps span {
+.service-steps span,
+.service-steps button {
   border: 1px solid #d6dbe1;
   border-radius: 999px;
   padding: 6px 10px;
+  background: #fff;
   color: #555f6b;
+  font-family: inherit;
   font-size: 12px;
   font-weight: 800;
 }
-.service-steps span.active { border-color: var(--yellow); color: var(--navy); background: #fff9d9; }
-.service-steps span.done { border-color: #03c75a; color: #038550; background: #e6f7ee; }
+.service-steps button { cursor: pointer; min-height: 34px; }
+.service-steps button:hover { border-color: var(--navy); color: var(--navy); }
+.service-steps span.active, .service-steps button.active { border-color: var(--yellow); color: var(--navy); background: #fff9d9; }
+.service-steps span.done, .service-steps button.done { border-color: #03c75a; color: #038550; background: #e6f7ee; }
+/* 단계 칩 클릭 시 나오는 단계별 사진 미리보기 (최대 3장) */
+.stage-photos { display: grid; gap: 8px; }
+.stage-photos[hidden] { display: none; }
+.stage-photos-title { color: var(--navy); font-size: 13px; }
+.stage-photos-title span { color: #8a94a0; font-weight: 700; }
+.stage-photos .album-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); max-width: 480px; }
+.stage-photos .album-item img { cursor: zoom-in; }
+.stage-photos .mini-btn { justify-self: start; }
 .service-run-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
 
 /* 작업현황 / 승인 / 설정 */
@@ -2246,6 +2301,120 @@ button.step-photo-slot {
   display: grid;
   gap: 12px;
 }
+/* ===== 고객문의: 카드형 목록 + 상태 필터 ===== */
+.inquiry-tabs {
+  display: inline-flex;
+  margin-bottom: 14px;
+  border: 1px solid #dfe4ea;
+  border-radius: 12px;
+  overflow: hidden;
+  background: #fff;
+}
+.inquiry-tabs button {
+  min-height: 44px;
+  padding: 0 18px;
+  border: 0;
+  background: none;
+  color: #55606d;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 800;
+  cursor: pointer;
+}
+.inquiry-tabs button + button { border-left: 1px solid #dfe4ea; }
+.inquiry-tabs button.on { background: var(--navy); color: #fff; }
+.inquiry-list {
+  display: grid;
+  border: 1px solid #e6eaef;
+  border-radius: 14px;
+  background: #fff;
+  overflow: hidden;
+}
+.inquiry-item {
+  display: grid;
+  grid-template-columns: auto minmax(110px, auto) 1fr auto auto;
+  align-items: center;
+  gap: 14px;
+  padding: 16px 18px;
+  border-top: 1px solid #eef1f4;
+  cursor: pointer;
+}
+.inquiry-item:first-child { border-top: 0; }
+.inquiry-item:hover, .inquiry-item:focus-visible { background: #f7f9fc; }
+.inquiry-avatar {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: #eef1f5;
+  color: #8a94a0;
+}
+.inquiry-avatar svg { width: 22px; height: 22px; }
+.inquiry-who { display: grid; gap: 2px; }
+.inquiry-who strong { color: var(--navy); font-size: 15px; }
+.inquiry-who span { color: #8a94a0; font-size: 13px; font-weight: 700; }
+.inquiry-preview { display: grid; gap: 3px; min-width: 0; border-left: 1px solid #eef1f4; padding-left: 14px; }
+.inquiry-preview p {
+  color: #2b2f33;
+  font-size: 14px;
+  line-height: 1.45;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.inquiry-preview span { color: #8a94a0; font-size: 12px; font-weight: 700; }
+.inquiry-state { display: grid; justify-items: end; gap: 4px; }
+.inquiry-badge {
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 800;
+}
+.inquiry-badge.live { background: #e6f7ee; color: #03875a; }
+.inquiry-badge.done { background: var(--blue-soft); color: var(--blue-dark); }
+.inquiry-state > span { color: #8a94a0; font-size: 12px; font-weight: 700; }
+.inquiry-arrow { color: #b6bec7; font-size: 20px; font-weight: 800; }
+.inquiry-pages {
+  display: flex;
+  justify-content: center;
+  gap: 6px;
+  margin-top: 16px;
+}
+.inquiry-pages button {
+  min-width: 36px;
+  min-height: 36px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: #55606d;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 800;
+  cursor: pointer;
+}
+.inquiry-pages button.on { background: var(--navy); color: #fff; }
+.inquiry-pages button:disabled { opacity: .35; cursor: default; }
+@media (max-width: 720px) {
+  /* 모바일: 아바타+이름 / 미리보기 / 상태를 세로로 쌓는다 */
+  .inquiry-item {
+    grid-template-columns: auto 1fr auto;
+    grid-template-areas:
+      "avatar who arrow"
+      "avatar preview arrow"
+      "avatar state arrow";
+    gap: 4px 12px;
+    padding: 14px;
+  }
+  .inquiry-avatar { grid-area: avatar; align-self: start; }
+  .inquiry-who { grid-area: who; display: flex; align-items: baseline; gap: 8px; }
+  .inquiry-preview { grid-area: preview; border-left: 0; padding-left: 0; }
+  .inquiry-state { grid-area: state; justify-items: start; grid-auto-flow: column; align-items: center; gap: 10px; margin-top: 2px; }
+  .inquiry-arrow { grid-area: arrow; align-self: center; }
+  .inquiry-tabs { width: 100%; }
+  .inquiry-tabs button { flex: 1; padding: 0 8px; }
+}
 .settings-main { min-width: 0; }
 .inquiry-card {
   position: sticky;
@@ -2327,20 +2496,21 @@ button.step-photo-slot {
 }
 .sub-admin-list li {
   display: grid;
-  grid-template-columns: 34px minmax(150px, 1fr) minmax(110px, auto) minmax(130px, auto) auto;
+  grid-template-columns: 34px minmax(120px, 1fr) minmax(160px, 2fr) auto;
   align-items: center;
   gap: 8px;
   border: 1px solid #e2e6ea;
   border-radius: 8px;
   padding: 10px 12px;
   background: #fafbfc;
+  min-width: 0;
 }
 .sub-admin-list li.empty {
   display: block;
   color: #8a94a0;
   font-size: 13px;
 }
-.sub-admin-list span {
+.sub-admin-list .sub-admin-index {
   display: grid;
   place-items: center;
   width: 26px;
@@ -2352,16 +2522,18 @@ button.step-photo-slot {
   font-weight: 900;
 }
 .sub-admin-list strong {
+  min-width: 0;
   color: #1f2933;
   font-size: 14px;
   word-break: break-all;
 }
 .sub-admin-list em {
+  min-width: 0;
   color: var(--navy);
   font-size: 13px;
   font-style: normal;
   font-weight: 900;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 }
 .sub-admin-list time {
   color: #6b7280;
@@ -2667,6 +2839,25 @@ button.step-photo-slot {
     padding: 24px 16px 56px;
     gap: 48px;
   }
+  .site-footer {
+    width: calc(100% + 32px);
+    margin: 0 -16px calc(68px + env(safe-area-inset-bottom));
+    padding: 28px 16px 24px;
+    background: #fff;
+    border-top: 1px solid #e2e6ea;
+    font-size: 13px;
+  }
+  .site-footer__inner { display: grid; gap: 14px; }
+  .site-footer__brand strong { font-size: 15px; }
+  .site-footer__brand span { font-size: 12px; }
+  .site-footer__business { display: grid; gap: 4px; line-height: 1.65; }
+  .site-footer__business span::after,
+  .site-footer__business a::after { content: none; margin: 0; }
+  /* 모바일은 2줄 묶음을 풀어 기존처럼 항목별 세로 배치 */
+  .site-footer__line { display: contents; }
+  .site-footer__legal { display: flex; flex-wrap: wrap; gap: 14px; }
+  .site-footer__copyright { margin-top: 14px; }
+  .legal-modal__content { font-size: 14px; }
   body[data-view="intro"] .right-panel { overflow: visible; }
   .view.active,
   #view-location.active,
@@ -3507,9 +3698,75 @@ button.step-photo-slot {
   line-height: 1;
   cursor: pointer;
 }
+.album-item img { cursor: zoom-in; }
 .album-item.deleted img { opacity: .55; border-style: dashed; border-color: var(--red); }
 .album-item.deleted figcaption { font-size: 11px; color: var(--red); margin-top: 4px; font-weight: 700; }
 .album-deleted-title { margin: 10px 0 6px; font-size: 13px; font-weight: 800; color: var(--red); }
+/* 삭제된 사진: 기본 접힘 — 버튼을 눌러야 펼쳐짐 */
+.album-deleted-toggle {
+  width: 100%;
+  min-height: 44px;
+  margin-top: 14px;
+  border: 1px dashed #d6a5a5;
+  border-radius: 10px;
+  background: #fff7f7;
+  color: var(--red);
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 800;
+  cursor: pointer;
+}
+.album-deleted-wrap { display: grid; gap: 12px; margin-top: 12px; }
+.album-deleted-wrap[hidden] { display: none; }
+
+/* 이미지 확대 라이트박스 (모바일·PC) */
+.image-lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 340;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+  background: rgba(8, 12, 24, .88);
+  cursor: zoom-out;
+}
+.image-lightbox img {
+  max-width: 96vw;
+  max-height: 90vh;
+  object-fit: contain;
+  border-radius: 10px;
+}
+.image-lightbox .lightbox-x {
+  position: absolute;
+  top: calc(14px + env(safe-area-inset-top));
+  right: 14px;
+  width: 42px;
+  height: 42px;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, .16);
+  color: #fff;
+  font-size: 24px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+/* 채팅: 사진 안내 메시지의 확인하기 버튼 */
+.chat-msg .chat-check {
+  justify-self: start;
+  margin-top: 6px;
+  min-height: 36px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--navy);
+  color: #fff;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
+}
+.chat-msg.mine .chat-check { background: rgba(255, 255, 255, .92); color: var(--navy); }
 
 .approval-steps { display: grid; gap: 10px; }
 .approval-step-row {
@@ -3782,7 +4039,11 @@ button.step-photo-slot {
   padding: 20px;
   background: rgba(15, 23, 42, .55);
 }
+/* hidden 속성이 위의 display: grid에 밀려 무시되면 닫은 뒤에도
+   빈 흰색 카드가 화면을 덮어 조작 불가 상태가 되므로 반드시 명시한다. */
+.pm-dialog-backdrop[hidden] { display: none; }
 .pm-dialog {
+  position: relative;
   width: min(360px, 100%);
   background: #fff;
   border-radius: 16px;
@@ -3790,6 +4051,21 @@ button.step-photo-slot {
   box-shadow: 0 18px 48px rgba(15, 23, 42, .28);
   text-align: center;
 }
+.pm-dialog-x {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 32px;
+  height: 32px;
+  border: 0;
+  border-radius: 50%;
+  background: #f1f4f8;
+  color: #6b7280;
+  font-size: 24px;
+  line-height: 1;
+  cursor: pointer;
+}
+.pm-dialog-x:hover { background: #e4e9ef; color: var(--navy); }
 .pm-dialog-brand {
   display: block;
   color: var(--gold);
@@ -3859,6 +4135,72 @@ button.step-photo-slot {
   display: flex;
   gap: 6px;
   flex-wrap: wrap;
+  grid-column: 2 / -1;
+  justify-content: flex-end;
+  width: 100%;
+  min-width: 0;
+  height: auto;
+  border-radius: 0;
+  background: transparent;
+  color: inherit;
+}
+.password-input-wrap {
+  position: relative;
+  display: flex;
+  flex: 1 1 240px;
+  min-width: 0;
+}
+.settings-form .password-input-wrap input,
+.modal-card .password-input-wrap input {
+  width: 100%;
+  min-width: 0;
+  padding-right: 66px;
+}
+.password-toggle {
+  position: absolute;
+  top: 50%;
+  right: 8px;
+  min-width: 48px;
+  min-height: 32px;
+  padding: 4px 8px;
+  transform: translateY(-50%);
+  border: 1px solid #c9d1d9;
+  border-radius: 6px;
+  background: #fff;
+  color: var(--navy);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 900;
+  cursor: pointer;
+}
+.inline-save-message {
+  margin-top: 8px;
+  min-height: 20px;
+  font-weight: 800;
+}
+.credential-reveal {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+  padding: 12px;
+  border: 1px solid var(--blue);
+  border-radius: 8px;
+  background: var(--blue-soft);
+}
+.credential-reveal strong { color: var(--navy); font-size: 14px; }
+.credential-reveal p { color: #555f6b; font-size: 13px; line-height: 1.55; }
+.credential-value { display: flex; gap: 8px; flex-wrap: wrap; }
+.credential-value input {
+  flex: 1 1 220px;
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid #c9d1d9;
+  border-radius: 8px;
+  background: #fff;
+  color: #1f2933;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 900;
 }
 /* 담당 지점 복수 선택 체크칩 */
 .branch-check-list {
@@ -3905,8 +4247,14 @@ button.step-photo-slot {
 .audit-summary em { color: #8a94a0; font-size: 12px; font-style: normal; font-weight: 700; }
 .audit-summary em b { color: var(--blue); font-weight: 900; }
 @media (max-width: 900px) {
+  .sub-admin-list li {
+    grid-template-columns: 30px minmax(0, 1fr);
+  }
+  .sub-admin-list li > strong,
+  .sub-admin-list li > em,
+  .sub-admin-list li > time,
   .sub-admin-list li .sub-admin-actions {
-    grid-column: 2 / -1;
+    grid-column: 2;
     justify-self: start;
   }
   .sub-admin-actions .mini-btn {
@@ -3915,6 +4263,7 @@ button.step-photo-slot {
   }
   .settings-form input,
   .settings-form select { min-width: 0; flex: 1 1 100%; }
+  .settings-form .password-input-wrap { flex-basis: 100%; width: 100%; }
   .settings-form .mini-btn { flex: 1 1 auto; min-height: 44px; }
   .ban-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 }
@@ -3925,10 +4274,17 @@ button.step-photo-slot {
 .event-banner {
   position: relative;
   width: 100%;
-  margin: 14px auto;
+  margin: 14px 0;
   border-radius: 16px;
   overflow: hidden;
 }
+/* 마이·설정 카드의 좌우 여백까지 사용해 배너를 끝까지 확장한다. */
+.mypage-card .event-banner {
+  width: auto;
+  margin: 14px -28px;
+  border-radius: 0;
+}
+.mypage-card .event-track { border-radius: 0; }
 .event-track {
   display: grid;
   grid-auto-flow: column;
@@ -3945,39 +4301,100 @@ button.step-photo-slot {
   display: grid;
 }
 .event-slide img { width: 100%; height: 148px; object-fit: cover; display: block; }
-/* 앱 설치 슬라이드: 배너 이미지 위에 앱 설치 버튼 오버레이 */
+/* 앱 설치 슬라이드: 설치 버튼만 실행되며, 이미지·문구는 안내용이다. */
 .event-slide.install-slide {
-  position: relative;
-  background: #f4f6fa;
-  cursor: pointer;
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-areas:
+    "logo copy"
+    "logo install";
+  align-items: center;
+  column-gap: 16px;
+  padding: 14px 18px;
+  background:
+    radial-gradient(circle at 85% 0%, rgba(255,255,255,.2), transparent 45%),
+    linear-gradient(135deg, var(--blue) 0%, var(--blue-dark) 100%);
+  color: #fff;
 }
-.event-slide .install-slide-bg {
-  width: 100%;
-  height: 148px;
+.event-slide .event-logo {
+  grid-area: logo;
+  width: 96px;
+  height: 96px;
+  border-radius: 22px;
   object-fit: cover;
-  object-position: left center;
-  display: block;
+  background: #fff;
+  box-shadow: 0 8px 20px rgba(9, 24, 60, .35);
 }
-/* 앱 설치 버튼: 배너 좌하단 빈 공간에 배치 (시안 위치 기준) */
-.event-install-btn {
-  position: absolute;
-  left: 4.5%;
-  bottom: 12%;
-  display: flex;
+.event-slide .event-copy { grid-area: copy; display: grid; gap: 6px; min-width: 0; }
+.event-slide .event-copy strong {
+  font-size: 21px;
+  letter-spacing: -.03em;
+  color: #fff;
+  white-space: nowrap;
+}
+.event-slide .event-copy span {
+  color: #dbe7ff;
+  font-size: 14px;
+  font-weight: 800;
+  word-break: keep-all;
+}
+/* 설치 버튼: 내 차 관리 문구에서 10px 아래, 기존보다 오른쪽으로 20px 확장 */
+.event-install-button {
+  grid-area: install;
+  width: calc(100% + 20px);
+  max-width: 260px;
+  min-height: 48px;
+  margin-top: 10px;
+  padding: 0 18px;
+  display: inline-flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  min-width: 34%;
-  padding: 9px 16px;
-  border-radius: 8px;
-  background: var(--blue);
+  border: 0;
+  border-radius: 12px;
+  background: var(--navy);
   color: #fff;
+  font-family: inherit;
+  font-size: 16px;
   font-weight: 900;
-  box-shadow: 0 6px 16px rgba(9, 24, 60, .28);
+  cursor: pointer;
+  box-shadow: 0 8px 18px rgba(9, 24, 60, .28);
 }
-.event-install-btn em { font-style: normal; font-size: 16px; letter-spacing: .02em; }
-.event-install-btn svg { width: 20px; height: 20px; flex: none; }
-.event-slide.install-slide:active .event-install-btn { transform: scale(.97); }
+.event-install-button:hover { background: #14194b; }
+.event-install-button:focus-visible { outline: 3px solid var(--yellow); outline-offset: 3px; }
+.event-install-button svg {
+  width: 24px;
+  height: 24px;
+  flex: 0 0 auto;
+}
+/* 기존 앱 설치 이미지는 유지하고, 설치 실행은 위에 올린 실제 버튼으로만 한정한다. */
+.event-slide.install-slide.image-install-slide {
+  position: relative;
+  display: block;
+  min-height: 0;
+  padding: 0;
+}
+.event-slide .event-install-image {
+  width: 100%;
+  height: auto;
+  object-fit: contain;
+  pointer-events: none;
+  user-select: none;
+}
+.image-install-slide .event-install-button {
+  position: absolute;
+  z-index: 1;
+  left: 18px;
+  bottom: 9px;
+  width: min(320px, calc(100% - 220px));
+  min-height: 40px;
+  height: 40px;
+  margin: 0;
+  padding: 0 14px;
+  background: #2463f3;
+  font-size: 14px;
+  border-radius: 10px;
+}
+.image-install-slide .event-install-button:hover { background: #1d55d8; }
 
 /* 앱 설치 안내 바텀시트 */
 .install-sheet-backdrop {
@@ -4008,6 +4425,18 @@ button.step-photo-slot {
 .install-sheet-logo { width: 58px; height: 58px; border-radius: 14px; margin-top: 8px; }
 .install-sheet-title { font-size: 18px; color: var(--navy, #10254d); }
 .install-sheet-sub { color: #6b7280; font-size: 13px; font-weight: 700; margin: 0; }
+.install-sheet-note {
+  width: 100%;
+  margin: 8px 0 0;
+  padding: 11px 14px;
+  border-radius: 12px;
+  background: #fff8e3;
+  color: #7a6420;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.55;
+  word-break: keep-all;
+}
 .install-sheet-steps {
   display: grid;
   gap: 10px;
@@ -4069,6 +4498,24 @@ button.step-photo-slot {
   background: rgba(255, 255, 255, .45);
 }
 .event-dots i.on { background: var(--yellow); }
+
+@media (max-width: 900px) {
+  /* 마이 페이지의 16px 좌우 패딩을 넘겨 화면 폭 전체로 표시 */
+  .mypage-card .event-banner {
+    width: auto;
+    margin: 14px -16px;
+    border-radius: 0;
+  }
+  .mypage-card .event-track { border-radius: 0; }
+}
+@media (max-width: 520px) {
+  .image-install-slide .event-install-button {
+    /* 배너 오른쪽 폰 이미지를 가리지 않도록 폭 축소 */
+    width: min(196px, calc(55% - 18px));
+    left: 18px;
+    bottom: 12px;
+  }
+}
 
 /* 보안 화면: 이벤트 배너 관리 */
 .event-admin-grid {
