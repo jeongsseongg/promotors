@@ -5508,3 +5508,47 @@ button.step-photo-slot {
 
 .rec-form .rec-wear { width: 128px; }
 .rec-form .rec-odo { width: 118px; }
+
+/* 관리자 예약관리: 시간대 줄을 시안 목록 스타일로 */
+.pm-page .pm-slot-row {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 8px;
+  padding: var(--pm-rowpad) var(--pm-cpad);
+  min-height: 44px;
+}
+.pm-page .pm-slot-row + .pm-slot-row { border-top: 1px solid var(--pm-ln2); }
+.pm-page .pm-slot-row > strong {
+  font-size: 13px; font-weight: 900; color: var(--pm-nv);
+  font-variant-numeric: tabular-nums; min-width: 46px;
+}
+.pm-page .pm-slot-row .slot-info { flex: 1 1 180px; min-width: 0; font-size: 12.5px; font-weight: 700; color: var(--pm-k2); }
+.pm-page .pm-slot-row .slot-info b { color: var(--pm-k1); }
+.pm-page .pm-slot-row .blocked-text { color: #12805a; font-weight: 900; }
+.pm-page .pm-slot-row .mini-btn {
+  border: 0; background: #f1f3f7; color: var(--pm-nv);
+  border-radius: 999px; padding: 8px 14px; min-height: 36px;
+  font-family: inherit; font-size: 12px; font-weight: 800; cursor: pointer;
+}
+.pm-page .pm-slot-row .mini-btn.danger { background: #fdecea; color: var(--pm-rd); }
+.pm-page .pm-pills span.off { opacity: .45; cursor: not-allowed; }
+
+/* 관리자 작업현황: 진한 카드 안의 단계·사진·버튼 */
+.pm-page .pm-work-tier .work-card-detail { margin-top: var(--pm-gap); }
+.pm-page .pm-work-tier .service-steps { display: flex; gap: 5px; flex-wrap: wrap; }
+.pm-page .pm-work-tier .service-steps button {
+  flex: 1 1 54px; min-width: 0;
+  border: 0; border-radius: 7px; padding: 7px 4px;
+  background: rgba(255,255,255,.1); color: rgba(255,255,255,.45);
+  font-family: inherit; font-size: 9.5px; font-weight: 900; cursor: pointer;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.pm-page .pm-work-tier .service-steps button.done { background: rgba(255,255,255,.9); color: var(--pm-nv); }
+.pm-page .pm-work-tier .service-steps button.active { background: var(--pm-yl); color: var(--pm-nv); }
+.pm-page .pm-work-tier .stage-photos:not([hidden]) { margin-top: var(--pm-slabb); }
+.pm-page .pm-work-tier .hint,
+.pm-page .pm-work-tier p { color: rgba(255,255,255,.64); }
+.pm-page .pm-job .work-card-detail { margin-top: var(--pm-slabb); }
+.pm-page .pm-job .service-steps button {
+  border: 0; border-radius: 7px; padding: 7px 10px; margin-right: 4px;
+  background: var(--pm-ln2); color: var(--pm-k2);
+  font-family: inherit; font-size: 10px; font-weight: 900; cursor: pointer;
+}

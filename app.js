@@ -3246,56 +3246,45 @@ function renderAdmBook() {
   const first = new Date(adm.y, adm.m, 1).getDay();
   const days = new Date(adm.y, adm.m + 1, 0).getDate();
 
+  const cells = [];
+  for (let i = 0; i < first; i++) cells.push('<b class="off"></b>');
+  for (let d = 1; d <= days; d++) {
+    const key = dateKey(adm.y, adm.m, d);
+    const cnt = bookings.filter(b => b.date === key).length;
+    const blk = blocked.filter(b => b.date === key).length;
+    cells.push(`<b class="${adm.selDate === key ? 'sel' : ''}" data-day="${key}">${d}${cnt || blk ? '<u></u>' : ''}</b>`);
+  }
+
+  body.className = 'adm-body pm-page';
   body.innerHTML = `
-    <div class="adm-tabs" id="adm-branch-tabs"></div>
-    <div class="cal-head">
-      <button type="button" class="cal-nav" id="adm-prev">‹</button>
-      <h4>${adm.y}. ${String(adm.m + 1).padStart(2, '0')}</h4>
-      <button type="button" class="cal-nav" id="adm-next">›</button>
-    </div>
-    <div id="adm-transfer-requests"></div>
-    <div class="cal-grid" id="adm-grid"></div>
-    <div id="adm-day"></div>`;
+    <div class="pm-scr">
+      <div class="pm-hd"><b>예약관리</b><span class="pm-hd-rt acc" id="adm-add-top">${adm.selDate ? '+ 예약 추가' : ''}</span></div>
+      <div class="pm-pills" id="adm-branch-tabs"></div>
+      <div id="adm-transfer-requests"></div>
+      <div class="pm-box pm-cal-box" style="margin-top:var(--pm-gap)">
+        <div class="pm-calbar"><i id="adm-prev">‹</i><b>${adm.y}. ${String(adm.m + 1).padStart(2, '0')}</b><i id="adm-next">›</i></div>
+        <div class="pm-cal" id="adm-grid">
+          <em class="su">일</em><em>월</em><em>화</em><em>수</em><em>목</em><em>금</em><em>토</em>
+          ${cells.join('')}
+        </div>
+      </div>
+      <div id="adm-day"></div>
+    </div>`;
+
+  body.querySelectorAll('[data-day]').forEach(el => el.addEventListener('click', () => {
+    adm.selDate = el.dataset.day; renderAdmBook();
+  }));
 
   const tabs = $('#adm-branch-tabs');
   branches.forEach(b => {
-    const t = document.createElement('button');
-    t.type = 'button';
-    t.className = 'tab' + (b.name === adm.branch ? ' active' : '');
+    const t = document.createElement('span');
+    t.className = (b.name === adm.branch ? 'on' : '');
     t.textContent = b.name;
-    t.disabled = !canAccessBranch(b.name);
+    if (!canAccessBranch(b.name)) t.classList.add('off');
     t.addEventListener('click', () => { if (!canAccessBranch(b.name)) return; adm.branch = b.name; adm.selDate = null; renderAdmBook(); });
     tabs.append(t);
   });
 
-  const grid = $('#adm-grid');
-  ['일','월','화','수','목','금','토'].forEach((d, i) => {
-    const el = document.createElement('div');
-    el.className = 'cal-dow' + (i === 0 ? ' sun' : '');
-    el.textContent = d;
-    grid.append(el);
-  });
-  for (let i = 0; i < first; i++) {
-    const el = document.createElement('button');
-    el.className = 'cal-day empty'; el.disabled = true;
-    grid.append(el);
-  }
-  for (let d = 1; d <= days; d++) {
-    const key = dateKey(adm.y, adm.m, d);
-    const el = document.createElement('button');
-    el.type = 'button'; el.className = 'cal-day'; el.textContent = d;
-    const cnt = bookings.filter(b => b.date === key).length;
-    const blk = blocked.filter(b => b.date === key).length;
-    if (cnt || blk) {
-      const c = document.createElement('span');
-      c.className = 'cnt';
-      c.textContent = (cnt ? '예약 ' + cnt : '') + (cnt && blk ? ' · ' : '') + (blk ? '완료 ' + blk : '');
-      el.append(c);
-    }
-    if (adm.selDate === key) el.classList.add('sel');
-    el.addEventListener('click', () => { adm.selDate = key; renderAdmBook(); });
-    grid.append(el);
-  }
   $('#adm-prev').addEventListener('click', () => { adm.m--; if (adm.m < 0) { adm.m = 11; adm.y--; } adm.selDate = null; renderAdmBook(); });
   $('#adm-next').addEventListener('click', () => { adm.m++; if (adm.m > 11) { adm.m = 0; adm.y++; } adm.selDate = null; renderAdmBook(); });
 
@@ -3340,12 +3329,18 @@ function renderAdmDay() {
   const wrap = $('#adm-day');
   const bookings = getBookings();
   const blocked = getBlocked();
-  wrap.innerHTML = `<p class="slots-title">${adm.selDate} 시간대 현황</p><div id="slot-rows"></div>`;
+  const dayCount = SLOT_TIMES.filter(t =>
+    bookings.some(b => b.branch === adm.branch && b.date === adm.selDate && b.time === t)).length;
+  const { label } = pmDateParts(adm.selDate);
+  wrap.innerHTML = `
+    <p class="pm-lab">${esc(label)} · ${dayCount}건</p>
+    <div class="pm-list" id="slot-rows"></div>
+    <p class="pm-note">비어있는 시간은 예약추가 · 예약완료 처리를 할 수 있습니다.</p>`;
   const rows = $('#slot-rows');
 
   SLOT_TIMES.forEach(t => {
     const row = document.createElement('div');
-    row.className = 'slot-row';
+    row.className = 'slot-row pm-slot-row';
     const bIdx = bookings.findIndex(b => b.branch === adm.branch && b.date === adm.selDate && b.time === t);
     const blkIdx = blocked.findIndex(b => b.branch === adm.branch && b.date === adm.selDate && b.time === t);
 
@@ -4587,15 +4582,22 @@ function renderAdmWork() {
     ...todayBookings.map(booking => ({ booking, run: runForBooking(booking), carried: false })),
     ...carriedRuns.map(run => ({ booking: null, run, carried: true }))
   ];
+  const running = workItems.filter(w => w.run).length;
+  body.className = 'adm-body pm-page';
   body.innerHTML = `
-    <div class="work-head">
-      <strong>${today} 오늘 예약 · 미출고 작업</strong>
-      <span>${workItems.length}건</span>
-    </div>
-    <div id="work-list"></div>`;
+    <div class="pm-scr">
+      <div class="pm-hd"><b>작업현황</b><span class="pm-hd-rt">${esc(isMainAdmin() ? '전체 지점' : (adminBranches || []).join(' · '))}</span></div>
+      <p class="pm-lab pm-lab-first">진행 ${running}대 · 오늘 ${workItems.length}건</p>
+      <div id="work-list"></div>
+    </div>`;
   const list = $('#work-list');
   if (!workItems.length) {
-    list.innerHTML = '<p class="hint">오늘 예약 또는 미출고 작업이 없습니다.</p>';
+    list.innerHTML = `
+      <article class="pm-empty">
+        <span class="pm-empty-ic">${MYPAGE_ICONS.wrench}</span>
+        <b>오늘 작업이 없어요</b>
+        <p>오늘 예약 또는 미출고 작업이 없습니다.</p>
+      </article>`;
     return;
   }
   workItems.forEach(({ booking, run, carried }) => {
@@ -4603,21 +4605,37 @@ function renderAdmWork() {
     const dateLabel = booking ? booking.date : run.bookingDate;
     const timeLabel = booking ? booking.time : run.bookingTime;
     const card = document.createElement('article');
-    card.className = 'work-card collapsible';
+    const svcText = booking ? ((booking.services || []).join(', ') || '서비스 미선택') : (run.service || run.serviceName || '서비스 미선택');
+    const pct = run && run.steps?.length
+      ? Math.round((((run.currentStep || 0) + (run.steps[run.currentStep]?.approved ? 1 : 0.5)) / run.steps.length) * 100) : 0;
+    card.className = (run ? 'work-card collapsible pm-tier pm-work-tier' : 'work-card collapsible pm-job');
     card.innerHTML = `
-      <div class="work-card-head">
-        <strong>${carried ? '미출고 · ' : ''}${esc(dateLabel || today)} ${esc(timeLabel || '')} · ${esc(source.name || '-')} · ${esc(source.car || '-')}</strong>
-        <a href="${phoneHref(source.phone)}">${esc(source.phone || '-')}</a>
-      </div>
-      <p>${esc(source.branch || '-')} · ${esc(source.model || '-')} · ${esc(booking ? ((booking.services || []).join(', ') || '서비스 미선택') : (run.service || '서비스 미선택'))}${run?.mileage ? ` · 입고 ${Number(run.mileage).toLocaleString()}km` : ''}</p>
-      <p class="hint">${run ? esc(stepStateLabel(run)) : '작업 시작 전'}</p>
+      <div class="${run ? 'pm-tier-top' : ''}">
+        <div class="${run ? 'pm-tier-r1' : 'pm-job-r1'}">
+          <span class="pm-plate${run ? '' : ' dk'}">${esc(source.car || '-')}</span>
+          <span class="pm-chip ${run ? 'y' : 'gy'}">${run ? (carried ? '미출고' : '작업중') : '입고 전'}</span>
+        </div>
+        ${run
+          ? `<h4>${esc(source.model || '-')} · ${esc(source.name || '-')}</h4>
+             <p class="pm-tier-svc">${esc(svcText)}${source.branch ? ` · ${esc(source.branch)}` : ''}${run.mileage ? ` · 입고 ${Number(run.mileage).toLocaleString()}km` : ''}</p>
+             <div class="pm-tier-pg"><strong>${pct}<i>%</i></strong><span>${esc(stepStateLabel(run))}</span></div>
+             <div class="pm-track"><i style="width:${pct}%"></i></div>`
+          : `<b>${esc(source.model || '-')} · ${esc(source.name || '-')}</b>
+             <s>${esc(timeLabel || '')} 예약 · ${esc(svcText)}</s>`}
       <div class="work-card-detail" hidden>
         ${run ? `<div class="service-steps">${run.steps.map((s, i) => `<button type="button" data-stage="${i}" class="${s.approved ? 'done' : i === run.currentStep ? 'active' : ''}">${esc(s.name)}</button>`).join('')}</div><div class="stage-photos" data-stage-photos hidden></div>` : ''}
         ${run ? '<div class="album-cover-wrap" data-cover></div>' : ''}
-        <div class="service-run-actions"></div>
-      </div>`;
+        <div class="service-run-actions pm-run-acts"></div>
+      </div></div>`;
     const actions = card.querySelector('.service-run-actions');
     if (!run) {
+      if (source.phone) {
+        const tel = document.createElement('a');
+        tel.className = 'mini-btn';
+        tel.href = phoneHref(source.phone);
+        tel.textContent = '전화';
+        actions.append(tel);
+      }
       actions.append(miniBtn('입고 시작', () => {
         const created = createRunFromBooking(booking);
         logWorkAudit('입고 시작', created, created.steps?.[0]?.name || '', '예약에서 작업 생성');
@@ -5840,6 +5858,18 @@ function showAdminViewFromMenu(view) {
   if (view === 'adm-settings') renderAdmSettings();
 }
 
+/* 관리 메뉴 한 줄 */
+function pmAdmItem(item) {
+  const { view, label, icon, value = '', tone = '' } = item;
+  return `
+    <button type="button" class="pm-item" data-adm-view="${esc(view)}">
+      <span class="pm-item-ic">${MYPAGE_ICONS[icon] || MYPAGE_ICONS.doc}</span>
+      <b>${esc(label)}</b>
+      <span class="pm-item-v ${tone}">${value}</span>
+      <span class="pm-item-cv">${MYPAGE_ICONS.chevron}</span>
+    </button>`;
+}
+
 /* 관리자용 마이(설정): 고객 내예약 페이지와 같은 전체화면 구성 */
 async function openAdminSettingsPage() {
   rememberModalScreen('admin-settings');
@@ -5898,7 +5928,7 @@ async function openAdminSettingsPage() {
     <h3 class="pm-sr">설정</h3>
     <div class="pm-scr">
       <div class="pm-hi">
-        <h3>${esc(isGeneralAdmin() && adminBranch ? `${adminBranch} 관리자님` : '관리자님')}, 안녕하세요</h3>
+        <h3>${esc(isGeneralAdmin() && (adminBranches || []).length ? `${adminBranches.join(' · ')} 관리자님` : '관리자님')}, 안녕하세요</h3>
         <p>오늘 예약 <mark>${todayCount}건</mark> · 작업중 <mark>${workingCount}대</mark></p>
       </div>
 
