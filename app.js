@@ -918,48 +918,88 @@ async function openMyPageModal() {
     stageIndex = 0;
     statusText = `${latestBooking.branch} ${latestBooking.date} ${latestBooking.time} 예약이 접수되었어요`;
   }
-  const stepsHtml = WORK_STAGES.map((stage, i) => `
-    <div class="ws ${stageIndex >= i ? 'done' : ''} ${stageIndex === i ? 'now' : ''}">
-      <span class="ws-icon">${MYPAGE_ICONS[stage.icon]}</span>
-      <em>${stage.label}</em>
-    </div>${i < WORK_STAGES.length - 1 ? `<i class="${stageIndex > i ? 'done' : ''}"></i>` : ''}`).join('');
   const hasRunPhotos = latestRun && (latestRun.steps || []).some(s => s.approved && (s.photoKeys || []).length);
-  const carMeta = [member.year, member.car].filter(Boolean).join(' · ');
   const banner = await eventBannerHtml();
+
+  /* 진행률: 단계 하나당 같은 폭. 예약이 없으면 0%. */
+  const pct = stageIndex < 0 ? 0 : Math.round((stageIndex + 1) / WORK_STAGES.length * 100);
+  const stageChips = WORK_STAGES.map((stage, i) =>
+    `<span class="${stageIndex > i ? 'done' : ''}${stageIndex === i ? ' now' : ''}">${esc(stage.label)}</span>`).join('');
+
+  /* 다음 예약: 지금 이후로 가장 가까운 것 */
+  const nowTs = Date.now();
+  const upcoming = bookings
+    .filter(b => bookingTimestamp(b) >= nowTs)
+    .sort((a, b) => bookingTimestamp(a) - bookingTimestamp(b))[0];
+
+  const serviceLine = latestRun
+    ? [latestRun.serviceName || latestRun.service, latestRun.branch || latestBooking?.branch].filter(Boolean).join(' · ')
+    : latestBooking
+      ? [(latestBooking.services || []).join(', '), latestBooking.branch].filter(Boolean).join(' · ')
+      : '진행 중인 정비가 없어요';
+
+  const greetSub = upcoming
+    ? `${formatBookingWhen(upcoming)}에 예약이 있어요.`
+    : stageIndex >= 0
+      ? statusText
+      : '정비가 필요하시면 언제든 예약해주세요.';
+
+  const menuRow = (id, icon, label, value = '', tone = '') => `
+    <button type="button" id="${id}">
+      <span class="ic" aria-hidden="true">${MYPAGE_ICONS[icon]}</span>
+      <b>${esc(label)}</b>
+      ${value ? `<span class="v ${tone}">${value}</span>` : '<span class="v"></span>'}
+      <span class="cv" aria-hidden="true">›</span>
+    </button>`;
 
   openModal(`
     <h3>내예약</h3>
-    <section class="mypage-account-card">
-      <button type="button" class="mypage-profile" id="mypage-info">
-        <span class="profile-avatar" aria-hidden="true">${MYPAGE_ICONS.user}</span>
-        <span class="profile-text"><strong>${esc(member.name || '고객')}님</strong><span>안녕하세요!</span></span>
-        <b>›</b>
+    <div class="my-greet">
+      <h2>${esc(member.name || '고객')}님, 안녕하세요</h2>
+      <p>${esc(greetSub)}</p>
+    </div>
+
+    <section class="my-hero">
+      <button type="button" class="my-hero-top" id="quick-work">
+        <span class="my-hero-line">
+          <span class="my-plate">${esc(member.car || '차량번호 미등록')}</span>
+          ${stageIndex >= 0 ? `<span class="my-stat">${esc(WORK_STAGES[stageIndex].label)}</span>` : ''}
+        </span>
+        <strong class="my-hero-car">${esc(member.model || '차량 정보를 등록해주세요')}</strong>
+        <span class="my-hero-sv">${esc(serviceLine)}</span>
+        ${stageIndex >= 0 ? `
+        <span class="my-hero-prog"><em>${pct}<i>%</i></em><s>${esc(statusText)}</s></span>
+        <span class="my-hero-bar"><u style="width:${pct}%"></u></span>
+        <span class="my-hero-stg">${stageChips}</span>` : ''}
       </button>
-      <div class="mypage-account-divider"></div>
-      <div class="mypage-car-text">
-        <span class="mypage-car-label">내 차량</span>
-        <strong>${esc(member.model || '차량 정보를 등록해주세요')}</strong>
-        <span>${esc(carMeta || '-')}</span>
-      </div>
+      <button type="button" class="my-hero-next" id="mypage-bookings">
+        <span class="ic" aria-hidden="true">${MYPAGE_ICONS.calendar}</span>
+        <b>다음 예약</b>
+        <strong>${upcoming ? esc(formatBookingWhen(upcoming)) : '예약 없음'}</strong>
+        <span class="cv" aria-hidden="true">›</span>
+      </button>
     </section>
-    <nav class="mypage-quick" aria-label="내예약 바로가기">
-      <button type="button" id="quick-work"><span class="quick-icon">${MYPAGE_ICONS.wrench}</span><strong>작업현황</strong></button>
-      <button type="button" id="mypage-alerts"><span class="quick-icon">${MYPAGE_ICONS.bell}</span><strong>알림</strong>${notices.length ? `<em>${notices.length}</em>` : ''}</button>
-      <button type="button" id="mypage-bookings"><span class="quick-icon">${MYPAGE_ICONS.calendar}</span><strong>예약 내역</strong></button>
-      <button type="button" id="customer-detail-page"><span class="quick-icon">${MYPAGE_ICONS.doc}</span><strong>이용 내역</strong></button>
+
+    <p class="my-glabel">내 차</p>
+    <nav class="my-group" aria-label="내 차">
+      ${menuRow('mypage-info', 'car', '내 차 관리', esc(member.car || '등록 필요'))}
+      ${menuRow('customer-detail-page', 'doc', '정비 이력', serviceRuns.length ? `${serviceRuns.length}건` : '')}
+      ${menuRow('mypage-alerts', 'bell', '내 차 TIP', notices.length ? `<i class="dt"></i>${notices.length}` : '', notices.length ? 'acc' : '')}
+      ${hasRunPhotos ? menuRow('view-run-photos', 'wrench', '작업사진', '') : ''}
     </nav>
-    <h4 class="mypage-sec-title">작업 현황</h4>
-    <article class="mypage-progress-card" id="work-status-card">
-      <p class="work-status-text">${esc(statusText)}</p>
-      <div class="work-steps">${stepsHtml}</div>
-      ${hasRunPhotos ? `<button type="button" class="mini-btn view-run-photos" data-run="${esc(latestRun.id)}">작업사진 보기</button>` : ''}
-    </article>
+
+    <p class="my-glabel">예약</p>
+    <nav class="my-group" aria-label="예약">
+      ${menuRow('my-reserve', 'calendar', '정비 예약하기')}
+      ${menuRow('my-booking-list', 'doc', '예약 내역', upcoming ? `다음 ${esc(formatBookingWhen(upcoming, { withTime: false }))}` : '')}
+    </nav>
+
+    <p class="my-glabel">고객센터</p>
+    <nav class="my-group" aria-label="고객센터">
+      ${menuRow('mypage-center', 'headset', '전화 · 채팅 문의')}
+    </nav>
+
     ${banner}
-    <button type="button" class="mypage-cs-btn" id="mypage-center">
-      <span class="cs-icon" aria-hidden="true">${MYPAGE_ICONS.headset}</span>
-      <span class="cs-text"><strong>고객센터</strong><span>실시간 채팅으로 문의하세요</span></span>
-      <b>›</b>
-    </button>
   `, true);
   modalCard.classList.add('mypage-card');
   wireEventBanner();
@@ -967,11 +1007,13 @@ async function openMyPageModal() {
   $('#mypage-alerts').addEventListener('click', openMyAlertsPage);
   $('#mypage-info').addEventListener('click', openMyInfoPage);
   $('#mypage-bookings').addEventListener('click', openMyBookingsPage);
+  $('#my-booking-list').addEventListener('click', openMyBookingsPage);
   $('#mypage-center').addEventListener('click', () => openCustomerCenterModal(member));
   $('#quick-work').addEventListener('click', openWorkStatusPage);
-  modalCard.querySelectorAll('.view-run-photos').forEach(btn => {
-    btn.addEventListener('click', () => openRunPhotosModal(btn.dataset.run));
-  });
+  $('#my-reserve').addEventListener('click', () => { closeModal(); openReserveFlow(); });
+  if (hasRunPhotos) {
+    $('#view-run-photos').addEventListener('click', () => openRunPhotosModal(latestRun.id));
+  }
 }
 
 function myPageBackActions() {
@@ -2893,6 +2935,19 @@ function bookingTimestamp(b) {
   const time = b.time || '00:00';
   const stamp = new Date(`${date}T${time}`).getTime();
   return Number.isFinite(stamp) ? stamp : 0;
+}
+
+/* 예약 일시를 "8월 5일 (화) 오후 2:00" 처럼 읽기 좋게.
+   오전/오후는 브라우저 로케일 데이터에 따라 "PM"으로 나오는 경우가 있어 직접 만든다. */
+function formatBookingWhen(b, { withTime = true } = {}) {
+  const ts = bookingTimestamp(b);
+  if (!ts) return [b?.date, withTime ? b?.time : ''].filter(Boolean).join(' ').trim();
+  const d = new Date(ts);
+  const date = d.toLocaleDateString('ko-KR', { month: 'long', day: 'numeric', weekday: 'short' });
+  if (!withTime) return date;
+  const hour = d.getHours();
+  const time = `${hour < 12 ? '오전' : '오후'} ${hour % 12 || 12}:${String(d.getMinutes()).padStart(2, '0')}`;
+  return `${date} ${time}`;
 }
 
 function latestBookingForMember(m, bookings = getBookings()) {
