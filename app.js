@@ -911,30 +911,32 @@ function openMemberModal(tab) {
   const draft = store.get('pm-signup-draft', {});
   const rememberedId = store.get('pm-remember-id', '');
   openModal(`
-    <h3>회원 ${tab === 'login' ? '로그인' : '가입'}</h3>
-    <div class="modal-tabs">
-      <button type="button" class="mtab ${tab === 'login' ? 'active' : ''}" data-t="login">로그인</button>
-      <button type="button" class="mtab ${tab === 'signup' ? 'active' : ''}" data-t="signup">회원가입</button>
-    </div>
-    <form id="member-form">
-      <input type="text" id="m-id" placeholder="아이디" required>
+    <h3 class="pm-sr">회원 ${tab === 'login' ? '로그인' : '가입'}</h3>
+    <div class="pm-scr">
+      <div class="pm-logo"><b>PRO<i>MOTORS</i></b><p>수입차 전문 정비센터</p></div>
+      <div class="pm-tabs pm-tabs-mid">
+        <span class="${tab === 'login' ? 'on' : ''}" data-t="login">로그인</span>
+        <span class="${tab === 'signup' ? 'on' : ''}" data-t="signup">회원가입</span>
+      </div>
+    <form id="member-form" class="pm-form">
+      <input type="text" id="m-id" class="pm-input" placeholder="${tab === 'login' ? '아이디 또는 차량번호' : '아이디'}" required>
       <div class="password-field">
-        <input type="password" id="m-password" placeholder="비밀번호" required>
+        <input type="password" id="m-password" class="pm-input" placeholder="비밀번호" required>
         <button type="button" id="m-eye" aria-label="비밀번호 보기">보기</button>
       </div>
       ${tab === 'signup' ? `
         <div class="password-field">
-          <input type="password" id="m-password2" placeholder="비밀번호 확인" required>
+          <input type="password" id="m-password2" class="pm-input" placeholder="비밀번호 확인" required>
           <button type="button" id="m-eye2" aria-label="비밀번호 확인 보기">보기</button>
         </div>
-        <input type="text" id="m-name" placeholder="이름" required>
-        <input type="text" id="m-model" placeholder="차량명 (예: BMW 520d M Sport)" required>
-        <input type="text" id="m-car" placeholder="차량번호 (예: 12가3456)" required>
-        <input type="tel" id="m-phone" placeholder="핸드폰번호 (예: 010-1234-5678)" required>
-        <input type="email" id="m-email" placeholder="이메일 (선택)">
+        <input type="text" id="m-name" class="pm-input" placeholder="이름" required>
+        <input type="text" id="m-model" class="pm-input" placeholder="차량명 (예: BMW 520d M Sport)" required>
+        <input type="text" id="m-car" class="pm-input" placeholder="차량번호 (예: 12가3456)" required>
+        <input type="tel" id="m-phone" class="pm-input" placeholder="핸드폰번호 (예: 010-1234-5678)" required>
+        <input type="email" id="m-email" class="pm-input" placeholder="이메일 (선택)">
         <p class="field-help">이메일은 비밀번호 변경, 쿠폰, 프로모터스 소식 안내를 받을 때 도움이 됩니다.</p>
         <div class="address-field">
-          <input type="text" id="m-address" placeholder="주소 (선택)">
+          <input type="text" id="m-address" class="pm-input" placeholder="주소 (선택)">
           <button type="button" id="m-address-find">주소찾기</button>
         </div>
         <p class="field-help">주소는 차량에 필요한 악세서리나 부속을 보내드릴 때 사용합니다. 선택사항입니다.</p>
@@ -945,16 +947,31 @@ function openMemberModal(tab) {
         ${Object.keys(draft).length ? '<button type="button" class="mini-btn" id="resume-signup">회원가입 이어서하기</button>' : ''}
       `}
       <p class="form-error" id="m-error"></p>
-      <div class="modal-actions">
-        <button type="submit" class="modal-submit">${tab === 'login' ? '로그인' : '가입하기'}</button>
-        <button type="button" class="modal-cancel" onclick="document.getElementById('modal').hidden=true">취소</button>
-      </div>
+      <button type="submit" class="pm-press pm-main">${tab === 'login' ? '로그인' : '가입하기'}</button>
     </form>
+      ${tab === 'login' ? `
+        <div class="pm-links">
+          <b data-t="signup">회원가입</b><i>|</i>
+          <span id="find-id">아이디 찾기</span><i>|</i>
+          <span id="find-pw">비밀번호 재설정</span>
+        </div>
+        <p class="pm-or">또는</p>
+        <div class="pm-social">
+          <button type="button" class="pm-press pm-kakao" data-social="kakao">카카오로 시작하기</button>
+          <button type="button" class="pm-press pm-naver" data-social="naver">네이버로 시작하기</button>
+        </div>
+      ` : '<button type="button" class="pm-press pm-soft pm-cancel" onclick="closeModal()">취소</button>'}
+      <div class="pm-bp"></div>
+    </div>
   `);
 
   /* 모바일에서는 로그인/회원가입을 전체화면 페이지로 표시 */
-  modalCard.classList.add('mobile-full');
-  modalCard.querySelectorAll('.mtab').forEach(b =>
+  modalCard.classList.add('mobile-full', 'pm-page');
+  modalCard.querySelectorAll('[data-social]').forEach(b =>
+    b.addEventListener('click', () => startSocialLogin(b.dataset.social)));
+  $('#find-id')?.addEventListener('click', () => openFindAccount('id'));
+  $('#find-pw')?.addEventListener('click', () => openFindAccount('pw'));
+  modalCard.querySelectorAll('[data-t]').forEach(b =>
     b.addEventListener('click', () => openMemberModal(b.dataset.t)));
   $('#m-id').value = tab === 'signup' ? (draft.id || '') : rememberedId;
   if (tab === 'login') $('#m-remember') && ($('#m-remember').checked = !!rememberedId);
