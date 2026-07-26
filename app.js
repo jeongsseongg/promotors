@@ -3037,19 +3037,18 @@ function renderAdmCust() {
     const memberRuns = getServiceRuns()
       .filter(r => r.car === m.car || (m.id && r.memberId === m.id))
       .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
-    const latestText = m.latestBooking ? `${m.latestBooking.date} ${m.latestBooking.time}` : '예약 없음';
     const isOpen = openCustCards.has(m.car);
     const memoFilter = custMemoFilters.get(m.car) || { date: '', text: '', open: false };
     custMemoFilters.set(m.car, memoFilter);
     const card = document.createElement('article');
     card.className = 'cust-card' + (isOpen ? ' open' : '');
     card.innerHTML = `
-      <button type="button" class="cust-summary" aria-expanded="${isOpen}">
-        <strong>${esc(m.name || '-')}</strong>
-        <span>${esc(m.car || '-')}</span>
-        <span>${esc(m.model || '-')}</span>
-        <a href="${phoneHref(m.phone)}" data-phone>${esc(m.phone || '-')}</a>
-        <em>최근 ${esc(latestText)}</em>
+      <button type="button" class="cust-summary pm-rw" aria-expanded="${isOpen}">
+        <span class="pm-rw-t">
+          <b>${m.latestBooking?.status === '승인대기' ? '<u></u>' : ''}${esc(m.name || '-')}</b>
+          <s>${esc(m.model || '-')} · ${esc(m.car || '-')} · ${esc(m.phone || '-')}</s>
+        </span>
+        <span class="pm-rw-m">${m.latestBooking ? `<em>${esc(m.latestBooking.time || '')}</em>${esc(m.latestBooking.date || '')}` : '예약 없음'}</span>
       </button>
       <div class="cust-detail" ${isOpen ? '' : 'hidden'}>
         <div class="cust-head">
@@ -3253,7 +3252,6 @@ function renderAdmCust() {
       paintMemoBook();
     });
 
-    card.querySelector('[data-phone]').addEventListener('click', e => e.stopPropagation());
     card.querySelector('.cust-summary').addEventListener('click', e => {
       const detail = card.querySelector('.cust-detail');
       const expanded = detail.hidden;

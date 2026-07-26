@@ -4375,3 +4375,28 @@ button.step-photo-slot {
 .modal-card.pm-page { display: flex; flex-direction: column; }
 .modal-card.pm-page .pm-scr-stick { flex: 1 1 auto; }
 .pm-page .pm-talks { display: flex; flex-direction: column; }
+
+/* 모바일에서 하단 고정줄이 탭바에 가리지 않게 */
+@media (max-width: 900px) {
+  .modal-card.pm-page .pm-stick {
+    padding-bottom: calc(var(--pm-pad) + 76px + env(safe-area-inset-bottom));
+  }
+}
+
+/* 고객 카드: 시안의 목록 한 줄 형태 (.pm-rw)를 그대로 쓴다 */
+.pm-page .cust-card {
+  border: 0;
+  border-radius: var(--pm-rad);
+  margin-bottom: var(--pm-gap);
+  box-shadow: 0 2px 12px rgba(15,23,42,.055);
+}
+.pm-page .cust-card.open { box-shadow: 0 8px 24px rgba(15,23,42,.12); }
+.pm-page .cust-summary {
+  grid-template-columns: minmax(0,1fr) auto;
+  gap: var(--pm-slabb);
+  padding: var(--pm-rowpad) var(--pm-cpad);
+  min-height: 44px;
+  color: var(--pm-k1);
+}
+.pm-page .cust-summary:hover { background: #fbfcfd; }
+.pm-page .cust-detail { padding: 0 var(--pm-cpad) var(--pm-cpad); }
