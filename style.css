@@ -4483,18 +4483,36 @@ button.step-photo-slot {
     font-weight: 900;
   }
 
-  /* ---------- 10. 마이페이지: 2단 네이비 카드 ---------- */
-  .mypage-account-card,
-  .mypage-progress-card {
+  /* ---------- 10. 마이페이지 ---------- */
+  /* 진한 네이비 카드는 화면당 하나. 마이페이지에서는 내 차 카드가 그 하나다. */
+  .mypage-account-card {
     background: linear-gradient(155deg, var(--navy-2) 0%, var(--navy) 48%, var(--navy-deep) 100%);
     border-radius: 20px;
     border: none;
     box-shadow: 0 9px 24px rgba(20, 25, 57, .28);
     overflow: hidden;
   }
-  .mypage-progress-card h4 { color: #fff; font-size: 21px; font-weight: 900; letter-spacing: -.6px; }
-  .mypage-progress-card p { color: rgba(255, 255, 255, .62); font-size: 12.5px; font-weight: 700; }
   .mypage-account-divider { background: rgba(255, 255, 255, .13); }
+
+  /* 작업 현황은 흰 카드로. 예전에는 진한 배경 위에 진한 글씨라 읽히지 않았다. */
+  .mypage-progress-card {
+    background: #fff;
+    border: none;
+    border-radius: 18px;
+    box-shadow: 0 2px 11px rgba(15, 23, 42, .06);
+  }
+  .mypage-progress-card h4 {
+    color: var(--t1);
+    font-size: 17px;
+    font-weight: 900;
+    letter-spacing: -.4px;
+  }
+  .mypage-progress-card p {
+    color: var(--t2);
+    font-size: 12.5px;
+    font-weight: 700;
+  }
+  .mypage-progress-card .work-status-text { color: var(--t2); }
 
   .mypage-greeting {
     font-size: 20px;
@@ -4587,7 +4605,7 @@ button.step-photo-slot {
   .modal-card.mypage-card,
   .modal-card.mobile-full {
     background: var(--app-bg);
-    padding: 20px 16px calc(104px + env(safe-area-inset-bottom));
+    padding: 20px 16px calc(124px + env(safe-area-inset-bottom));
   }
 }
 
