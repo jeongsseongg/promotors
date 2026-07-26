@@ -327,6 +327,19 @@ const DEFAULT_BRANCHES = [
 ];
 const DEFAULT_NOTICES = [];
 
+/* 영업시간 — 오시는길·고객센터에서 공용으로 쓴다. 관리자 보안화면에서 바꿀 수 있다. */
+const DEFAULT_HOURS = { weekday: '09:00 - 18:00', saturday: '09:00 - 15:00', sunday: '휴무', openHour: 9, closeHour: 18, satCloseHour: 15 };
+const getHours = () => ({ ...DEFAULT_HOURS, ...store.get('pm-hours', {}) });
+function isOpenNow() {
+  const h = getHours();
+  const now = new Date();
+  const day = now.getDay();
+  if (day === 0) return { open: false, until: '' };
+  const close = day === 6 ? h.satCloseHour : h.closeHour;
+  const cur = now.getHours() + now.getMinutes() / 60;
+  return { open: cur >= h.openHour && cur < close, until: `${String(close).padStart(2, '0')}:00` };
+}
+
 const DEFAULT_PRODUCTS = [
   { name: '엔진오일 교환', desc: '', steps: defaultWorkflowSteps() },
   { name: '미션오일 교환', desc: '', steps: defaultWorkflowSteps() },
@@ -691,30 +704,35 @@ function openMemberModal(tab) {
   const draft = store.get('pm-signup-draft', {});
   const rememberedId = store.get('pm-remember-id', '');
   openModal(`
-    <h3>회원 ${tab === 'login' ? '로그인' : '가입'}</h3>
-    <div class="modal-tabs">
-      <button type="button" class="mtab ${tab === 'login' ? 'active' : ''}" data-t="login">로그인</button>
-      <button type="button" class="mtab ${tab === 'signup' ? 'active' : ''}" data-t="signup">회원가입</button>
-    </div>
-    <form id="member-form">
-      <input type="text" id="m-id" placeholder="아이디" required>
+    <h3 class="pm-sr">회원 ${tab === 'login' ? '로그인' : '가입'}</h3>
+    <div class="pm-scr">
+      <div class="pm-logo">
+        <b>PRO<i>MOTORS</i></b>
+        <p>수입차 전문 정비센터</p>
+      </div>
+      <div class="pm-tabs pm-tabs-mid">
+        <span class="${tab === 'login' ? 'on' : ''}" data-t="login">로그인</span>
+        <span class="${tab === 'signup' ? 'on' : ''}" data-t="signup">회원가입</span>
+      </div>
+    <form id="member-form" class="pm-form">
+      <input type="text" id="m-id" class="pm-input" placeholder="${tab === 'login' ? '아이디 또는 차량번호' : '아이디'}" required>
       <div class="password-field">
-        <input type="password" id="m-password" placeholder="비밀번호" required>
+        <input type="password" id="m-password" class="pm-input" placeholder="비밀번호" required>
         <button type="button" id="m-eye" aria-label="비밀번호 보기">보기</button>
       </div>
       ${tab === 'signup' ? `
         <div class="password-field">
-          <input type="password" id="m-password2" placeholder="비밀번호 확인" required>
+          <input type="password" id="m-password2" class="pm-input" placeholder="비밀번호 확인" required>
           <button type="button" id="m-eye2" aria-label="비밀번호 확인 보기">보기</button>
         </div>
-        <input type="text" id="m-name" placeholder="이름" required>
-        <input type="text" id="m-model" placeholder="차량명 (예: BMW 520d M Sport)" required>
-        <input type="text" id="m-car" placeholder="차량번호 (예: 12가3456)" required>
-        <input type="tel" id="m-phone" placeholder="핸드폰번호 (예: 010-1234-5678)" required>
-        <input type="email" id="m-email" placeholder="이메일 (선택)">
+        <input type="text" id="m-name" class="pm-input" placeholder="이름" required>
+        <input type="text" id="m-model" class="pm-input" placeholder="차량명 (예: BMW 520d M Sport)" required>
+        <input type="text" id="m-car" class="pm-input" placeholder="차량번호 (예: 12가3456)" required>
+        <input type="tel" id="m-phone" class="pm-input" placeholder="핸드폰번호 (예: 010-1234-5678)" required>
+        <input type="email" id="m-email" class="pm-input" placeholder="이메일 (선택)">
         <p class="field-help">이메일은 비밀번호 변경, 쿠폰, 프로모터스 소식 안내를 받을 때 도움이 됩니다.</p>
         <div class="address-field">
-          <input type="text" id="m-address" placeholder="주소 (선택)">
+          <input type="text" id="m-address" class="pm-input" placeholder="주소 (선택)">
           <button type="button" id="m-address-find">주소찾기</button>
         </div>
         <p class="field-help">주소는 차량에 필요한 악세서리나 부속을 보내드릴 때 사용합니다. 선택사항입니다.</p>
@@ -725,16 +743,16 @@ function openMemberModal(tab) {
         ${Object.keys(draft).length ? '<button type="button" class="mini-btn" id="resume-signup">회원가입 이어서하기</button>' : ''}
       `}
       <p class="form-error" id="m-error"></p>
-      <div class="modal-actions">
-        <button type="submit" class="modal-submit">${tab === 'login' ? '로그인' : '가입하기'}</button>
-        <button type="button" class="modal-cancel" onclick="document.getElementById('modal').hidden=true">취소</button>
-      </div>
+      <button type="submit" class="pm-press pm-main">${tab === 'login' ? '로그인' : '가입하기'}</button>
+      <button type="button" class="pm-press pm-soft" onclick="closeModal()">취소</button>
     </form>
+      <div class="pm-bp"></div>
+    </div>
   `);
 
   /* 모바일에서는 로그인/회원가입을 전체화면 페이지로 표시 */
-  modalCard.classList.add('mobile-full');
-  modalCard.querySelectorAll('.mtab').forEach(b =>
+  modalCard.classList.add('mobile-full', 'pm-page');
+  modalCard.querySelectorAll('[data-t]').forEach(b =>
     b.addEventListener('click', () => openMemberModal(b.dataset.t)));
   $('#m-id').value = tab === 'signup' ? (draft.id || '') : rememberedId;
   if (tab === 'login') $('#m-remember') && ($('#m-remember').checked = !!rememberedId);
@@ -1003,7 +1021,7 @@ async function openMyPageModal() {
     history: openCustomerHistoryModal,
     reserve: () => { closeModal(); openReserveFlow(); },
     bookings: openMyBookingsPage,
-    center: () => openCustomerCenterModal(member),
+    center: openCustomerHelpPage,
     alerts: openMyAlertsPage,
     info: openMyInfoPage,
     logout: () => { closeModal(); logout(); },
@@ -1406,6 +1424,77 @@ function mergeRemoteMessages(remote) {
   return merged;
 }
 
+/* 시안 고객센터: 영업중 여부 → 전화·채팅 2칸 → 영업시간 → 자주 묻는 질문 */
+const CENTER_FAQ = [
+  ['예약을 변경하고 싶어요', '마이 → 예약 내역에서 예약을 취소한 뒤 새로 예약해 주세요. 작업이 시작된 뒤에는 지점으로 전화 주시면 도와드립니다.'],
+  ['정비 보증 기간이 궁금해요', '작업 내용과 부품에 따라 보증 기간이 다릅니다. 정확한 안내는 담당 지점으로 문의해 주세요.'],
+  ['결제는 어떻게 하나요?', '작업 완료 후 지점에서 현금·카드·계좌이체로 결제하실 수 있습니다.'],
+  ['대차 서비스가 있나요?', '차종과 작업 기간에 따라 다릅니다. 예약 시 요청사항에 남겨주시면 확인해 드립니다.']
+];
+
+function openCustomerHelpPage() {
+  const state = isOpenNow();
+  const hours = getHours();
+  const branch = getBranches()[0] || {};
+  const replies = member ? getMessagesFor(member).filter(m => m.from === 'admin').length : 0;
+
+  openModal(`
+    <h3 class="pm-sr">고객센터</h3>
+    <div class="pm-scr">
+      <div class="pm-hd">
+        ${member ? `<button type="button" class="pm-bk" id="help-back">${MYPAGE_ICONS.chevron}</button>` : ''}
+        <b>고객센터</b>
+      </div>
+      <div class="pm-help-hi">
+        <b>무엇을 도와드릴까요?</b>
+        <p>지금은 <em class="${state.open ? 'open' : 'closed'}">${state.open ? '영업중' : '영업종료'}</em>이에요${state.open ? ` · ${esc(state.until)}까지` : ''}</p>
+      </div>
+
+      <div class="pm-help-2up">
+        <a class="pm-help-card nv" href="${phoneHref(branch.tel)}">
+          <span class="pm-help-ic">${MYPAGE_ICONS.phone}</span>
+          <b>전화 문의</b>
+          <s>${esc(branch.tel || '-')}</s>
+        </a>
+        <button type="button" class="pm-help-card" id="help-chat">
+          <span class="pm-help-ic">${MYPAGE_ICONS.chat}</span>
+          <b>채팅 문의</b>
+          <s>${replies ? `답변 ${replies}건` : '로그인 후 이용'}</s>
+        </button>
+      </div>
+
+      <div class="pm-box pm-help-hours">
+        <div><s>평일</s><span>${esc(hours.weekday)}</span></div>
+        <div><s>토요일</s><span>${esc(hours.saturday)}</span></div>
+        <div><s>일요일 · 공휴일</s><em>${esc(hours.sunday)}</em></div>
+      </div>
+
+      <div class="pm-list pm-faq">
+        ${CENTER_FAQ.map(([q], i) => `
+          <button type="button" class="pm-rw pm-faq-q" data-faq="${i}">
+            <span class="pm-rw-t"><b>${esc(q)}</b></span>
+            <span class="pm-rw-m">›</span>
+          </button>
+          <p class="pm-faq-a" data-faq-a="${i}" hidden>${esc(CENTER_FAQ[i][1])}</p>`).join('')}
+      </div>
+      <div class="pm-bp"></div>
+    </div>
+  `, true);
+  modalCard.classList.add('mypage-card', 'pm-page');
+  $('#help-back')?.addEventListener('click', openMyPageModal);
+  $('#help-chat').addEventListener('click', () => {
+    if (!member) return openMemberModal('login');
+    openCustomerCenterModal(member);
+  });
+  modalCard.querySelectorAll('[data-faq]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const a = modalCard.querySelector(`[data-faq-a="${btn.dataset.faq}"]`);
+      a.hidden = !a.hidden;
+      btn.classList.toggle('open', !a.hidden);
+    });
+  });
+}
+
 function openCustomerCenterModal(customer = member) {
   const target = customer || member;
   if (!target) return openMemberModal('login');
@@ -1454,7 +1543,7 @@ function openCustomerCenterModal(customer = member) {
   textarea.addEventListener('keydown', e => {
     if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); send(); }
   });
-  $('#back-from-chat')?.addEventListener('click', openMyPageModal);
+  $('#back-from-chat')?.addEventListener('click', openCustomerHelpPage);
 }
 
 function initRealtimeChat() {
@@ -1547,7 +1636,36 @@ async function renderBranches() {
     addrLink.rel = 'noopener';
     addrLink.textContent = b.addr;
     addr.append(addrLink);
-    card.append(h3, tel, addr);
+
+    /* 시안: 이름 옆 영업중 배지 + 영업시간 + 전화·지도 버튼 */
+    const head = document.createElement('div');
+    head.className = 'pm-branch-head';
+    const state = isOpenNow();
+    const chip = document.createElement('span');
+    chip.className = 'pm-chip ' + (state.open ? 'ok' : 'gy');
+    chip.textContent = state.open ? '영업중' : '영업종료';
+    head.append(h3, chip);
+
+    const hours = getHours();
+    const hoursLine = document.createElement('p');
+    hoursLine.className = 'pm-branch-hours';
+    hoursLine.textContent = `평일 ${hours.weekday} · 토 ${hours.saturday} · 일·공휴일 ${hours.sunday}`;
+
+    const acts = document.createElement('div');
+    acts.className = 'pm-pair pm-branch-acts';
+    const call = document.createElement('a');
+    call.className = 'pm-press pm-soft';
+    call.href = phoneHref(b.tel);
+    call.textContent = '전화';
+    const mapBtn = document.createElement('a');
+    mapBtn.className = 'pm-press pm-edge';
+    mapBtn.href = addrLink.href;
+    mapBtn.target = '_blank';
+    mapBtn.rel = 'noopener';
+    mapBtn.textContent = '지도 보기';
+    acts.append(call, mapBtn);
+
+    card.append(head, tel, addr, hoursLine, acts);
 
     card.addEventListener('click', e => {
       if (e.target.closest('a, button')) return;
@@ -2079,17 +2197,33 @@ async function renderNotices() {
     return;
   }
 
+  /* 시안: 맨 위 공지 하나는 진한 2단 카드(필독), 나머지는 목록 줄 */
+  album.className = 'album pm-page';
   for (const [i, n] of notices.entries()) {
     const card = document.createElement('article');
     const imageHtml = await renderImageStrip(n.imageKeys || [], n.title);
-    card.className = `notice-card post-card ${imageHtml ? 'has-image' : 'text-only'}`;
-    card.innerHTML = `
-      ${imageHtml ? `<div class="post-images">${imageHtml}</div>` : ''}
-      <div class="notice-body">
-        <time>${esc(n.date || '')}</time>
-        <h3>${esc(n.title || '')}</h3>
-        <p>${esc(plainFromHtml(n.bodyHtml || n.body).slice(0, 260))}</p>
-      </div>`;
+    if (i === 0) {
+      card.className = 'pm-tier pm-notice-top';
+      card.innerHTML = `
+        <div class="pm-tier-top">
+          <div class="pm-tier-r1">
+            <span class="pm-chip y">필독</span>
+            <span class="pm-tier-date">${esc(n.date || '')}</span>
+          </div>
+          <h4 class="pm-notice-title">${esc(n.title || '')}</h4>
+          <p class="pm-tier-svc">${esc(plainFromHtml(n.bodyHtml || n.body).slice(0, 120))}</p>
+        </div>`;
+    } else {
+      card.className = 'pm-notice-row';
+      card.innerHTML = `
+        <div class="pm-rw">
+          <span class="pm-rw-t">
+            <b>${esc(n.title || '')}</b>
+            <s>${esc(plainFromHtml(n.bodyHtml || n.body).slice(0, 80))}</s>
+          </span>
+          <span class="pm-rw-m">${esc((n.date || '').replace(/^\d{4}\./, ''))}</span>
+        </div>`;
+    }
     card.addEventListener('click', e => {
       if (!e.target.closest('button, a')) openPostView(n, { kind: 'notice', index: allNotices.indexOf(n) });
     });
@@ -2156,11 +2290,12 @@ function openNoticeModal(index) {
 function renderCaseFilters() {
   const wrap = $('#case-brand-filter');
   if (!wrap) return;
+  /* 시안: 가로 스크롤 브랜드 칩 */
+  wrap.className = 'brand-filter pm-pills';
   wrap.innerHTML = '';
   BRANDS.forEach(brand => {
-    const btn = document.createElement('button');
-    btn.type = 'button';
-    btn.className = brand === selectedCaseBrand ? 'active' : '';
+    const btn = document.createElement('span');
+    btn.className = brand === selectedCaseBrand ? 'on' : '';
     btn.textContent = brand;
     btn.addEventListener('click', () => { selectedCaseBrand = brand; renderCases(); });
     wrap.append(btn);
@@ -2174,20 +2309,24 @@ async function renderCases() {
   const allCases = getCases();
   const filtered = selectedCaseBrand === '전체' ? cases : cases.filter(c => c.brand === selectedCaseBrand);
   const list = $('#case-list');
+  /* 시안: 2열 카드 그리드 */
+  list.className = 'pm-cases';
   list.innerHTML = '';
   $('#case-empty').style.display = filtered.length ? 'none' : '';
 
   for (const c of filtered) {
     const realIndex = allCases.indexOf(c);
     const card = document.createElement('article');
-    card.className = 'post-card case-card';
-    const imageHtml = await renderImageStrip(c.imageKeys || [], c.title);
+    card.className = 'pm-kase';
+    const cover = (c.imageKeys || [])[0] ? await assetSrc((c.imageKeys || [])[0]) : '';
     card.innerHTML = `
-      <div class="post-images ${imageHtml ? '' : 'empty'}">${imageHtml || '<span>사진 준비중</span>'}</div>
-      <div class="post-body">
-        <div class="post-meta"><time>${esc(c.date || '')}</time><span>${esc(c.brand || '기타')}</span></div>
-        <h3>${esc(c.title || '')}</h3>
-        <p>${esc(plainFromHtml(c.bodyHtml || c.body).slice(0, 140))}</p>
+      <div class="pm-kase-ph">
+        ${cover ? `<img src="${esc(cover)}" alt="${esc(c.title || '정비사례')}">` : `<span class="pm-kase-noimg">${MYPAGE_ICONS.car}</span>`}
+        <b>${esc(c.brand || '기타')}</b>
+      </div>
+      <div class="pm-kase-tx">
+        <b>${esc(c.title || '')}</b>
+        <s>${esc([c.branch, c.date].filter(Boolean).join(' · ') || c.date || '')}</s>
       </div>`;
     card.addEventListener('click', e => {
       if (!e.target.closest('button, a')) openPostView(c);
@@ -2264,20 +2403,41 @@ async function openPostView(post, options = {}) {
     author: { '@type': 'Organization', name: '프로모터스' }
   };
   openModal(`
-    <article class="post-view">
+    <h3 class="pm-sr">${esc(post.title || '상세')}</h3>
+    <div class="pm-scr">
       <script type="application/ld+json">${JSON.stringify(articleSchema).replace(/</g, '\\u003c')}</script>
-      ${canEditNotice ? `
-        <div class="post-admin-actions">
-          <button type="button" class="mini-btn" id="post-edit-notice">수정</button>
-          <button type="button" class="mini-btn danger" id="post-delete-notice">삭제</button>
-        </div>` : ''}
-      <h3>${esc(post.title || '')}</h3>
-      <p class="post-meta-line">${esc(post.date || '')}${post.brand ? ' · ' + esc(post.brand) : ''}</p>
-      ${post.postUrl ? `<a class="post-link" href="${esc(normalizeUrl(post.postUrl))}" target="_blank" rel="noopener">원문/관련 URL 열기</a>` : ''}
-      ${hasInlineImages ? '' : `<div class="post-images detail ${images ? '' : 'empty'}">${images || '<span>사진 준비중</span>'}</div>`}
-      <div class="post-content">${contentHtml}</div>
-    </article>
+      <div class="pm-hd">
+        <button type="button" class="pm-bk" id="post-back">${MYPAGE_ICONS.chevron}</button>
+        <b>${esc(options.kind === 'notice' ? '공지사항' : '정비사례')}</b>
+      </div>
+      <article class="pm-box pm-post">
+        ${hasInlineImages ? '' : `<div class="pm-post-ph ${images ? '' : 'empty'}">${images || `<span class="pm-kase-noimg">${MYPAGE_ICONS.car}</span>`}</div>`}
+        <div class="pm-post-tx">
+          <div class="pm-post-meta">
+            ${post.brand ? `<span class="pm-chip n">${esc(post.brand)}</span>` : ''}
+            <span>${esc([post.branch, post.date].filter(Boolean).join(' · ') || post.date || '')}</span>
+          </div>
+          <b class="pm-post-title">${esc(post.title || '')}</b>
+          <div class="pm-post-body post-content">${contentHtml}</div>
+          <div class="pm-pair pm-pair-done">
+            ${post.postUrl
+              ? `<a class="pm-press pm-edge" href="${esc(normalizeUrl(post.postUrl))}" target="_blank" rel="noopener">블로그에서 보기</a>`
+              : '<span></span>'}
+            <button type="button" class="pm-press pm-soft" id="post-close">닫기</button>
+          </div>
+          ${canEditNotice ? `
+            <div class="pm-pair pm-pair-done">
+              <button type="button" class="pm-press pm-soft" id="post-edit-notice">수정</button>
+              <button type="button" class="pm-press pm-soft pm-danger" id="post-delete-notice">삭제</button>
+            </div>` : ''}
+        </div>
+      </article>
+      <div class="pm-bp"></div>
+    </div>
   `, true);
+  modalCard.classList.add('mypage-card', 'pm-page');
+  $('#post-close').addEventListener('click', closeModal);
+  $('#post-back').addEventListener('click', closeModal);
   hydrateInlineImages(modalCard);
   if (canEditNotice) {
     $('#post-edit-notice')?.addEventListener('click', () => openNoticeModal(options.index));
@@ -4437,7 +4597,13 @@ function renderAdmInquiry() {
     .filter(m => !m.serviceContext?.runId)
     .slice()
     .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
-  body.innerHTML = `<div class="inquiry-board" id="admin-inquiries">${messages.length ? '' : '<p class="hint">진행 중인 고객문의가 없습니다.</p>'}</div>`;
+  const unread = messages.filter(m => m.from !== 'admin').length;
+  body.className = 'adm-body pm-page';
+  body.innerHTML = `
+    <div class="pm-scr">
+      <div class="pm-hd"><b>고객문의</b><span class="pm-hd-rt ${unread ? 'acc' : ''}">${unread ? `${unread}건 대기` : ''}</span></div>
+      <div class="pm-list" id="admin-inquiries">${messages.length ? '' : '<p class="pm-empty-row">진행 중인 고객문의가 없습니다.</p>'}</div>
+    </div>`;
   renderAdminInquiries(messages);
 }
 
@@ -4449,15 +4615,28 @@ function renderAdminInquiries(messages) {
     const key = msg.memberId || msg.car || msg.customer?.id || msg.customer?.phone || msg.id;
     if (!grouped.has(key)) grouped.set(key, msg);
   });
+  const all = store.get('pm-messages', []);
   wrap.innerHTML = [...grouped.values()].slice(0, 12).map((msg, i) => {
     const customer = msg.customer || store.get('pm-members', []).find(m => m.id === msg.memberId || m.car === msg.car) || {};
+    const name = customer.name || msg.car || '고객';
+    /* 고객이 보낸 뒤 아직 답장하지 않은 건수 */
+    const thread = all.filter(x => (x.memberId && x.memberId === msg.memberId) || (x.car && x.car === msg.car));
+    const lastAdminAt = Math.max(0, ...thread.filter(x => x.from === 'admin').map(x => new Date(x.createdAt || 0).getTime()));
+    const waiting = thread.filter(x => x.from !== 'admin' && new Date(x.createdAt || 0).getTime() > lastAdminAt).length;
+    const when = new Date(msg.createdAt || Date.now());
+    const sameDay = when.toDateString() === new Date().toDateString();
     return `
-      <article class="inquiry-row">
-        <strong>${esc(customer.name || msg.car || '고객')}</strong>
-        <span>${esc(customer.car || msg.car || '-')} · ${esc(new Date(msg.createdAt || Date.now()).toLocaleString('ko-KR'))}</span>
-        <p>${esc(msg.message || '')}</p>
-        <button type="button" class="mini-btn inquiry-open" data-inquiry="${i}">실시간 채팅</button>
-      </article>`;
+      <button type="button" class="pm-conv inquiry-open ${waiting ? 'un' : ''}" data-inquiry="${i}">
+        <span class="pm-av">${esc(name.slice(0, 1))}</span>
+        <span class="pm-conv-t">
+          <b>${esc(name)}</b>
+          <s>${esc(msg.message || '')}</s>
+        </span>
+        <span class="pm-conv-m">
+          <time>${esc(sameDay ? when.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' }) : when.toLocaleDateString('ko-KR', { month: '2-digit', day: '2-digit' }))}</time>
+          ${waiting ? `<em>${waiting}</em>` : ''}
+        </span>
+      </button>`;
   }).join('');
   wrap.querySelectorAll('.inquiry-open').forEach((btn, i) => {
     const msg = [...grouped.values()][i];

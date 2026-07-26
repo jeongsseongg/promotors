@@ -4400,3 +4400,209 @@ button.step-photo-slot {
 }
 .pm-page .cust-summary:hover { background: #fbfcfd; }
 .pm-page .cust-detail { padding: 0 var(--pm-cpad) var(--pm-cpad); }
+
+/* ---------- 시안 부품 8: 로그인 · 문의목록 ---------- */
+.pm-page .pm-logo { padding: var(--pm-slab) 4px 0; text-align: center; }
+.pm-page .pm-logo b { font-size: 26px; font-weight: 900; color: var(--pm-nv); letter-spacing: -1px; }
+.pm-page .pm-logo b i { font-style: normal; color: var(--pm-yld); }
+.pm-page .pm-logo p { margin: 8px 0 0; font-size: 12.5px; font-weight: 700; color: var(--pm-k3); }
+.pm-page .pm-tabs-mid { justify-content: center; margin-top: var(--pm-slab); }
+.pm-page .pm-form { display: grid; gap: 8px; margin-top: var(--pm-slab); }
+.pm-page .pm-form .password-field { position: relative; display: flex; }
+.pm-page .pm-form .password-field .pm-input { flex: 1; padding-right: 62px; }
+.pm-page .pm-form .password-field button {
+  position: absolute; right: 12px; top: 50%; transform: translateY(-50%);
+  border: 0; background: none; color: var(--pm-k3);
+  font-family: inherit; font-size: 12px; font-weight: 800; cursor: pointer;
+}
+.pm-page .pm-form .address-field { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 8px; }
+.pm-page .pm-form .address-field button {
+  border: 1.5px solid var(--pm-nv); background: #fff; color: var(--pm-nv);
+  border-radius: 999px; padding: 0 16px; min-height: 44px;
+  font-family: inherit; font-size: 12.5px; font-weight: 800; cursor: pointer;
+}
+.pm-page .pm-form .check-line {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 12.5px; font-weight: 700; color: var(--pm-k2);
+  padding: 4px 6px;
+}
+.pm-page .pm-form .field-help,
+.pm-page .pm-form .hint {
+  margin: 0 6px; font-size: 11.5px; font-weight: 600; color: var(--pm-k3); line-height: 1.55;
+}
+.pm-page .pm-form .form-error { margin: 4px 6px 0; font-size: 12.5px; font-weight: 800; color: var(--pm-rd); }
+.pm-page .pm-form .pm-press { margin-top: 8px; }
+
+/* 문의 목록 */
+.pm-page .pm-conv {
+  width: 100%;
+  display: grid; grid-template-columns: 34px minmax(0,1fr) auto;
+  align-items: center; gap: var(--pm-slabb);
+  padding: var(--pm-rowpad) var(--pm-cpad);
+  min-height: 44px;
+  border: 0; background: none; font-family: inherit;
+  text-align: left; cursor: pointer; color: var(--pm-k1);
+}
+.pm-page .pm-conv + .pm-conv { border-top: 1px solid var(--pm-ln2); }
+.pm-page .pm-av {
+  width: 34px; height: 34px; border-radius: 50%;
+  background: var(--pm-ln2);
+  display: grid; place-items: center;
+  font-size: 12px; font-weight: 900; color: var(--pm-nv);
+}
+.pm-page .pm-conv.un .pm-av { background: var(--pm-nv); color: var(--pm-yl); }
+.pm-page .pm-conv-t b { font-size: 14px; font-weight: 800; }
+.pm-page .pm-conv-t s {
+  text-decoration: none; display: block; margin-top: 4px;
+  font-size: 11.5px; font-weight: 600; color: var(--pm-k3);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.pm-page .pm-conv-m { text-align: right; }
+.pm-page .pm-conv-m time { display: block; font-size: 10.5px; font-weight: 700; color: var(--pm-k3); }
+.pm-page .pm-conv-m em {
+  font-style: normal; display: inline-block; margin-top: 6px;
+  min-width: 18px; height: 18px; line-height: 18px; padding: 0 5px;
+  border-radius: 999px; background: var(--pm-rd); color: #fff;
+  font-size: 10px; font-weight: 900;
+}
+
+/* ---------- 시안 부품 9: 정비사례 · 지점 · 공지 ---------- */
+/* 정비사례 2열 카드 */
+.pm-cases { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.pm-kase {
+  background: #fff; border-radius: 15px; overflow: hidden;
+  box-shadow: 0 2px 12px rgba(15,23,42,.07);
+  cursor: pointer; position: relative;
+}
+.pm-kase-ph {
+  position: relative; aspect-ratio: 4/3;
+  background: linear-gradient(150deg,#2a3268,#1e2464 55%,#141939);
+  display: grid; place-items: center;
+}
+.pm-kase-ph img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.pm-kase-noimg { display: grid; color: rgba(255,255,255,.3); }
+.pm-kase-noimg svg { width: 28px; height: 28px; }
+.pm-kase-ph > b {
+  position: absolute; left: 8px; top: 8px;
+  background: rgba(255,255,255,.92); color: #1e2464;
+  font-size: 9.5px; font-weight: 900; border-radius: 5px; padding: 3px 7px;
+}
+.pm-kase-tx { padding: 12px 12px 14px; }
+.pm-kase-tx b { display: block; font-size: 13px; font-weight: 900; line-height: 1.35; color: #14161c; }
+.pm-kase-tx s {
+  text-decoration: none; display: block; margin-top: 7px;
+  font-size: 11px; font-weight: 700; color: #a2adba;
+}
+@media (min-width: 901px) {
+  .pm-cases { grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); }
+}
+
+/* 정비사례 · 공지 상세 */
+.pm-page .pm-post { overflow: hidden; margin-top: var(--pm-gap); }
+.pm-page .pm-post-ph {
+  aspect-ratio: 4/3;
+  background: linear-gradient(150deg,#2a3268,var(--pm-nv) 55%,var(--pm-nvd));
+  display: grid; place-items: center;
+}
+.pm-page .pm-post-ph img { width: 100%; height: 100%; object-fit: cover; }
+.pm-page .pm-post-tx { padding: var(--pm-cpad); }
+.pm-page .pm-post-meta { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.pm-page .pm-post-meta span:not(.pm-chip) { font-size: 11.5px; font-weight: 800; color: var(--pm-k3); }
+.pm-page .pm-chip.n { background: var(--pm-nv); color: var(--pm-yl); }
+.pm-page .pm-post-title { display: block; margin-top: var(--pm-slabb); font-size: 17px; font-weight: 900; line-height: 1.35; }
+.pm-page .pm-post-body {
+  margin-top: 11px;
+  font-size: 12.5px; font-weight: 600; color: var(--pm-k2); line-height: 1.7;
+}
+.pm-page .pm-post-body img { max-width: 100%; border-radius: 10px; margin: 8px 0; }
+.pm-page .pm-press.pm-danger { color: var(--pm-rd); }
+
+/* 지점 카드 */
+.pm-branch-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.pm-branch-head h3 { margin: 0; }
+.pm-branch-hours {
+  margin-top: 6px;
+  font-size: 11.5px; font-weight: 700; color: #a2adba; line-height: 1.55;
+}
+.pm-branch-acts { margin-top: 14px; }
+.branch .pm-press {
+  border-radius: 999px; min-height: 46px;
+  display: inline-flex; align-items: center; justify-content: center;
+  text-decoration: none; font-family: inherit; font-size: 13.5px; font-weight: 900;
+  border: 0; cursor: pointer;
+}
+.branch .pm-press.pm-soft { background: #f1f3f7; color: #1e2464; }
+.branch .pm-press.pm-edge { background: #fff; color: #1e2464; border: 1.5px solid #1e2464; }
+.branch .pm-chip {
+  display: inline-block; border-radius: 999px; padding: 4px 10px;
+  font-size: 10.5px; font-weight: 900; white-space: nowrap;
+}
+.branch .pm-chip.ok { background: #e7f6ef; color: #12805a; }
+.branch .pm-chip.gy { background: #f5f6f9; color: #666f7d; }
+.pm-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; }
+
+/* 공지 */
+.album.pm-page { background: none; padding: 0; }
+.pm-notice-top { cursor: pointer; }
+.pm-notice-title { font-size: 18px !important; }
+.pm-notice-row {
+  background: #fff; border-radius: var(--pm-rad, 18px);
+  box-shadow: 0 2px 12px rgba(15,23,42,.055);
+  margin-top: 12px; cursor: pointer;
+}
+
+/* ---------- 시안 부품 10: 고객센터 ---------- */
+.pm-page .pm-help-hi { padding: 4px 4px var(--pm-gap); }
+.pm-page .pm-help-hi b { font-size: 21px; font-weight: 900; color: var(--pm-nv); letter-spacing: -.6px; }
+.pm-page .pm-help-hi p { margin: 8px 0 0; font-size: 12.5px; font-weight: 700; color: var(--pm-k2); }
+.pm-page .pm-help-hi em { font-style: normal; font-weight: 900; }
+.pm-page .pm-help-hi em.open { color: #12805a; }
+.pm-page .pm-help-hi em.closed { color: var(--pm-rd); }
+
+.pm-page .pm-help-2up { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.pm-page .pm-help-card {
+  background: #fff; border-radius: var(--pm-rad);
+  box-shadow: 0 2px 12px rgba(15,23,42,.06);
+  padding: var(--pm-cpad);
+  border: 0; font-family: inherit; text-align: left;
+  text-decoration: none; color: var(--pm-k1); cursor: pointer;
+  display: block; min-height: 44px;
+}
+.pm-page .pm-help-card.nv { background: var(--pm-nv); }
+.pm-page .pm-help-ic {
+  width: 36px; height: 36px; border-radius: 12px;
+  background: var(--pm-ln2); color: var(--pm-nv);
+  display: grid; place-items: center;
+}
+.pm-page .pm-help-card.nv .pm-help-ic { background: rgba(255,255,255,.14); color: var(--pm-yl); }
+.pm-page .pm-help-ic svg { width: 22px; height: 22px; }
+.pm-page .pm-help-card b { display: block; margin-top: var(--pm-slabb); font-size: 14px; font-weight: 900; }
+.pm-page .pm-help-card s {
+  text-decoration: none; display: block; margin-top: 4px;
+  font-size: 11px; font-weight: 700; color: var(--pm-k3);
+}
+.pm-page .pm-help-card.nv b { color: #fff; }
+.pm-page .pm-help-card.nv s { color: rgba(255,255,255,.6); }
+
+.pm-page .pm-help-hours { margin-top: var(--pm-gap); padding: var(--pm-gap) var(--pm-cpad); }
+.pm-page .pm-help-hours div {
+  display: flex; justify-content: space-between; gap: var(--pm-gap);
+  padding: 6px 0; font-size: 12.5px; font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+.pm-page .pm-help-hours s { text-decoration: none; color: var(--pm-k3); }
+.pm-page .pm-help-hours em { font-style: normal; color: var(--pm-rd); }
+
+.pm-page .pm-faq { margin-top: var(--pm-gap); }
+.pm-page .pm-faq-q {
+  width: 100%; border: 0; background: none;
+  font-family: inherit; text-align: left; cursor: pointer; color: var(--pm-k1);
+}
+.pm-page .pm-faq-q + .pm-faq-a { border-top: 0; }
+.pm-page .pm-faq-q .pm-rw-m { color: #ccd2db; font-size: 16px; }
+.pm-page .pm-faq-q.open .pm-rw-m { color: var(--pm-nv); }
+.pm-page .pm-faq-a {
+  margin: 0; padding: 0 var(--pm-cpad) var(--pm-rowpad);
+  font-size: 12.5px; font-weight: 600; color: var(--pm-k2); line-height: 1.7;
+}
+.pm-page .pm-faq-a[hidden] { display: none; }
