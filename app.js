@@ -2443,10 +2443,26 @@ async function renderIntroSlides() {
   introSlideIndex = Math.max(0, Math.min(introSlideIndex, slides.length - 1));
 
   if (!slides.length) return;
-  for (const [i, slide] of slides.entries()) {
+
+  /* 이미지 데이터를 받지 못한 슬라이드는 건너뛴다.
+     등록은 돼 있는데 전부 못 받으면 빈 칸 대신 안내문을 띄운다. */
+  const loaded = [];
+  for (const slide of slides) {
+    const src = await assetSrc(slide.key);
+    if (src) loaded.push({ ...slide, src });
+  }
+  if (!loaded.length) {
+    photo.classList.add('no-img');
+    photo.classList.remove('has-multiple');
+    return;
+  }
+  photo.classList.toggle('has-multiple', loaded.length > 1);
+  introSlideIndex = Math.max(0, Math.min(introSlideIndex, loaded.length - 1));
+
+  loaded.forEach((slide, i) => {
     const img = document.createElement('img');
     img.className = i === introSlideIndex ? 'active' : '';
-    img.src = await assetSrc(slide.key);
+    img.src = slide.src;
     img.alt = slide.alt || `프로모터스 소개 이미지 ${i + 1}`;
     frame.append(img);
 
@@ -2456,7 +2472,7 @@ async function renderIntroSlides() {
     dot.ariaLabel = `${i + 1}번째 소개 이미지`;
     dot.addEventListener('click', () => { introSlideIndex = i; renderIntroSlides(); });
     dots.append(dot);
-  }
+  });
 
   introTimer = null;
 }
@@ -5523,8 +5539,15 @@ async function startApp() {
   const initialView = showView(savedView || getHomeView());
   renderViewContent(initialView);
 
-  /* 원격 데이터 수신 후 화면 전환 없이 내용만 다시 그린다 */
+  /* 원격 데이터 수신 후 화면 전환 없이 내용만 다시 그린다.
+     응답이 오래 걸려도 소개 화면이 빈 칸으로 남지 않도록 대기 상한을 둔다. */
+  const introFallback = setTimeout(() => {
+    if (introDataReady) return;
+    introDataReady = true;
+    renderIntroSlides();
+  }, 6000);
   await hydrateSupabaseData();
+  clearTimeout(introFallback);
   introDataReady = true;
   await migrateLocalAssetsToSupabase();
   applyAuthUI();
