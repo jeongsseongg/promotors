@@ -6163,7 +6163,15 @@ button.step-photo-slot {
   word-break: keep-all;
   overflow-wrap: normal;
 }
-#adm-activity-body .activity-keyword-table { min-width: 1000px; }
+#adm-activity-body .activity-keyword-table { min-width: 1060px; }
+#adm-activity-body .activity-acquisition-table { min-width: 1180px; }
+/* 숫자 칸이 세로로 쪼개지지 않게 한다 */
+#adm-activity-body .activity-owner-table td,
+#adm-activity-body .activity-acquisition-table td,
+#adm-activity-body .activity-keyword-table td { white-space: nowrap; }
+#adm-activity-body .activity-acquisition-table td:nth-child(n+8),
+#adm-activity-body .activity-keyword-table td:first-child { white-space: normal; }
+#adm-activity-body .activity-keyword-platforms { margin-bottom: 14px; }
 #adm-activity-body .activity-grade {
   display: inline-block;
   padding: 3px 9px;

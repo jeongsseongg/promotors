@@ -1042,6 +1042,24 @@ function activityBookingRevenue(booking, customers) {
     .filter(record => record.paid && String(record.date || record.createdAt || '').slice(0, 10).replaceAll('.', '-') === bookingDay)
     .reduce((sum, record) => sum + Number(String(record.amount ?? '').replace(/[^\d]/g, '') || 0), 0);
 }
+/* 검색어를 어디까지 확인할 수 있는지는 들어온 곳마다 다르다.
+   광고만 실제 검색어가 확실히 넘어오고, 플레이스·블로그는 원리적으로 넘어오지 않는다. */
+function activityKeywordAvailability(channel) {
+  const name = String(channel || '');
+  if (/검색광고/.test(name)) return { label:'가능', tone:'gold', note:'실제 검색어와 등록 키워드가 함께 저장됩니다.' };
+  if (/구글/.test(name)) return { label:'불가', tone:'cold', note:'구글은 검색어를 보내지 않습니다. 구글 서치 콘솔에서 확인합니다.' };
+  if (/플레이스/.test(name)) return { label:'불가', tone:'cold', note:'어떤 검색으로 플레이스를 찾았는지는 네이버 스마트플레이스 통계에서 확인합니다.' };
+  if (/블로그|카페/.test(name)) return { label:'불가', tone:'cold', note:'검색어는 블로그·카페 통계에서 확인합니다. 링크에 utm_campaign을 넣으면 어느 글에서 왔는지는 구분됩니다.' };
+  if (/자연검색|검색엔진/.test(name)) return { label:'일부만', tone:'warm', note:'네이버·다음은 일부 경로에서만 검색어를 보냅니다.' };
+  return { label:'해당 없음', tone:'plain', note:'검색을 거치지 않은 유입입니다.' };
+}
+function activityPlatform(channel) {
+  const name = String(channel || '');
+  if (name.includes('네이버')) return '네이버';
+  if (name.includes('구글')) return '구글';
+  if (name.includes('다음')) return '다음';
+  return '기타';
+}
 /* 황금 키워드 판정. 방문 수가 아니라 전화·예약이 붙었는지로 나눈다. */
 function activityKeywordGrade(row) {
   if (row.bookings) return { label: '황금', tone: 'gold' };
@@ -1202,7 +1220,8 @@ function initActivityTracking() {
     const element = event.target.closest('button, a, [role="button"], input[type="submit"]');
     if (!element) return;
     const href = element.getAttribute('href') || '';
-    if (/^tel:/i.test(href)) logEvent('phone_call', phoneClickContext(element, href));
+    /* 전화 링크는 곧바로 전화 앱으로 넘어가므로 keepalive 로 보내야 기록이 살아남는다. */
+    if (/^tel:/i.test(href)) logEvent('phone_call', phoneClickContext(element, href), { keepalive: true });
     logEvent('element_click', {
       label: activityElementLabel(element),
       target: element.id || element.dataset?.view || element.dataset?.mtab || href.slice(0, 120) || element.tagName.toLowerCase()
@@ -6954,6 +6973,7 @@ const PUBLIC_ACTIVITY_VIEWS = Object.freeze(['intro', 'location', 'cases', 'guid
 let activityDateRange = null;
 let activitySelectedBranch = '전체';
 let activitySection = 'dashboard';
+let activityKeywordPlatform = '전체';
 function activityDateValue(date) {
   const shifted = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
   return shifted.toISOString().slice(0, 10);
@@ -7524,7 +7544,10 @@ async function renderAdmActivity() {
     selectedCallItems.forEach(item => {
       if (!selectedChannelMap.get(channelNameForItem(item))) unknownChannel.calls += 1;
     });
-    const previousCallCount = previousItems.filter(item => item.visitor_key && item.event_type === 'phone_call').length;
+    /* 비교 대상도 같은 지점 기준이어야 늘었는지 줄었는지가 맞다. */
+    const previousCallCount = previousItems.filter(item => item.visitor_key
+      && item.event_type === 'phone_call'
+      && (activitySelectedBranch === '전체' || activitySameBranch(item.payload?.branch, activitySelectedBranch))).length;
     /* 검색어별 전환: 같은 검색어를 한 줄로 모아 방문·전화·예약을 함께 본다. */
     const keywordRowMap = new Map();
     const keywordKeyBySession = new Map();
@@ -7537,10 +7560,11 @@ async function renderAdmActivity() {
           { text: String(payload.searchQuery || '').trim(), kind: '실제 검색어' },
           { text: String(payload.purchasedKeyword || payload.keyword || '').trim(), kind: '광고 등록 키워드' }
         ].filter(entry => entry.text);
+        const channelName = activityChannel(item);
         entries.forEach(entry => {
-          const key = `${entry.kind}|${activityKeywordKey(entry.text)}`;
-          const row = keywordRowMap.get(key) || { text: entry.text, kind: entry.kind, channels:new Set(), visitors:new Set(), sessions:new Set(), calls:0, bookingIds:new Set(), ranks:[] };
-          row.channels.add(activityChannel(item));
+          /* 같은 검색어라도 네이버 광고에서 온 것과 다음에서 온 것은 따로 본다. */
+          const key = `${entry.kind}|${channelName}|${activityKeywordKey(entry.text)}`;
+          const row = keywordRowMap.get(key) || { text: entry.text, kind: entry.kind, channel: channelName, platform: activityPlatform(channelName), visitors:new Set(), sessions:new Set(), calls:0, bookingIds:new Set(), ranks:[] };
           if (item.visitor_key) row.visitors.add(item.visitor_key);
           const rank = Number(payload.rank || 0);
           if (rank > 0) row.ranks.push(rank);
@@ -7579,10 +7603,16 @@ async function renderAdmActivity() {
         };
         return { ...stats, grade: activityKeywordGrade(stats) };
       })
-      .sort((a, b) => b.bookings - a.bookings || b.revenue - a.revenue || b.calls - a.calls || b.visitors - a.visitors)
+      .sort((a, b) => b.bookings - a.bookings || b.revenue - a.revenue || b.calls - a.calls || b.visitors - a.visitors);
+    const keywordPlatforms = ['전체', '네이버', '구글', '다음', '기타']
+      .map(name => ({ name, count: name === '전체' ? keywordRows.length : keywordRows.filter(row => row.platform === name).length }))
+      .filter(entry => entry.name === '전체' || entry.count);
+    if (!keywordPlatforms.some(entry => entry.name === activityKeywordPlatform)) activityKeywordPlatform = '전체';
+    const visibleKeywordRows = keywordRows
+      .filter(row => activityKeywordPlatform === '전체' || row.platform === activityKeywordPlatform)
       .slice(0, 40);
-    const goldenKeywordCount = keywordRows.filter(row => row.grade.label === '황금').length;
-    const wastedKeywordCount = keywordRows.filter(row => row.grade.label === '낭비').length;
+    const goldenKeywordCount = visibleKeywordRows.filter(row => row.grade.label === '황금').length;
+    const wastedKeywordCount = visibleKeywordRows.filter(row => row.grade.label === '낭비').length;
     /* 검색으로 들어왔지만 검색어가 넘어오지 않은 방문을 센다. 자연검색어는 정책상 전달되지 않는 경우가 많다. */
     const searchSessionStarts = sessionStarts
       .filter(item => activitySelectedBranch === '전체' || selectedVisitorKeys.has(item.visitor_key))
@@ -7746,7 +7776,7 @@ async function renderAdmActivity() {
       </section>
       <section class="settings-card">
         <div class="activity-section-head"><div><h3>어디서 와서 예약했나</h3><p>방문 합계와 예약 합계를 함께 확인할 수 있습니다.</p></div></div>
-        <div class="activity-table-wrap"><table class="activity-table activity-owner-table"><thead><tr><th>들어온 곳</th><th>방문</th><th>전화 클릭</th><th>예약 생성</th><th>확정</th><th>입고</th><th>예약 전환</th><th>광고비</th><th>예약당 광고비</th></tr></thead><tbody>${channelTableRows.map(row => `<tr><td><strong>${esc(row.channel.name)}</strong></td><td>${row.channel.visitors.size}명</td><td>${row.channel.calls}건</td><td>${row.created}건</td><td>${row.confirmed}건</td><td>${row.arrived}건</td><td>${activityRatio(row.created, row.channel.visitors.size)}</td><td>${row.adCost === null ? '—' : `${Math.round(row.adCost).toLocaleString()}원`}</td><td>${row.adCost === null || !row.created ? '—' : `${Math.round(row.adCost / row.created).toLocaleString()}원`}</td></tr>`).join('') || '<tr><td colspan="9">선택한 기간의 유입 내역이 없습니다.</td></tr>'}</tbody><tfoot><tr><th>합계</th><th>${channelVisitorTotal}명</th><th>${channelTableRows.reduce((sum, row) => sum + row.channel.calls, 0)}건</th><th>${channelBookingTotal}건</th><th>${selectedBranchRow?.confirmed || 0}건</th><th>${selectedBranchRow?.visits || 0}건</th><th>${activityRatio(channelBookingTotal, channelVisitorTotal)}</th><th>${Math.round(Number(adTotals.cost || 0)).toLocaleString()}원</th><th>${channelBookingTotal ? `${Math.round(Number(adTotals.cost || 0) / channelBookingTotal).toLocaleString()}원` : '—'}</th></tr></tfoot></table></div>
+        <div class="activity-table-wrap"><table class="activity-table activity-owner-table"><thead><tr><th>들어온 곳</th><th>방문</th><th>전화 클릭</th><th>예약 생성</th><th>확정</th><th>입고</th><th>예약 전환</th><th>광고비</th><th>예약당 광고비</th></tr></thead><tbody>${channelTableRows.map(row => `<tr><td><strong>${esc(row.channel.name)}</strong></td><td>${row.channel.visitors.size}명</td><td>${row.channel.calls}건</td><td>${row.created}건</td><td>${row.confirmed}건</td><td>${row.arrived}건</td><td>${activityRatio(row.created, row.channel.visitors.size)}</td><td>${row.adCost === null ? '—' : `${Math.round(row.adCost).toLocaleString()}원`}</td><td>${row.adCost === null || !row.created ? '—' : `${Math.round(row.adCost / row.created).toLocaleString()}원`}</td></tr>`).join('') || '<tr><td colspan="10">선택한 기간의 유입 내역이 없습니다.</td></tr>'}</tbody><tfoot><tr><th>합계</th><th>${channelVisitorTotal}명</th><th>${channelTableRows.reduce((sum, row) => sum + row.channel.calls, 0)}건</th><th>${channelBookingTotal}건</th><th>${selectedBranchRow?.confirmed || 0}건</th><th>${selectedBranchRow?.visits || 0}건</th><th>${activityRatio(channelBookingTotal, channelVisitorTotal)}</th><th>${Math.round(Number(adTotals.cost || 0)).toLocaleString()}원</th><th>${channelBookingTotal ? `${Math.round(Number(adTotals.cost || 0) / channelBookingTotal).toLocaleString()}원` : '—'}</th></tr></tfoot></table></div>
       </section>
       <section class="settings-card">
         <div class="activity-section-head"><div><h3>지점별 예약 진행</h3><p>예약부터 입고·완료까지 비교합니다.</p></div></div>
@@ -7757,11 +7787,12 @@ async function renderAdmActivity() {
       ${simpleAdPanel}
       <section class="settings-card">
         <div class="activity-section-head"><div><h3>유입·검색어 상세</h3><p>손님이 어디에서 어떤 검색어로 들어왔는지 봅니다.</p></div></div>
-        <div class="activity-table-wrap"><table class="activity-table activity-acquisition-table"><thead><tr><th>들어온 곳</th><th>방문</th><th>평균 관심시간</th><th>예약 관심</th><th>전화 클릭</th><th>예약 생성</th><th>실제 검색어</th><th>광고에 등록한 검색어</th><th>광고 이름</th></tr></thead><tbody>${selectedChannels.map(channel => `<tr><td><strong>${esc(channel.name)}</strong></td><td>${channel.visitors.size}명</td><td>${activityDuration(channel.dwell / Math.max(1, channel.sessions))}</td><td>${channel.intentVisitors.size}명</td><td>${channel.calls}건</td><td>${channel.bookingIds.size}건</td><td>${esc(activityKeywordPreview(channel.searchQueries))}</td><td>${esc(activityKeywordPreview(channel.purchasedKeywords))}</td><td>${esc(activityKeywordPreview([...channel.campaigns, ...channel.adGroups]))}</td></tr>`).join('') || '<tr><td colspan="9">선택한 기간의 유입 내역이 없습니다.</td></tr>'}</tbody></table></div>
+        <div class="activity-table-wrap"><table class="activity-table activity-acquisition-table"><thead><tr><th>들어온 곳</th><th>검색어 확인</th><th>방문</th><th>평균 관심시간</th><th>예약 관심</th><th>전화 클릭</th><th>예약 생성</th><th>실제 검색어</th><th>광고에 등록한 검색어</th><th>광고 이름</th></tr></thead><tbody>${selectedChannels.map(channel => `<tr><td><strong>${esc(channel.name)}</strong></td><td><span class="activity-grade" data-tone="${activityKeywordAvailability(channel.name).tone}" title="${esc(activityKeywordAvailability(channel.name).note)}">${activityKeywordAvailability(channel.name).label}</span></td><td>${channel.visitors.size}명</td><td>${activityDuration(channel.dwell / Math.max(1, channel.sessions))}</td><td>${channel.intentVisitors.size}명</td><td>${channel.calls}건</td><td>${channel.bookingIds.size}건</td><td>${esc(activityKeywordPreview(channel.searchQueries))}</td><td>${esc(activityKeywordPreview(channel.purchasedKeywords))}</td><td>${esc(activityKeywordPreview([...channel.campaigns, ...channel.adGroups]))}</td></tr>`).join('') || '<tr><td colspan="9">선택한 기간의 유입 내역이 없습니다.</td></tr>'}</tbody></table></div>
       </section>
       <section class="settings-card activity-keyword-card">
-        <div class="activity-section-head"><div><h3>황금 키워드</h3><p>전화·예약이 붙은 검색어가 황금, 방문만 많고 아무 것도 없는 검색어가 낭비입니다. 광고 예산은 황금에 몰고 낭비는 끄면 됩니다.</p></div><strong>황금 ${goldenKeywordCount} · 낭비 ${wastedKeywordCount}</strong></div>
-        <div class="activity-table-wrap"><table class="activity-table activity-keyword-table"><thead><tr><th>검색어</th><th>등급</th><th>방문</th><th>전화</th><th>예약</th><th>매출</th><th>확정</th><th>입고</th><th>구분</th><th>들어온 곳</th><th>광고 순위</th></tr></thead><tbody>${keywordRows.map(row => `<tr><td><strong>${esc(row.text)}</strong></td><td><span class="activity-grade" data-tone="${row.grade.tone}">${row.grade.label}</span></td><td>${row.visitors}명 / ${row.sessions.size}회</td><td>${row.calls}건</td><td>${row.bookings}건</td><td>${row.revenue ? `${row.revenue.toLocaleString()}원` : '—'}</td><td>${row.confirmed}건</td><td>${row.arrived}건</td><td>${esc(row.kind)}</td><td>${esc(activityKeywordPreview(row.channels, 2))}</td><td>${row.rank ? `${row.rank.toFixed(1)}위` : '—'}</td></tr>`).join('') || '<tr><td colspan="11">선택한 기간에 저장된 검색어가 없습니다.</td></tr>'}</tbody></table></div>
+        <div class="activity-section-head"><div><h3>황금 키워드</h3><p>전화·예약이 붙은 검색어가 황금, 방문만 많고 아무 것도 없는 검색어가 낭비입니다. 같은 검색어라도 들어온 곳이 다르면 따로 셉니다.</p></div><strong>황금 ${goldenKeywordCount} · 낭비 ${wastedKeywordCount}</strong></div>
+        <div class="activity-presets activity-keyword-platforms">${keywordPlatforms.map(entry => `<button type="button" data-keyword-platform="${esc(entry.name)}" class="${activityKeywordPlatform === entry.name ? 'active' : ''}">${esc(entry.name)} ${entry.count}</button>`).join('')}</div>
+        <div class="activity-table-wrap"><table class="activity-table activity-keyword-table"><thead><tr><th>검색어</th><th>등급</th><th>들어온 곳</th><th>방문</th><th>전화</th><th>예약</th><th>매출</th><th>확정</th><th>입고</th><th>구분</th><th>광고 순위</th></tr></thead><tbody>${visibleKeywordRows.map(row => `<tr><td><strong>${esc(row.text)}</strong></td><td><span class="activity-grade" data-tone="${row.grade.tone}">${row.grade.label}</span></td><td>${esc(row.channel)}</td><td>${row.visitors}명 / ${row.sessions.size}회</td><td>${row.calls}건</td><td>${row.bookings}건</td><td>${row.revenue ? `${row.revenue.toLocaleString()}원` : '—'}</td><td>${row.confirmed}건</td><td>${row.arrived}건</td><td>${esc(row.kind)}</td><td>${row.rank ? `${row.rank.toFixed(1)}위` : '—'}</td></tr>`).join('') || '<tr><td colspan="11">선택한 기간에 저장된 검색어가 없습니다.</td></tr>'}</tbody></table></div>
         <p class="activity-data-note">검색어가 남는 경우: 네이버 검색광고 유입(실제 검색어·등록 키워드·광고 순위 모두 저장), 검색어가 주소에 남는 다음·빙·줌 유입, utm_term을 넣은 링크.<br>
         검색어가 남지 않는 경우: 구글 자연검색은 정책상 검색어를 보내지 않고, 네이버 자연검색도 대부분 보내지 않습니다. 이 방문은 채널만 남습니다. 자연검색어까지 보려면 구글 서치 콘솔과 네이버 서치어드바이저를 따로 연결해야 하고, 검색량·경쟁도는 네이버 검색광고 키워드도구 쪽 자료가 필요합니다. 매출은 같은 차량·같은 날짜의 정산 완료 기록으로 이어붙인 추정값입니다.</p>
       </section>
@@ -7800,6 +7831,10 @@ async function renderAdmActivity() {
       renderAdmActivity();
     }));
 
+    body.querySelectorAll('[data-keyword-platform]').forEach(button => button.addEventListener('click', () => {
+      activityKeywordPlatform = button.dataset.keywordPlatform || '전체';
+      renderAdmActivity();
+    }));
     body.querySelectorAll('[data-activity-branch]').forEach(button => button.addEventListener('click', () => {
       activitySelectedBranch = button.dataset.activityBranch || '전체';
       renderAdmActivity();
