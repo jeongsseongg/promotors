@@ -526,6 +526,56 @@ function progressServiceText(serviceName, done = false) {
   return done ? `${name} 작업을 완료했어요` : `지금 ${name} 작업을 하고있어요`;
 }
 
+/* 네이버 검색광고 전환 추적(wcs.trans).
+   사이트에서 만든 예약·회원가입을 네이버 광고 관리자로 되돌려주면 키워드별 전환을 광고 쪽에서도 볼 수 있다. */
+let naverConversionLoader = null;
+function naverAdsTrackingConfig() {
+  const config = window.PROMOTORS_NAVER_ADS || {};
+  const commonKey = String(config.commonKey || '').trim();
+  if (!commonKey) return null;
+  return {
+    commonKey,
+    inflowDomain: String(config.inflowDomain || '').trim(),
+    bookingConversionType: String(config.bookingConversionType || 'lead').trim(),
+    signupConversionType: String(config.signupConversionType || 'sign_up').trim()
+  };
+}
+function loadNaverConversionScript() {
+  const config = naverAdsTrackingConfig();
+  if (!config || isAdmin) return null;
+  naverConversionLoader ||= new Promise(resolve => {
+    const script = document.createElement('script');
+    script.src = 'https://wcs.naver.net/wcslog.js';
+    script.async = true;
+    script.onload = () => {
+      window.wcs_add = window.wcs_add || {};
+      window.wcs_add.wa = config.commonKey;
+      resolve(!!window.wcs);
+    };
+    script.onerror = () => resolve(false);
+    document.head.appendChild(script);
+  });
+  return naverConversionLoader;
+}
+function trackNaverPageView() {
+  const config = naverAdsTrackingConfig();
+  const loader = loadNaverConversionScript();
+  if (!config || !loader) return;
+  loader.then(ready => {
+    if (!ready || !window.wcs) return;
+    if (config.inflowDomain) window.wcs.inflow(config.inflowDomain);
+    if (typeof window.wcs_do === 'function') window.wcs_do();
+  }).catch(() => {});
+}
+function trackNaverConversion(type, value = 0) {
+  const loader = loadNaverConversionScript();
+  if (!loader || !type) return;
+  loader.then(ready => {
+    if (!ready || typeof window.wcs?.trans !== 'function') return;
+    window.wcs.trans({ type, value: String(Math.max(0, Math.round(Number(value) || 0))) });
+  }).catch(() => {});
+}
+
 function logEvent(type, payload = {}, options = {}) {
   /* 관리자·개발자 로그인 상태에서는 어떤 활동도 저장하지 않는다. */
   if (isAdmin) return;
@@ -538,6 +588,9 @@ function logEvent(type, payload = {}, options = {}) {
   try { acquisition = JSON.parse(sessionStorage.getItem('pm-activity-acquisition') || '{}'); } catch {}
   const eventPayload = { ...acquisition, sessionId, view: document.body?.dataset?.view || 'intro', ...payload };
   sessionStorage.setItem('pm-activity-last-seen', String(Date.now()));
+  const naverAds = naverAdsTrackingConfig();
+  if (naverAds && type === 'booking_complete') trackNaverConversion(naverAds.bookingConversionType, payload.amount || 0);
+  if (naverAds && type === 'signup_complete') trackNaverConversion(naverAds.signupConversionType);
   const logs = store.get('pm-logs', []);
   logs.unshift({ type, payload: eventPayload, at: new Date().toISOString() });
   store.set('pm-logs', logs.slice(0, 300));
@@ -1011,6 +1064,24 @@ function activityElementLabel(element) {
   const label = element.getAttribute('aria-label') || element.dataset?.view || element.textContent || element.id || element.tagName;
   return String(label).replace(/\s+/g, ' ').trim().slice(0, 80) || '이름 없는 요소';
 }
+function activityPhoneDigits(value) {
+  return String(value || '').replace(/\D/g, '');
+}
+/* 사이트 어디서든 전화번호 링크를 누르면 지점·번호를 찾아 전환으로 남긴다. */
+function phoneClickContext(element, href) {
+  const digits = activityPhoneDigits(String(href || '').replace(/^tel:/i, ''));
+  const tagged = element?.dataset?.phoneBranch || element?.closest?.('[data-phone-branch]')?.dataset?.phoneBranch || '';
+  if (tagged) return { branch: tagged, phone: element?.dataset?.phone || digits };
+  const candidates = [
+    ...PHONE_BOOKING_BRANCHES.map(branch => ({ name: branch.name, tel: branch.phone })),
+    ...getBranches().flatMap(branch => [{ name: branch.name, tel: branch.tel }, { name: branch.name, tel: branch.mobile }])
+  ];
+  const matched = candidates.find(candidate => {
+    const candidateDigits = activityPhoneDigits(candidate.tel);
+    return candidateDigits && candidateDigits === digits;
+  });
+  return { branch: matched?.name || '', phone: digits };
+}
 function activityAcquisitionContext(referrerValue = document.referrer || '', urlValue = location.href) {
   let params = new URLSearchParams();
   try { params = new URL(urlValue, location.origin).searchParams; } catch {}
@@ -1021,7 +1092,16 @@ function activityAcquisitionContext(referrerValue = document.referrer || '', url
   const naverKeyword = params.get('n_keyword') || '';
   const campaign = params.get('utm_campaign') || params.get('n_campaign') || params.get('n_campaign_type') || '';
   const content = params.get('utm_content') || '';
-  const searchQuery = naverQuery || params.get('query') || params.get('q') || '';
+  /* 네이버·다음은 검색어를 이전 주소에 담아 보내는 경우가 있어, 우리 주소에 없으면 이전 주소에서 찾는다. */
+  const referrerQuery = (() => {
+    try {
+      const previous = new URL(String(referrerValue || ''));
+      return previous.searchParams.get('query') || previous.searchParams.get('q') || previous.searchParams.get('keyword') || '';
+    } catch {
+      return '';
+    }
+  })();
+  const searchQuery = naverQuery || params.get('query') || params.get('q') || referrerQuery;
   const purchasedKeyword = naverKeyword || params.get('utm_term') || '';
   const keyword = searchQuery || purchasedKeyword;
   const clickId = params.get('gclid') || params.get('wbraid') || params.get('gbraid') || params.get('fbclid') || params.get('n_click_id') || '';
@@ -1030,21 +1110,27 @@ function activityAcquisitionContext(referrerValue = document.referrer || '', url
   const rank = params.get('n_rank') || '';
   const referrer = String(referrerValue || '').toLowerCase();
   const combined = `${source} ${medium} ${naverMedia} ${referrer}`;
-  const paid = !!(campaign || clickId || naverMedia || naverKeyword || /cpc|ppc|paid|display/.test(medium));
+  /* utm_campaign은 블로그·문자 같은 무료 링크에도 쓰므로 광고 판정 근거로 쓰지 않는다. */
+  const paid = !!(clickId || naverMedia || naverKeyword || /cpc|ppc|paid|display|cpm/.test(medium));
   let channel = '직접 접속';
   if (paid && (naverMedia || combined.includes('naver'))) channel = '네이버 검색광고';
   else if (paid && combined.includes('google')) channel = '구글 검색광고';
   else if (paid && (combined.includes('instagram') || combined.includes('facebook') || source === 'ig')) channel = '메타 광고';
   else if (paid) channel = '기타 광고';
-  else if (/place\.naver|m\.place\.naver|map\.naver/.test(combined) || source.includes('naver_place')) channel = '네이버 플레이스';
+  else if (/blog\.naver|blog\.me|post\.naver/.test(combined) || source.includes('naver_blog')) channel = '네이버 블로그';
+  else if (/cafe\.naver/.test(combined)) channel = '네이버 카페';
+  else if (/place\.naver|map\.naver/.test(combined) || source.includes('naver_place')) channel = '네이버 플레이스';
   else if (combined.includes('naver')) channel = '네이버 자연검색';
   else if (combined.includes('google')) channel = '구글 자연검색';
+  else if (/daum\.net/.test(combined)) channel = '다음 자연검색';
+  else if (/bing\.com|duckduckgo|zum\.com/.test(combined)) channel = '기타 검색엔진';
   else if (combined.includes('instagram') || source === 'ig') channel = '인스타그램';
   else if (combined.includes('kakao')) channel = '카카오톡';
+  else if (medium === 'blog' || source.includes('blog')) channel = '블로그 링크';
   else if (medium === 'sms' || source === 'sms' || source.includes('message')) channel = '문자 링크';
   else if (medium.includes('push') || source.includes('push')) channel = '앱 푸시';
   else if (medium.includes('affiliate') || source.includes('partner')) channel = '제휴 사이트';
-  else if (referrer) channel = '제휴 사이트';
+  else if (referrer) channel = '기타 사이트';
   return {
     channel,
     source: source || (naverMedia || combined.includes('naver') ? 'naver' : combined.includes('google') ? 'google' : ''),
@@ -1075,6 +1161,7 @@ function initActivityTracking() {
   sessionStorage.setItem('pm-activity-session', sessionId);
   sessionStorage.setItem('pm-activity-acquisition', JSON.stringify(acquisition));
   sessionStorage.setItem('pm-activity-last-seen', String(Date.now()));
+  trackNaverPageView();
   if (!sessionActive) {
     logEvent('session_start', {
       referrer: document.referrer || '',
@@ -1086,6 +1173,7 @@ function initActivityTracking() {
     const element = event.target.closest('button, a, [role="button"], input[type="submit"]');
     if (!element) return;
     const href = element.getAttribute('href') || '';
+    if (/^tel:/i.test(href)) logEvent('phone_call', phoneClickContext(element, href));
     logEvent('element_click', {
       label: activityElementLabel(element),
       target: element.id || element.dataset?.view || element.dataset?.mtab || href.slice(0, 120) || element.tagName.toLowerCase()
@@ -4001,9 +4089,7 @@ function openPhoneBookingBranches() {
     </div>
     <button type="button" class="modal-cancel phone-branch-close" onclick="closeModal()">닫기</button>
   `);
-  $$('.phone-branch-list a').forEach(link => link.addEventListener('click', () => {
-    logEvent('phone_call', { branch: link.dataset.phoneBranch, phone: link.dataset.phone });
-  }));
+  /* 전화 클릭은 사이트 전체 tel: 링크를 감시하는 공통 추적에서 남는다. */
 }
 
 async function closeAdminBookingDate(date) {
@@ -6913,6 +6999,13 @@ function activityRatio(numerator, denominator) {
   if (bottom < 30) return `${top}/${bottom} · 표본 부족`;
   return `${(top / bottom * 100).toFixed(1)}% (${top}/${bottom})`;
 }
+/* 검색어가 많은 채널은 한 칸에 다 늘어놓지 않고 앞 몇 개만 보여준다. */
+function activityKeywordPreview(values, limit = 3) {
+  const list = [...(values || [])].filter(Boolean);
+  if (!list.length) return '확인 불가';
+  const shown = list.slice(0, limit).join(' · ');
+  return list.length > limit ? `${shown} 외 ${list.length - limit}개` : shown;
+}
 function activityZeroClass(value) {
   return Number(value) === 0 ? ' is-zero' : '';
 }
@@ -7136,6 +7229,8 @@ async function renderAdmActivity() {
       dwell:0,
       pageViews:0,
       intentVisitors:new Set(),
+      callVisitors:new Set(),
+      calls:0,
       bookingIds:new Set(),
       linkedBookingIds:new Set(),
       campaigns:new Set(),
@@ -7165,6 +7260,10 @@ async function renderAdmActivity() {
       if (item.event_type === 'view_dwell') channel.dwell += Number(item.payload?.seconds || 0);
       if (item.event_type === 'view_open') channel.pageViews += 1;
       if (item.event_type === 'reservation_click') channel.intentVisitors.add(item.visitor_key);
+      if (item.event_type === 'phone_call') {
+        channel.calls += 1;
+        channel.callVisitors.add(item.visitor_key);
+      }
       if (item.event_type === 'signup_complete') channel.signups += 1;
       if (item.event_type === 'booking_complete') {
         const resolvedBookingId = resolvedBookingIdForLog(item);
@@ -7217,7 +7316,7 @@ async function renderAdmActivity() {
       });
     visitorItems.forEach(item => {
       if (activitySelectedBranch !== '전체'
-        && item.event_type === 'booking_complete'
+        && ['booking_complete', 'phone_call'].includes(item.event_type)
         && !activitySameBranch(item.payload?.branch, activitySelectedBranch)) return;
       if (activitySelectedBranch !== '전체' && !selectedVisitorKeys.has(item.visitor_key)) return;
       const channel = selectedChannelMap.get(channelNameForItem(item));
@@ -7225,6 +7324,10 @@ async function renderAdmActivity() {
       if (item.event_type === 'view_dwell') channel.dwell += Number(item.payload?.seconds || 0);
       if (item.event_type === 'view_open') channel.pageViews += 1;
       if (item.event_type === 'reservation_click') channel.intentVisitors.add(item.visitor_key);
+      if (item.event_type === 'phone_call') {
+        channel.calls += 1;
+        channel.callVisitors.add(item.visitor_key);
+      }
       if (item.event_type === 'signup_complete') channel.signups += 1;
       if (item.event_type === 'booking_complete') {
         const resolvedBookingId = resolvedBookingIdForLog(item);
@@ -7254,6 +7357,58 @@ async function renderAdmActivity() {
     const selectedChannels = [...selectedChannelMap.values()].sort((a,b) => b.visitors.size - a.visitors.size);
     const selectedDonut = activityDonut(selectedChannels.map(channel => ({ count:channel.visitors.size })));
     const selectedChannelVisitors = new Set(selectedChannels.flatMap(channel => [...channel.visitors])).size;
+    /* 전화 클릭은 예약과 함께 보는 보조 전환이다. 지점을 선택하면 그 지점 번호를 누른 것만 센다. */
+    const callItems = visitorItems.filter(item => item.event_type === 'phone_call');
+    const selectedCallItems = callItems.filter(item => activitySelectedBranch === '전체' || activitySameBranch(item.payload?.branch, activitySelectedBranch));
+    const selectedCallVisitors = new Set(selectedCallItems.map(item => item.visitor_key).filter(Boolean)).size;
+    const unnamedCallCount = callItems.filter(item => !String(item.payload?.branch || '').trim()).length;
+    /* 유입 채널을 못 찾은 전화 클릭은 미분류에 넣어 채널 표 합계가 전화 클릭 총계와 맞도록 한다. */
+    selectedCallItems.forEach(item => {
+      if (!selectedChannelMap.get(channelNameForItem(item))) unknownChannel.calls += 1;
+    });
+    const previousCallCount = previousItems.filter(item => item.visitor_key && item.event_type === 'phone_call').length;
+    /* 검색어별 전환: 같은 검색어를 한 줄로 모아 방문·전화·예약을 함께 본다. */
+    const keywordRowMap = new Map();
+    const keywordKeyBySession = new Map();
+    sessionStarts
+      .filter(item => activitySelectedBranch === '전체' || selectedVisitorKeys.has(item.visitor_key))
+      .forEach(item => {
+        const payload = item.payload || {};
+        /* 실제 검색어와 광고에 등록한 키워드는 각각 한 줄로 남긴다. 둘 다 있으면 둘 다 본다. */
+        const entries = [
+          { text: String(payload.searchQuery || '').trim(), kind: '실제 검색어' },
+          { text: String(payload.purchasedKeyword || payload.keyword || '').trim(), kind: '광고 등록 키워드' }
+        ].filter(entry => entry.text);
+        entries.forEach(entry => {
+          const key = `${entry.kind}|${entry.text}`;
+          const row = keywordRowMap.get(key) || { text: entry.text, kind: entry.kind, channels:new Set(), visitors:new Set(), sessions:new Set(), calls:0, bookingIds:new Set() };
+          row.channels.add(activityChannel(item));
+          if (item.visitor_key) row.visitors.add(item.visitor_key);
+          if (payload.sessionId) {
+            row.sessions.add(payload.sessionId);
+            keywordKeyBySession.set(payload.sessionId, [...(keywordKeyBySession.get(payload.sessionId) || []), key]);
+          }
+          keywordRowMap.set(key, row);
+        });
+      });
+    visitorItems.forEach(item => {
+      if (!['phone_call', 'booking_complete'].includes(item.event_type)) return;
+      if (activitySelectedBranch !== '전체' && !activitySameBranch(item.payload?.branch, activitySelectedBranch)) return;
+      (keywordKeyBySession.get(item.payload?.sessionId) || []).forEach(key => {
+        const row = keywordRowMap.get(key);
+        if (!row) return;
+        if (item.event_type === 'phone_call') row.calls += 1;
+        if (item.event_type === 'booking_complete') row.bookingIds.add(resolvedBookingIdForLog(item) || activityBookingLogKey(item));
+      });
+    });
+    const keywordRows = [...keywordRowMap.values()]
+      .sort((a, b) => b.bookingIds.size - a.bookingIds.size || b.calls - a.calls || b.visitors.size - a.visitors.size || b.sessions.size - a.sessions.size)
+      .slice(0, 30);
+    /* 검색으로 들어왔지만 검색어가 넘어오지 않은 방문을 센다. 자연검색어는 정책상 전달되지 않는 경우가 많다. */
+    const searchSessionStarts = sessionStarts
+      .filter(item => activitySelectedBranch === '전체' || selectedVisitorKeys.has(item.visitor_key))
+      .filter(item => /검색/.test(activityChannel(item)));
+    const searchWithoutKeyword = searchSessionStarts.filter(item => !String(item.payload?.searchQuery || '').trim() && !String(item.payload?.purchasedKeyword || item.payload?.keyword || '').trim()).length;
     const selectedTrackedBookingIds = new Set(selectedChannels.flatMap(channel => [...channel.bookingIds]));
     const selectedLinkedBookingIds = new Set(
       selectedChannels
@@ -7319,6 +7474,14 @@ async function renderAdmActivity() {
     if (!adUnavailableCount && selectedChannels.some(channel => channel.name === '네이버 검색광고' && channel.visitors.size) && Number(adTotals.clicks || 0) === 0) {
       qualityAlerts.push('광고 방문은 있는데 광고 클릭이 0회입니다. 7일 기준으로 다시 확인해주세요.');
     }
+    if (!naverAdsTrackingConfig() && selectedChannels.some(channel => channel.name === '네이버 검색광고' && channel.visitors.size)) {
+      qualityAlerts.push('네이버 전환 스크립트 공통키가 아직 없습니다. 프리미엄 로그분석을 신청해 공통키를 넣으면 예약이 광고 관리자에도 전환으로 잡힙니다.');
+    }
+    if (!selectedCallItems.length) qualityAlerts.push('선택한 기간에 저장된 전화 클릭이 없습니다. 전화번호를 눌러 저장되는지 먼저 확인해주세요.');
+    if (unnamedCallCount) qualityAlerts.push(`지점을 확인할 수 없는 전화 클릭이 ${unnamedCallCount}건 있습니다. 지점 전화번호가 등록된 번호와 다른지 확인해주세요.`);
+    if (searchWithoutKeyword) {
+      qualityAlerts.push(`검색 유입 ${searchSessionStarts.length}건 중 ${searchWithoutKeyword}건은 검색어가 넘어오지 않았습니다. 자연검색어는 네이버·구글 정책상 전달되지 않는 경우가 많아 광고 추적값이나 별도 검색 분석 도구가 필요합니다.`);
+    }
     if (unknownPerformance?.visitors.size) qualityAlerts.push(`들어온 곳을 확인할 수 없는 방문이 ${unknownPerformance.visitors.size}명 있습니다.`);
     if (selectedUntrackedBookings.length) qualityAlerts.push(`유입경로가 남지 않은 기존 예약이 ${selectedUntrackedBookings.length}건 있습니다.`);
     if (selectedChannelVisitors < 30) qualityAlerts.push('방문자가 30명보다 적어 비율보다 실제 건수를 중심으로 봐주세요.');
@@ -7358,13 +7521,14 @@ async function renderAdmActivity() {
     const dashboardPanel = `
       ${qualityAlerts.length ? `<section class="activity-alerts"><strong>확인할 내용</strong><ul>${qualityAlerts.map(message => `<li>${esc(message)}</li>`).join('')}</ul></section>` : ''}
       <section class="activity-simple-kpis activity-owner-kpis">
+        <article class="${activityZeroClass(selectedCallItems.length)}"><span>전화 클릭</span><strong>${selectedCallItems.length}건</strong><small>${selectedCallVisitors}명 · 이전 기간 ${previousCallCount}건</small></article>
         <article class="${activityZeroClass(selectedBranchRow?.confirmed)}"><span>예약 확정</span><strong>${selectedBranchRow?.confirmed || 0}건</strong><small>예약 생성 ${selectedSubmittedBookings.length}건</small></article>
         <article class="${activityZeroClass(selectedBranchRow?.visits)}"><span>실제 입고</span><strong>${selectedBranchRow?.visits || 0}건</strong><small>예약일 기준</small></article>
         <article class="${activityZeroClass(revenue)}"><span>매출</span><strong>${revenue.toLocaleString()}원</strong><small>정산 완료 기준</small></article>
         <article class="${activityZeroClass(selectedSubmittedBookings.length)}"><span>예약 전환</span><strong>${activityRatio(selectedSubmittedBookings.length, selectedChannelVisitors)}</strong><small>예약 ${selectedSubmittedBookings.length} / 방문 ${selectedChannelVisitors}</small></article>
       </section>
       <section class="settings-card activity-simple-funnel">
-        <div class="activity-section-head"><div><h3>예약 흐름</h3><p>어디에서 손님이 줄어드는지 보여줍니다.</p></div></div>
+        <div class="activity-section-head"><div><h3>예약 흐름</h3><p>어디에서 손님이 줄어드는지 보여줍니다. 전화로만 문의한 ${selectedCallItems.length}건은 이 흐름에 포함되지 않습니다.</p></div></div>
         ${simpleFunnel.map((stage, index) => {
           const previous = simpleFunnel[index - 1];
           const loss = previous ? Math.max(0, previous.value - stage.value) : 0;
@@ -7373,7 +7537,7 @@ async function renderAdmActivity() {
       </section>
       <section class="settings-card">
         <div class="activity-section-head"><div><h3>어디서 와서 예약했나</h3><p>방문 합계와 예약 합계를 함께 확인할 수 있습니다.</p></div></div>
-        <div class="activity-table-wrap"><table class="activity-table activity-owner-table"><thead><tr><th>들어온 곳</th><th>방문</th><th>예약 생성</th><th>확정</th><th>입고</th><th>예약 전환</th><th>광고비</th><th>예약당 광고비</th></tr></thead><tbody>${channelTableRows.map(row => `<tr><td><strong>${esc(row.channel.name)}</strong></td><td>${row.channel.visitors.size}명</td><td>${row.created}건</td><td>${row.confirmed}건</td><td>${row.arrived}건</td><td>${activityRatio(row.created, row.channel.visitors.size)}</td><td>${row.adCost === null ? '—' : `${Math.round(row.adCost).toLocaleString()}원`}</td><td>${row.adCost === null || !row.created ? '—' : `${Math.round(row.adCost / row.created).toLocaleString()}원`}</td></tr>`).join('') || '<tr><td colspan="8">선택한 기간의 유입 내역이 없습니다.</td></tr>'}</tbody><tfoot><tr><th>합계</th><th>${channelVisitorTotal}명</th><th>${channelBookingTotal}건</th><th>${selectedBranchRow?.confirmed || 0}건</th><th>${selectedBranchRow?.visits || 0}건</th><th>${activityRatio(channelBookingTotal, channelVisitorTotal)}</th><th>${Math.round(Number(adTotals.cost || 0)).toLocaleString()}원</th><th>${channelBookingTotal ? `${Math.round(Number(adTotals.cost || 0) / channelBookingTotal).toLocaleString()}원` : '—'}</th></tr></tfoot></table></div>
+        <div class="activity-table-wrap"><table class="activity-table activity-owner-table"><thead><tr><th>들어온 곳</th><th>방문</th><th>전화 클릭</th><th>예약 생성</th><th>확정</th><th>입고</th><th>예약 전환</th><th>광고비</th><th>예약당 광고비</th></tr></thead><tbody>${channelTableRows.map(row => `<tr><td><strong>${esc(row.channel.name)}</strong></td><td>${row.channel.visitors.size}명</td><td>${row.channel.calls}건</td><td>${row.created}건</td><td>${row.confirmed}건</td><td>${row.arrived}건</td><td>${activityRatio(row.created, row.channel.visitors.size)}</td><td>${row.adCost === null ? '—' : `${Math.round(row.adCost).toLocaleString()}원`}</td><td>${row.adCost === null || !row.created ? '—' : `${Math.round(row.adCost / row.created).toLocaleString()}원`}</td></tr>`).join('') || '<tr><td colspan="9">선택한 기간의 유입 내역이 없습니다.</td></tr>'}</tbody><tfoot><tr><th>합계</th><th>${channelVisitorTotal}명</th><th>${channelTableRows.reduce((sum, row) => sum + row.channel.calls, 0)}건</th><th>${channelBookingTotal}건</th><th>${selectedBranchRow?.confirmed || 0}건</th><th>${selectedBranchRow?.visits || 0}건</th><th>${activityRatio(channelBookingTotal, channelVisitorTotal)}</th><th>${Math.round(Number(adTotals.cost || 0)).toLocaleString()}원</th><th>${channelBookingTotal ? `${Math.round(Number(adTotals.cost || 0) / channelBookingTotal).toLocaleString()}원` : '—'}</th></tr></tfoot></table></div>
       </section>
       <section class="settings-card">
         <div class="activity-section-head"><div><h3>지점별 예약 진행</h3><p>예약부터 입고·완료까지 비교합니다.</p></div></div>
@@ -7384,7 +7548,11 @@ async function renderAdmActivity() {
       ${simpleAdPanel}
       <section class="settings-card">
         <div class="activity-section-head"><div><h3>유입·검색어 상세</h3><p>손님이 어디에서 어떤 검색어로 들어왔는지 봅니다.</p></div></div>
-        <div class="activity-table-wrap"><table class="activity-table activity-acquisition-table"><thead><tr><th>들어온 곳</th><th>방문</th><th>평균 관심시간</th><th>예약 관심</th><th>예약 생성</th><th>실제 검색어</th><th>광고에 등록한 검색어</th><th>광고 이름</th></tr></thead><tbody>${selectedChannels.map(channel => `<tr><td><strong>${esc(channel.name)}</strong></td><td>${channel.visitors.size}명</td><td>${activityDuration(channel.dwell / Math.max(1, channel.sessions))}</td><td>${channel.intentVisitors.size}명</td><td>${channel.bookingIds.size}건</td><td>${esc([...channel.searchQueries].join(' · ') || '확인 불가')}</td><td>${esc([...channel.purchasedKeywords].join(' · ') || '확인 불가')}</td><td>${esc([...channel.campaigns, ...channel.adGroups].join(' · ') || '확인 불가')}</td></tr>`).join('') || '<tr><td colspan="8">선택한 기간의 유입 내역이 없습니다.</td></tr>'}</tbody></table></div>
+        <div class="activity-table-wrap"><table class="activity-table activity-acquisition-table"><thead><tr><th>들어온 곳</th><th>방문</th><th>평균 관심시간</th><th>예약 관심</th><th>전화 클릭</th><th>예약 생성</th><th>실제 검색어</th><th>광고에 등록한 검색어</th><th>광고 이름</th></tr></thead><tbody>${selectedChannels.map(channel => `<tr><td><strong>${esc(channel.name)}</strong></td><td>${channel.visitors.size}명</td><td>${activityDuration(channel.dwell / Math.max(1, channel.sessions))}</td><td>${channel.intentVisitors.size}명</td><td>${channel.calls}건</td><td>${channel.bookingIds.size}건</td><td>${esc(activityKeywordPreview(channel.searchQueries))}</td><td>${esc(activityKeywordPreview(channel.purchasedKeywords))}</td><td>${esc(activityKeywordPreview([...channel.campaigns, ...channel.adGroups]))}</td></tr>`).join('') || '<tr><td colspan="9">선택한 기간의 유입 내역이 없습니다.</td></tr>'}</tbody></table></div>
+      </section>
+      <section class="settings-card">
+        <div class="activity-section-head"><div><h3>검색어별 전환</h3><p>방문만 많은 검색어와 실제로 전화·예약을 만드는 검색어를 구분합니다.</p></div><strong>${keywordRowMap.size}개</strong></div>
+        <div class="activity-table-wrap"><table class="activity-table"><thead><tr><th>검색어</th><th>구분</th><th>들어온 곳</th><th>방문</th><th>전화 클릭</th><th>예약 생성</th></tr></thead><tbody>${keywordRows.map(row => `<tr><td><strong>${esc(row.text)}</strong></td><td>${esc(row.kind)}</td><td>${esc(activityKeywordPreview(row.channels, 2))}</td><td>${row.visitors.size}명 / ${row.sessions.size}회</td><td>${row.calls}건</td><td>${row.bookingIds.size}건</td></tr>`).join('') || '<tr><td colspan="6">선택한 기간에 저장된 검색어가 없습니다. 자연검색어는 네이버·구글이 보내주지 않으면 남지 않습니다.</td></tr>'}</tbody></table></div>
       </section>
       <section class="settings-card">
         <div class="activity-section-head"><div><h3>관심이 높았던 페이지</h3><p>평균 관심시간은 세션 수 기준입니다.</p></div></div>

@@ -5813,10 +5813,10 @@ button.step-photo-slot {
   background: var(--yellow);
 }
 .activity-owner-table {
-  min-width: 920px;
+  min-width: 1020px;
 }
 .activity-acquisition-table {
-  min-width: 980px;
+  min-width: 1080px;
 }
 .activity-table tfoot th {
   padding: 12px 9px;
