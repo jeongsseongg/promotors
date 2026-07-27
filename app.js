@@ -526,56 +526,6 @@ function progressServiceText(serviceName, done = false) {
   return done ? `${name} 작업을 완료했어요` : `지금 ${name} 작업을 하고있어요`;
 }
 
-/* 네이버 검색광고 전환 추적(wcs.trans).
-   사이트에서 만든 예약·회원가입을 네이버 광고 관리자로 되돌려주면 키워드별 전환을 광고 쪽에서도 볼 수 있다. */
-let naverConversionLoader = null;
-function naverAdsTrackingConfig() {
-  const config = window.PROMOTORS_NAVER_ADS || {};
-  const commonKey = String(config.commonKey || '').trim();
-  if (!commonKey) return null;
-  return {
-    commonKey,
-    inflowDomain: String(config.inflowDomain || '').trim(),
-    bookingConversionType: String(config.bookingConversionType || 'lead').trim(),
-    signupConversionType: String(config.signupConversionType || 'sign_up').trim()
-  };
-}
-function loadNaverConversionScript() {
-  const config = naverAdsTrackingConfig();
-  if (!config || isAdmin) return null;
-  naverConversionLoader ||= new Promise(resolve => {
-    const script = document.createElement('script');
-    script.src = 'https://wcs.naver.net/wcslog.js';
-    script.async = true;
-    script.onload = () => {
-      window.wcs_add = window.wcs_add || {};
-      window.wcs_add.wa = config.commonKey;
-      resolve(!!window.wcs);
-    };
-    script.onerror = () => resolve(false);
-    document.head.appendChild(script);
-  });
-  return naverConversionLoader;
-}
-function trackNaverPageView() {
-  const config = naverAdsTrackingConfig();
-  const loader = loadNaverConversionScript();
-  if (!config || !loader) return;
-  loader.then(ready => {
-    if (!ready || !window.wcs) return;
-    if (config.inflowDomain) window.wcs.inflow(config.inflowDomain);
-    if (typeof window.wcs_do === 'function') window.wcs_do();
-  }).catch(() => {});
-}
-function trackNaverConversion(type, value = 0) {
-  const loader = loadNaverConversionScript();
-  if (!loader || !type) return;
-  loader.then(ready => {
-    if (!ready || typeof window.wcs?.trans !== 'function') return;
-    window.wcs.trans({ type, value: String(Math.max(0, Math.round(Number(value) || 0))) });
-  }).catch(() => {});
-}
-
 function logEvent(type, payload = {}, options = {}) {
   /* 관리자·개발자 로그인 상태에서는 어떤 활동도 저장하지 않는다. */
   if (isAdmin) return;
@@ -588,9 +538,6 @@ function logEvent(type, payload = {}, options = {}) {
   try { acquisition = JSON.parse(sessionStorage.getItem('pm-activity-acquisition') || '{}'); } catch {}
   const eventPayload = { ...acquisition, sessionId, view: document.body?.dataset?.view || 'intro', ...payload };
   sessionStorage.setItem('pm-activity-last-seen', String(Date.now()));
-  const naverAds = naverAdsTrackingConfig();
-  if (naverAds && type === 'booking_complete') trackNaverConversion(naverAds.bookingConversionType, payload.amount || 0);
-  if (naverAds && type === 'signup_complete') trackNaverConversion(naverAds.signupConversionType);
   const logs = store.get('pm-logs', []);
   logs.unshift({ type, payload: eventPayload, at: new Date().toISOString() });
   store.set('pm-logs', logs.slice(0, 300));
@@ -1161,7 +1108,6 @@ function initActivityTracking() {
   sessionStorage.setItem('pm-activity-session', sessionId);
   sessionStorage.setItem('pm-activity-acquisition', JSON.stringify(acquisition));
   sessionStorage.setItem('pm-activity-last-seen', String(Date.now()));
-  trackNaverPageView();
   if (!sessionActive) {
     logEvent('session_start', {
       referrer: document.referrer || '',
@@ -7006,6 +6952,134 @@ function activityKeywordPreview(values, limit = 3) {
   const shown = list.slice(0, limit).join(' · ');
   return list.length > limit ? `${shown} 외 ${list.length - limit}개` : shown;
 }
+/* ---------- 분석 화면 그래프 ----------
+   외부 라이브러리 없이 SVG로 그린다. 색은 한 계열(파란색) 기준이고,
+   퍼널은 단계 순서가 보이도록 밝은색에서 진한색으로 내려가는 5단계를 쓴다. */
+const ACTIVITY_INK = Object.freeze({ visit:'#3176d5', call:'#3176d5', booking:'#eb6834', grid:'#e8ebef' });
+const ACTIVITY_FUNNEL_INK = Object.freeze(['#8ab5ea', '#6a9ce2', '#4b87d8', '#2f66bd', '#1c3f8f']);
+function activityKstDayKey(value) {
+  const time = new Date(value).getTime();
+  if (!Number.isFinite(time)) return '';
+  return new Date(time + 9 * 3600000).toISOString().slice(0, 10);
+}
+function activityDayLabel(key) {
+  const [, month, day] = String(key).split('-');
+  return `${Number(month)}.${Number(day)}`;
+}
+/* 기간 안의 날짜를 하루도 빠뜨리지 않고 만들어 둔다. 방문이 없는 날도 0으로 보여야 흐름이 보인다. */
+function activityDaySeries(rangeStart, endExclusive) {
+  const series = [];
+  for (let time = rangeStart.getTime(); time < endExclusive.getTime(); time += 86400000) {
+    const key = activityKstDayKey(new Date(time).toISOString());
+    series.push({ key, label: activityDayLabel(key), visitors: new Set(), calls: 0, bookings: 0 });
+  }
+  return series.slice(-90);
+}
+function activityNiceTicks(max) {
+  const top = Math.max(1, Math.ceil(max));
+  const step = Math.pow(10, Math.floor(Math.log10(top)));
+  const rounded = Math.ceil(top / step) * step;
+  return [0, rounded / 2, rounded];
+}
+function activityColumnPath(x, y, width, height, radius = 4) {
+  const r = Math.max(0, Math.min(radius, width / 2, height));
+  const bottom = y + height;
+  return `M${x} ${bottom} L${x} ${y + r} Q${x} ${y} ${x + r} ${y} L${x + width - r} ${y} Q${x + width} ${y} ${x + width} ${y + r} L${x + width} ${bottom} Z`;
+}
+/* 방문 추이: 한 계열이라 범례 없이 제목이 무엇인지 말해준다. 끝점만 직접 라벨을 붙인다. */
+function activityVisitTrendChart(series) {
+  if (!series.length) return '<p class="activity-chart-empty">선택한 기간에 방문 기록이 없습니다.</p>';
+  const width = 720;
+  const height = 190;
+  const padding = { top: 18, right: 46, bottom: 26, left: 38 };
+  const plotWidth = width - padding.left - padding.right;
+  const plotHeight = height - padding.top - padding.bottom;
+  const values = series.map(day => day.visitors.size);
+  const ticks = activityNiceTicks(Math.max(...values));
+  const top = ticks[2];
+  const stepX = series.length > 1 ? plotWidth / (series.length - 1) : 0;
+  const pointX = index => padding.left + (series.length > 1 ? index * stepX : plotWidth / 2);
+  const pointY = value => padding.top + plotHeight - (value / top) * plotHeight;
+  const line = values.map((value, index) => `${index ? 'L' : 'M'}${pointX(index).toFixed(1)} ${pointY(value).toFixed(1)}`).join(' ');
+  const area = `${line} L${pointX(values.length - 1).toFixed(1)} ${padding.top + plotHeight} L${pointX(0).toFixed(1)} ${padding.top + plotHeight} Z`;
+  const labelEvery = Math.ceil(series.length / 7);
+  const lastIndex = values.length - 1;
+  return `
+    <figure class="activity-chart">
+      <svg viewBox="0 0 ${width} ${height}" role="img" aria-label="날짜별 방문자 추이" preserveAspectRatio="xMidYMid meet">
+        ${ticks.map(tick => {
+          const y = pointY(tick).toFixed(1);
+          return `<line class="activity-grid" x1="${padding.left}" x2="${width - padding.right}" y1="${y}" y2="${y}"></line><text class="activity-axis" x="${padding.left - 8}" y="${y}" text-anchor="end" dominant-baseline="middle">${tick.toLocaleString()}</text>`;
+        }).join('')}
+        <path class="activity-area" d="${area}" fill="${ACTIVITY_INK.visit}"></path>
+        <path class="activity-line" d="${line}" pathLength="1" stroke="${ACTIVITY_INK.visit}"></path>
+        ${series.map((day, index) => {
+          const x = pointX(index).toFixed(1);
+          const y = pointY(values[index]).toFixed(1);
+          const band = Math.max(10, stepX);
+          return `<g class="activity-point">
+            <rect x="${(Number(x) - band / 2).toFixed(1)}" y="${padding.top}" width="${band.toFixed(1)}" height="${plotHeight}" fill="transparent"><title>${esc(day.label)} · 방문 ${values[index]}명 · 전화 ${day.calls}건 · 예약 ${day.bookings}건</title></rect>
+            <circle cx="${x}" cy="${y}" r="4.5" fill="${ACTIVITY_INK.visit}"></circle>
+          </g>`;
+        }).join('')}
+        <circle class="activity-end-dot" cx="${pointX(lastIndex).toFixed(1)}" cy="${pointY(values[lastIndex]).toFixed(1)}" r="4.5" fill="${ACTIVITY_INK.visit}"></circle>
+        <text class="activity-end-label" x="${(pointX(lastIndex) + 10).toFixed(1)}" y="${pointY(values[lastIndex]).toFixed(1)}" dominant-baseline="middle">${values[lastIndex]}명</text>
+        ${series.map((day, index) => (index % labelEvery === 0 || index === lastIndex)
+          ? `<text class="activity-axis" x="${pointX(index).toFixed(1)}" y="${height - 8}" text-anchor="middle">${esc(day.label)}</text>`
+          : '').join('')}
+      </svg>
+    </figure>`;
+}
+/* 전환 추이: 전화 클릭과 예약 생성은 단위가 같은 '건'이라 한 축에 나란히 둔다. */
+function activityConversionChart(series) {
+  const totals = series.reduce((sum, day) => sum + day.calls + day.bookings, 0);
+  if (!series.length || !totals) return '<p class="activity-chart-empty">선택한 기간에 전화 클릭과 예약 생성 기록이 없습니다.</p>';
+  const width = 720;
+  const height = 150;
+  const padding = { top: 16, right: 46, bottom: 26, left: 38 };
+  const plotWidth = width - padding.left - padding.right;
+  const plotHeight = height - padding.top - padding.bottom;
+  const ticks = activityNiceTicks(Math.max(...series.map(day => Math.max(day.calls, day.bookings))));
+  const top = ticks[2];
+  const band = plotWidth / series.length;
+  const barWidth = Math.max(2, Math.min(24, band / 2 - 2));
+  const labelEvery = Math.ceil(series.length / 7);
+  const columnY = value => padding.top + plotHeight - (value / top) * plotHeight;
+  return `
+    <figure class="activity-chart">
+      <svg viewBox="0 0 ${width} ${height}" role="img" aria-label="날짜별 전화 클릭과 예약 생성" preserveAspectRatio="xMidYMid meet">
+        ${ticks.map(tick => {
+          const y = columnY(tick).toFixed(1);
+          return `<line class="activity-grid" x1="${padding.left}" x2="${width - padding.right}" y1="${y}" y2="${y}"></line><text class="activity-axis" x="${padding.left - 8}" y="${y}" text-anchor="end" dominant-baseline="middle">${tick.toLocaleString()}</text>`;
+        }).join('')}
+        ${series.map((day, index) => {
+          const center = padding.left + band * index + band / 2;
+          const baseline = padding.top + plotHeight;
+          const callHeight = Math.max(0, baseline - columnY(day.calls));
+          const bookingHeight = Math.max(0, baseline - columnY(day.bookings));
+          const delay = (index % 12) * 0.03;
+          return `<g class="activity-column" style="--delay:${delay}s">
+            ${day.calls ? `<path d="${activityColumnPath(center - barWidth - 1, columnY(day.calls), barWidth, callHeight)}" fill="${ACTIVITY_INK.call}"><title>${esc(day.label)} 전화 클릭 ${day.calls}건</title></path>` : ''}
+            ${day.bookings ? `<path d="${activityColumnPath(center + 1, columnY(day.bookings), barWidth, bookingHeight)}" fill="${ACTIVITY_INK.booking}"><title>${esc(day.label)} 예약 생성 ${day.bookings}건</title></path>` : ''}
+          </g>`;
+        }).join('')}
+        ${series.map((day, index) => (index % labelEvery === 0 || index === series.length - 1)
+          ? `<text class="activity-axis" x="${(padding.left + band * index + band / 2).toFixed(1)}" y="${height - 8}" text-anchor="middle">${esc(day.label)}</text>`
+          : '').join('')}
+      </svg>
+    </figure>`;
+}
+/* 채널 비교: 이름에 순서가 없으니 한 가지 색으로만 칠하고, 길이로만 크기를 말한다. */
+function activityChannelBars(rows) {
+  if (!rows.length) return '<p class="activity-chart-empty">선택한 기간의 유입 기록이 없습니다.</p>';
+  const max = Math.max(1, ...rows.map(row => row.visitors));
+  return `<ul class="activity-bar-list">${rows.map((row, index) => `
+    <li style="--width:${(row.visitors / max * 100).toFixed(1)}%;--delay:${(index * 0.05).toFixed(2)}s">
+      <span class="activity-bar-name">${esc(row.name)}</span>
+      <span class="activity-bar-track"><i style="background:${ACTIVITY_INK.visit}"></i></span>
+      <span class="activity-bar-value"><strong>${row.visitors}명</strong><small>전화 ${row.calls} · 예약 ${row.bookings}</small></span>
+    </li>`).join('')}</ul>`;
+}
 function activityZeroClass(value) {
   return Number(value) === 0 ? ' is-zero' : '';
 }
@@ -7409,6 +7483,26 @@ async function renderAdmActivity() {
       .filter(item => activitySelectedBranch === '전체' || selectedVisitorKeys.has(item.visitor_key))
       .filter(item => /검색/.test(activityChannel(item)));
     const searchWithoutKeyword = searchSessionStarts.filter(item => !String(item.payload?.searchQuery || '').trim() && !String(item.payload?.purchasedKeyword || item.payload?.keyword || '').trim()).length;
+    /* 그래프용 날짜별 묶음. 방문이 없는 날도 0으로 채워 흐름이 끊기지 않게 한다. */
+    const trendSeries = activityDaySeries(rangeStart, endExclusive);
+    const trendByKey = new Map(trendSeries.map(day => [day.key, day]));
+    visitorItems.forEach(item => {
+      if (activitySelectedBranch !== '전체' && !selectedVisitorKeys.has(item.visitor_key)) return;
+      const day = trendByKey.get(activityKstDayKey(item.created_at));
+      if (day) day.visitors.add(item.visitor_key);
+    });
+    selectedCallItems.forEach(item => {
+      const day = trendByKey.get(activityKstDayKey(item.created_at));
+      if (day) day.calls += 1;
+    });
+    selectedSubmittedBookings.forEach(booking => {
+      const day = trendByKey.get(String(activityBookingPeriodValue(booking) || '').slice(0, 10).replaceAll('.', '-'));
+      if (day) day.bookings += 1;
+    });
+    const channelBarRows = selectedChannels
+      .filter(channel => channel.visitors.size)
+      .slice(0, 7)
+      .map(channel => ({ name: channel.name, visitors: channel.visitors.size, calls: channel.calls, bookings: channel.bookingIds.size }));
     const selectedTrackedBookingIds = new Set(selectedChannels.flatMap(channel => [...channel.bookingIds]));
     const selectedLinkedBookingIds = new Set(
       selectedChannels
@@ -7474,9 +7568,6 @@ async function renderAdmActivity() {
     if (!adUnavailableCount && selectedChannels.some(channel => channel.name === '네이버 검색광고' && channel.visitors.size) && Number(adTotals.clicks || 0) === 0) {
       qualityAlerts.push('광고 방문은 있는데 광고 클릭이 0회입니다. 7일 기준으로 다시 확인해주세요.');
     }
-    if (!naverAdsTrackingConfig() && selectedChannels.some(channel => channel.name === '네이버 검색광고' && channel.visitors.size)) {
-      qualityAlerts.push('네이버 전환 스크립트 공통키가 아직 없습니다. 프리미엄 로그분석을 신청해 공통키를 넣으면 예약이 광고 관리자에도 전환으로 잡힙니다.');
-    }
     if (!selectedCallItems.length) qualityAlerts.push('선택한 기간에 저장된 전화 클릭이 없습니다. 전화번호를 눌러 저장되는지 먼저 확인해주세요.');
     if (unnamedCallCount) qualityAlerts.push(`지점을 확인할 수 없는 전화 클릭이 ${unnamedCallCount}건 있습니다. 지점 전화번호가 등록된 번호와 다른지 확인해주세요.`);
     if (searchWithoutKeyword) {
@@ -7527,13 +7618,26 @@ async function renderAdmActivity() {
         <article class="${activityZeroClass(revenue)}"><span>매출</span><strong>${revenue.toLocaleString()}원</strong><small>정산 완료 기준</small></article>
         <article class="${activityZeroClass(selectedSubmittedBookings.length)}"><span>예약 전환</span><strong>${activityRatio(selectedSubmittedBookings.length, selectedChannelVisitors)}</strong><small>예약 ${selectedSubmittedBookings.length} / 방문 ${selectedChannelVisitors}</small></article>
       </section>
+      <section class="settings-card activity-trend-card">
+        <div class="activity-section-head"><div><h3>방문과 전환 추이</h3><p>선 위에 마우스를 올리면 그 날의 방문·전화·예약을 함께 볼 수 있습니다.</p></div><strong>${selectedChannelVisitors.toLocaleString()}명</strong></div>
+        ${activityVisitTrendChart(trendSeries)}
+        <div class="activity-chart-legend">
+          <span><i style="background:${ACTIVITY_INK.call}"></i>전화 클릭</span>
+          <span><i style="background:${ACTIVITY_INK.booking}"></i>예약 생성</span>
+        </div>
+        ${activityConversionChart(trendSeries)}
+      </section>
       <section class="settings-card activity-simple-funnel">
         <div class="activity-section-head"><div><h3>예약 흐름</h3><p>어디에서 손님이 줄어드는지 보여줍니다. 전화로만 문의한 ${selectedCallItems.length}건은 이 흐름에 포함되지 않습니다.</p></div></div>
         ${simpleFunnel.map((stage, index) => {
           const previous = simpleFunnel[index - 1];
           const loss = previous ? Math.max(0, previous.value - stage.value) : 0;
-          return `<article><div><span>${stage.name}</span><strong>${stage.value.toLocaleString()}${stage.unit}</strong><small>${previous ? (previous.value ? `${activityRatio(stage.value, previous.value)} · ${loss}${stage.unit === '명' ? '명' : '건'} 이탈` : '진행 중') : '정제된 실제 방문'}</small></div><i><b style="width:${stage.value / simpleFunnelMax * 100}%"></b></i></article>`;
+          return `<article style="--delay:${(index * 0.07).toFixed(2)}s"><div><span>${stage.name}</span><strong>${stage.value.toLocaleString()}${stage.unit}</strong><small>${previous ? (previous.value ? `${activityRatio(stage.value, previous.value)} · ${loss}${stage.unit === '명' ? '명' : '건'} 이탈` : '진행 중') : '정제된 실제 방문'}</small></div><i><b style="width:${(stage.value / simpleFunnelMax * 100).toFixed(1)}%;background:${ACTIVITY_FUNNEL_INK[Math.min(index, ACTIVITY_FUNNEL_INK.length - 1)]}"></b></i></article>`;
         }).join('')}
+      </section>
+      <section class="settings-card activity-channel-card">
+        <div class="activity-section-head"><div><h3>어디서 많이 들어오나</h3><p>막대는 방문자 수입니다. 방문이 많은 곳과 전화·예약을 만드는 곳을 비교해보세요.</p></div></div>
+        ${activityChannelBars(channelBarRows)}
       </section>
       <section class="settings-card">
         <div class="activity-section-head"><div><h3>어디서 와서 예약했나</h3><p>방문 합계와 예약 합계를 함께 확인할 수 있습니다.</p></div></div>
@@ -7572,7 +7676,7 @@ async function renderAdmActivity() {
     body.innerHTML = `
       <section class="activity-filter settings-card">
         <div><h3>분석 기간</h3><p>마지막 수집 ${esc(lastCollectedAt)} · 봇과 내부 테스트 방문은 자동 제외</p></div>
-        <div class="activity-presets">${[7, 30, 90].map(daysValue => `<button type="button" data-activity-days="${daysValue}" class="${activityDateRange.days === daysValue ? 'active' : ''}">${daysValue}일</button>`).join('')}</div>
+        <div class="activity-presets">${[1, 7, 30, 90].map(daysValue => `<button type="button" data-activity-days="${daysValue}" class="${activityDateRange.days === daysValue ? 'active' : ''}">${daysValue === 1 ? '오늘' : `${daysValue}일`}</button>`).join('')}</div>
         <form id="activity-date-form"><label>시작일<input type="date" id="activity-from" value="${esc(activityDateRange.from)}" required></label><span>~</span><label>종료일<input type="date" id="activity-to" value="${esc(activityDateRange.to)}" required></label><button type="submit" class="mini-btn">조회</button></form>
       </section>
       <nav class="activity-view-tabs" aria-label="분석 화면">
