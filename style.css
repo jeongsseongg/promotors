@@ -468,6 +468,7 @@ body[data-view="intro"] .view.active { overflow: hidden; }
 #view-adm-work.active,
 #view-adm-approval.active,
 #view-adm-cust.active,
+#view-adm-guest.active,
 #view-adm-prod.active,
 #view-adm-settings.active {
   overflow-y: auto;
@@ -2038,6 +2039,29 @@ body:not(.developer) .developer-only { display: none !important; }
   background: #fff;
 }
 .cust-detail[hidden] { display: none; }
+.guest-booking-list {
+  display: grid;
+  gap: 8px;
+}
+.guest-booking-row {
+  display: grid;
+  grid-template-columns: 150px 120px minmax(0, 1fr) 80px;
+  gap: 10px;
+  align-items: center;
+  padding: 10px 12px;
+  border: 1px solid #e9edf2;
+  border-radius: 8px;
+  background: #f8fafc;
+  color: #555f6b;
+  font-size: 13px;
+}
+.guest-booking-row strong { color: var(--navy); }
+.guest-booking-row em {
+  justify-self: end;
+  color: #b8963a;
+  font-style: normal;
+  font-weight: 900;
+}
 .cust-head { display: flex; gap: 10px; align-items: baseline; margin-bottom: 10px; flex-wrap: wrap; }
 .cust-head strong { font-size: 18px; color: var(--navy); }
 .cust-head span { color: #555f6b; font-size: 14px; }
@@ -3452,6 +3476,7 @@ button.step-photo-slot {
   #view-adm-work.active,
   #view-adm-approval.active,
   #view-adm-cust.active,
+  #view-adm-guest.active,
   #view-adm-prod.active,
   #view-adm-settings.active {
     flex: 0 0 auto;
@@ -3474,6 +3499,7 @@ button.step-photo-slot {
   #view-adm-work,
   #view-adm-approval,
   #view-adm-cust,
+  #view-adm-guest,
   #view-adm-prod,
   #view-adm-inquiry,
   #view-adm-settings {
@@ -3483,6 +3509,7 @@ button.step-photo-slot {
   #view-adm-work.active,
   #view-adm-approval.active,
   #view-adm-cust.active,
+  #view-adm-guest.active,
   #view-adm-prod.active,
   #view-adm-inquiry.active,
   #view-adm-settings.active {
@@ -3695,6 +3722,11 @@ button.step-photo-slot {
     gap: 5px;
   }
   .cust-summary em { justify-self: start; }
+  .guest-booking-row {
+    grid-template-columns: 1fr;
+    gap: 4px;
+  }
+  .guest-booking-row em { justify-self: start; }
   .notice-body {
     min-height: 130px;
     padding: 18px 16px;

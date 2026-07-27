@@ -1282,6 +1282,7 @@ function renderViewContent(name) {
   if (name === 'adm-work') renderAdmWork();
   if (name === 'adm-approval') renderAdmApproval();
   if (name === 'adm-cust') renderAdmCust();
+  if (name === 'adm-guest') renderAdmGuest();
   if (name === 'adm-prod') renderAdmProd();
   if (name === 'adm-inquiry') renderAdmInquiry();
   if (name === 'adm-settings') renderAdmSettings();
@@ -1333,6 +1334,7 @@ function wireNav() {
       if (btn.dataset.view === 'adm-work') renderAdmWork();
       if (btn.dataset.view === 'adm-approval') renderAdmApproval();
       if (btn.dataset.view === 'adm-cust') renderAdmCust();
+      if (btn.dataset.view === 'adm-guest') renderAdmGuest();
       if (btn.dataset.view === 'adm-prod') renderAdmProd();
       if (btn.dataset.view === 'adm-inquiry') renderAdmInquiry();
       if (btn.dataset.view === 'adm-settings') renderAdmSettings();
@@ -1549,6 +1551,7 @@ function applyAuthUI() {
   renderCases();
   if (isTopAdmin()) {
     renderAdmCust();
+    renderAdmGuest();
     renderAdmProd();
     renderAdmApproval();
     renderAdmSettings();
@@ -4847,6 +4850,84 @@ async function renderAdmCust() {
   });
 }
 
+function guestCustomerDirectory() {
+  const guests = new Map();
+  getBookings()
+    .filter(booking => booking?.guest === true)
+    .slice()
+    .sort((a, b) => bookingTimestamp(b) - bookingTimestamp(a))
+    .forEach(booking => {
+      const car = String(booking.car || '').toLowerCase().replace(/[^0-9a-z가-힣]/g, '');
+      const phone = normPhone(booking.phone);
+      const key = car
+        ? `car:${car}`
+        : phone
+          ? `phone:${phone}`
+          : `guest:${booking.name || ''}:${booking.model || ''}`;
+      const current = guests.get(key);
+      if (current) {
+        current.bookings.push(booking);
+        return;
+      }
+      guests.set(key, {
+        name: booking.name || '',
+        car: booking.car || '',
+        model: booking.model || '',
+        phone: booking.phone || '',
+        bookings: [booking]
+      });
+    });
+  return [...guests.values()];
+}
+
+function renderAdmGuest() {
+  const body = $('#adm-guest-body');
+  if (!body) return;
+  if (!isTopAdmin()) { body.innerHTML = ''; return; }
+  const guests = guestCustomerDirectory();
+  body.innerHTML = `<div id="guest-list">${guests.length ? '' : '<p class="hint">비회원 예약 고객이 없습니다.</p>'}</div>`;
+  const list = $('#guest-list');
+
+  guests.forEach(guest => {
+    const latest = guest.bookings[0];
+    const card = document.createElement('article');
+    card.className = 'cust-card guest-card';
+    card.innerHTML = `
+      <button type="button" class="cust-summary" aria-expanded="false">
+        <strong>${esc(guest.name || '-')}</strong>
+        <span>${esc(guest.car || '-')}</span>
+        <span>${esc(guest.model || '-')}</span>
+        <span>${esc(guest.phone || '-')}</span>
+        <em>최근 ${esc(latest?.date || '-')} ${esc(latest?.time || '')}</em>
+      </button>
+      <div class="cust-detail" hidden>
+        <div class="cust-head">
+          <strong>${esc(guest.name || '-')}</strong>
+          <span>${esc(guest.car || '-')} · ${esc(guest.model || '-')} · <a href="${phoneHref(guest.phone)}">${esc(guest.phone || '-')}</a></span>
+          <em>비회원 예약 ${guest.bookings.length}건</em>
+        </div>
+        <div class="guest-booking-list">
+          ${guest.bookings.map(booking => `
+            <div class="guest-booking-row">
+              <time>${esc(booking.date || '-')} ${esc(booking.time || '')}</time>
+              <strong>${esc(booking.branch || '-')}</strong>
+              <span>${esc((booking.services || []).join(' · ') || '-')}</span>
+              <em>${esc(bookingStatusLabel(booking))}</em>
+            </div>`).join('')}
+        </div>
+      </div>`;
+    const summary = card.querySelector('.cust-summary');
+    const detail = card.querySelector('.cust-detail');
+    summary.addEventListener('click', () => {
+      const open = detail.hidden;
+      detail.hidden = !open;
+      card.classList.toggle('open', open);
+      summary.setAttribute('aria-expanded', String(open));
+    });
+    list.append(card);
+  });
+}
+
 /* 고객 블랙리스트/삭제: 계정은 회원 목록에서 제거, 기록은 보안 화면에 보관.
    블랙리스트 등록 시 해당 핸드폰번호는 재가입·로그인 불가. 고객 자료(메모·정비내역)는 유지. */
 async function banMember(m, type) {
@@ -6966,7 +7047,7 @@ function openLottoAdminModal(editId = '') {
 const ACTIVITY_VIEW_NAMES = Object.freeze({
   intro: '프로모터스', location: '오시는길', cases: '정비사례', guide: '브랜드별 정비 가이드', notice: '공지사항',
   'adm-book': '예약관리', 'adm-work': '작업현황', 'adm-approval': '가입승인',
-  'adm-cust': '고객관리', 'adm-prod': '상품관리', 'adm-inquiry': '고객문의',
+  'adm-cust': '고객관리', 'adm-guest': '비회원관리', 'adm-prod': '상품관리', 'adm-inquiry': '고객문의',
   'adm-settings': '보안', 'adm-activity': '분석'
 });
 const PUBLIC_ACTIVITY_VIEWS = Object.freeze(['intro', 'location', 'cases', 'guide', 'notice']);
@@ -8586,6 +8667,7 @@ function showAdminViewFromMenu(view) {
   if (view === 'adm-work') renderAdmWork();
   if (view === 'adm-approval') renderAdmApproval();
   if (view === 'adm-cust') renderAdmCust();
+  if (view === 'adm-guest') renderAdmGuest();
   if (view === 'adm-prod') renderAdmProd();
   if (view === 'adm-inquiry') renderAdmInquiry();
   if (view === 'adm-settings') renderAdmSettings();
@@ -8602,6 +8684,7 @@ async function openAdminSettingsPage() {
     ...(isTopAdmin() ? [
       { view: 'adm-approval', label: '작업승인', icon: 'check' },
       { view: 'adm-cust', label: '고객관리', icon: 'user' },
+      { view: 'adm-guest', label: '비회원관리', icon: 'user' },
       { view: 'adm-prod', label: '상품관리', icon: 'doc' },
       { view: 'adm-settings', label: '보안', icon: 'lock' },
       ...(isDeveloper() ? [{ view: 'adm-activity', label: '분석', icon: 'search' }] : [])
