@@ -1011,6 +1011,98 @@ function activityElementLabel(element) {
   const label = element.getAttribute('aria-label') || element.dataset?.view || element.textContent || element.id || element.tagName;
   return String(label).replace(/\s+/g, ' ').trim().slice(0, 80) || '이름 없는 요소';
 }
+/* 검색어는 검색엔진에서 온 방문에서만 가져온다.
+   아무 사이트의 ?q= 를 검색어로 쓰면 엉뚱한 값이 키워드 목록에 섞인다. */
+const SEARCH_ENGINE_HOST = /(^|\.)(search\.naver\.com|search\.daum\.net|bing\.com|zum\.com|duckduckgo\.com)$|(^|\.)google\.|(^|\.)yahoo\./;
+function activitySearchTermFromReferrer(referrerValue) {
+  try {
+    const previous = new URL(String(referrerValue || ''));
+    if (!SEARCH_ENGINE_HOST.test(previous.hostname.toLowerCase())) return '';
+    return previous.searchParams.get('query') || previous.searchParams.get('q') || previous.searchParams.get('keyword') || '';
+  } catch {
+    return '';
+  }
+}
+/* 보이는 표기는 그대로 두고 앞뒤·중복 공백만 정리한다. */
+function activityCleanKeyword(value) {
+  return String(value || '').trim().replace(/\s+/g, ' ').slice(0, 80);
+}
+/* 묶는 기준. 공백과 대소문자만 다른 같은 검색어가 여러 줄로 쪼개지지 않게 한다. */
+function activityKeywordKey(value) {
+  return activityCleanKeyword(value).replace(/\s+/g, '').toLowerCase();
+}
+/* 예약에는 매출이 없고 정산 기록은 차량번호로 저장된다.
+   그래서 같은 차량 · 같은 날짜의 정산 완료 기록만 그 예약의 매출로 본다. 추정값이다. */
+function activityBookingRevenue(booking, customers) {
+  const records = customers?.[booking?.car]?.records;
+  if (!Array.isArray(records)) return 0;
+  const bookingDay = String(booking.date || booking.createdAt || '').slice(0, 10).replaceAll('.', '-');
+  if (!bookingDay) return 0;
+  return records
+    .filter(record => record.paid && String(record.date || record.createdAt || '').slice(0, 10).replaceAll('.', '-') === bookingDay)
+    .reduce((sum, record) => sum + Number(String(record.amount ?? '').replace(/[^\d]/g, '') || 0), 0);
+}
+/* 황금 키워드 판정. 방문 수가 아니라 전화·예약이 붙었는지로 나눈다. */
+function activityKeywordGrade(row) {
+  if (row.bookings) return { label: '황금', tone: 'gold' };
+  const callRate = row.visitors ? row.calls / row.visitors : 0;
+  /* 방문이 충분히 쌓였는데 전화까지 이어지는 비율이 낮으면 예산을 빼는 쪽이다. */
+  if (row.visitors >= 20 && callRate < 0.05) return { label: '낭비', tone: 'cold' };
+  if (row.calls) return { label: '유망', tone: 'warm' };
+  if (row.visitors >= 10) return { label: '낭비', tone: 'cold' };
+  return { label: '관찰', tone: 'plain' };
+}
+/* 방문자 한 명이 무엇을 하려다 멈췄는지 한 줄로 정리한다.
+   화면 녹화가 아니라 저장된 행동 기록만으로 판단하므로, 확실한 신호부터 차례로 본다. */
+function activityVisitorVerdict(items) {
+  const ordered = [...items].sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+  const has = type => ordered.some(item => item.event_type === type);
+  const dwell = ordered
+    .filter(item => item.event_type === 'view_dwell')
+    .reduce((sum, item) => sum + Number(item.payload?.seconds || 0), 0);
+  const views = ordered.filter(item => item.event_type === 'view_open');
+  const clicks = ordered.filter(item => item.event_type === 'element_click');
+  const paidVisit = /광고/.test(activityChannel(ordered[0]) || '');
+
+  const viewCounts = new Map();
+  views.forEach(item => {
+    const name = activityViewName(item.payload?.view);
+    viewCounts.set(name, (viewCounts.get(name) || 0) + 1);
+  });
+  const repeated = [...viewCounts.entries()].sort((a, b) => b[1] - a[1])[0];
+
+  const dwellByView = new Map();
+  ordered.filter(item => item.event_type === 'view_dwell').forEach(item => {
+    const name = activityViewName(item.payload?.view);
+    dwellByView.set(name, (dwellByView.get(name) || 0) + Number(item.payload?.seconds || 0));
+  });
+  const longest = [...dwellByView.entries()].sort((a, b) => b[1] - a[1])[0];
+
+  /* 같은 곳을 짧은 시간에 세 번 이상 누른 흔적 */
+  const rage = clicks.some((item, index) => {
+    const same = clicks.slice(index, index + 3);
+    if (same.length < 3) return false;
+    const sameTarget = same.every(click => (click.payload?.target || '') === (item.payload?.target || ''));
+    return sameTarget && new Date(same[2].created_at) - new Date(item.created_at) <= 5000;
+  });
+
+  if (has('booking_complete')) return '예약까지 마쳤습니다.';
+  if (has('phone_call')) return '전화번호를 눌렀습니다. 통화로 이어졌는지는 확인이 필요합니다.';
+  if (rage) return '같은 곳을 여러 번 눌렀습니다. 반응이 없다고 느꼈을 수 있습니다.';
+  if (has('reservation_hesitation')) return '예약을 시작했다가 망설이고 나갔습니다.';
+  if (has('branch_select')) return '지점까지 골랐지만 예약을 끝내지 않았습니다.';
+  if (has('reservation_click')) return '예약 화면까지 갔다가 멈췄습니다.';
+  if (repeated && repeated[1] >= 3) return `${repeated[0]} 화면을 ${repeated[1]}번 다시 봤습니다. 찾는 정보가 없었던 것 같습니다.`;
+  if (dwell >= 180 && longest) return `${longest[0]} 화면을 ${activityDuration(longest[1])} 봤지만 연락은 없었습니다.`;
+  if (clicks.length >= 5) return '여기저기 눌러봤지만 예약·전화로 이어지지 않았습니다.';
+  if (dwell > 0 && dwell < 10 && views.length <= 1) {
+    return paidVisit
+      ? '광고로 들어와 곧바로 나갔습니다. 광고 문구와 첫 화면이 다를 수 있습니다.'
+      : '들어오자마자 나갔습니다.';
+  }
+  if (longest) return `${longest[0]} 화면을 주로 봤습니다.`;
+  return '둘러보기만 했습니다.';
+}
 function activityPhoneDigits(value) {
   return String(value || '').replace(/\D/g, '');
 }
@@ -1039,17 +1131,8 @@ function activityAcquisitionContext(referrerValue = document.referrer || '', url
   const naverKeyword = params.get('n_keyword') || '';
   const campaign = params.get('utm_campaign') || params.get('n_campaign') || params.get('n_campaign_type') || '';
   const content = params.get('utm_content') || '';
-  /* 네이버·다음은 검색어를 이전 주소에 담아 보내는 경우가 있어, 우리 주소에 없으면 이전 주소에서 찾는다. */
-  const referrerQuery = (() => {
-    try {
-      const previous = new URL(String(referrerValue || ''));
-      return previous.searchParams.get('query') || previous.searchParams.get('q') || previous.searchParams.get('keyword') || '';
-    } catch {
-      return '';
-    }
-  })();
-  const searchQuery = naverQuery || params.get('query') || params.get('q') || referrerQuery;
-  const purchasedKeyword = naverKeyword || params.get('utm_term') || '';
+  const searchQuery = activityCleanKeyword(naverQuery || params.get('query') || params.get('q') || activitySearchTermFromReferrer(referrerValue));
+  const purchasedKeyword = activityCleanKeyword(naverKeyword || params.get('utm_term') || '');
   const keyword = searchQuery || purchasedKeyword;
   const clickId = params.get('gclid') || params.get('wbraid') || params.get('gbraid') || params.get('fbclid') || params.get('n_click_id') || '';
   const adGroup = params.get('n_ad_group') || params.get('utm_adgroup') || '';
@@ -6975,11 +7058,12 @@ function activityDaySeries(rangeStart, endExclusive) {
   }
   return series.slice(-90);
 }
+/* 건수·명수는 소수점이 없어야 읽힌다. 가운데 눈금이 정수가 되는 값만 고른다. */
 function activityNiceTicks(max) {
-  const top = Math.max(1, Math.ceil(max));
-  const step = Math.pow(10, Math.floor(Math.log10(top)));
-  const rounded = Math.ceil(top / step) * step;
-  return [0, rounded / 2, rounded];
+  const target = Math.max(1, Math.ceil(max));
+  const steps = [2, 4, 6, 8, 10, 20, 40, 60, 80, 100, 200, 400, 600, 1000, 2000, 4000, 10000];
+  const top = steps.find(step => step >= target) || Math.ceil(target / 2) * 2;
+  return [0, top / 2, top];
 }
 function activityColumnPath(x, y, width, height, radius = 4) {
   const r = Math.max(0, Math.min(radius, width / 2, height));
@@ -7454,10 +7538,12 @@ async function renderAdmActivity() {
           { text: String(payload.purchasedKeyword || payload.keyword || '').trim(), kind: '광고 등록 키워드' }
         ].filter(entry => entry.text);
         entries.forEach(entry => {
-          const key = `${entry.kind}|${entry.text}`;
-          const row = keywordRowMap.get(key) || { text: entry.text, kind: entry.kind, channels:new Set(), visitors:new Set(), sessions:new Set(), calls:0, bookingIds:new Set() };
+          const key = `${entry.kind}|${activityKeywordKey(entry.text)}`;
+          const row = keywordRowMap.get(key) || { text: entry.text, kind: entry.kind, channels:new Set(), visitors:new Set(), sessions:new Set(), calls:0, bookingIds:new Set(), ranks:[] };
           row.channels.add(activityChannel(item));
           if (item.visitor_key) row.visitors.add(item.visitor_key);
+          const rank = Number(payload.rank || 0);
+          if (rank > 0) row.ranks.push(rank);
           if (payload.sessionId) {
             row.sessions.add(payload.sessionId);
             keywordKeyBySession.set(payload.sessionId, [...(keywordKeyBySession.get(payload.sessionId) || []), key]);
@@ -7475,9 +7561,28 @@ async function renderAdmActivity() {
         if (item.event_type === 'booking_complete') row.bookingIds.add(resolvedBookingIdForLog(item) || activityBookingLogKey(item));
       });
     });
+    /* 키워드마다 예약이 확정·입고·매출까지 갔는지 이어붙인다. */
+    const keywordBookingIndex = new Map(getBookings().map(booking => [String(booking.id || ''), booking]));
+    const keywordCustomers = getCustomers();
     const keywordRows = [...keywordRowMap.values()]
-      .sort((a, b) => b.bookingIds.size - a.bookingIds.size || b.calls - a.calls || b.visitors.size - a.visitors.size || b.sessions.size - a.sessions.size)
-      .slice(0, 30);
+      .map(row => {
+        const bookings = [...row.bookingIds].map(id => keywordBookingIndex.get(String(id))).filter(Boolean);
+        const visitors = row.visitors.size;
+        const stats = {
+          ...row,
+          visitors,
+          bookings: row.bookingIds.size,
+          confirmed: bookings.filter(booking => !isNewBooking(booking) && isActiveBooking(booking)).length,
+          arrived: bookings.filter(booking => !!runForBooking(booking)).length,
+          revenue: bookings.reduce((sum, booking) => sum + activityBookingRevenue(booking, keywordCustomers), 0),
+          rank: row.ranks.length ? row.ranks.reduce((sum, value) => sum + value, 0) / row.ranks.length : 0
+        };
+        return { ...stats, grade: activityKeywordGrade(stats) };
+      })
+      .sort((a, b) => b.bookings - a.bookings || b.revenue - a.revenue || b.calls - a.calls || b.visitors - a.visitors)
+      .slice(0, 40);
+    const goldenKeywordCount = keywordRows.filter(row => row.grade.label === '황금').length;
+    const wastedKeywordCount = keywordRows.filter(row => row.grade.label === '낭비').length;
     /* 검색으로 들어왔지만 검색어가 넘어오지 않은 방문을 센다. 자연검색어는 정책상 전달되지 않는 경우가 많다. */
     const searchSessionStarts = sessionStarts
       .filter(item => activitySelectedBranch === '전체' || selectedVisitorKeys.has(item.visitor_key))
@@ -7559,7 +7664,7 @@ async function renderAdmActivity() {
       });
       const firstStart = ordered.find(item => item.event_type === 'session_start');
       const last = ordered.at(-1);
-      return { visitor, route, channel:activityChannel(firstStart), last };
+      return { visitor, route, channel:activityChannel(firstStart), last, verdict:activityVisitorVerdict(ordered), dwell:visitor.dwell };
     });
     const lastCollectedAt = items[0]?.created_at ? new Date(items[0].created_at).toLocaleString('ko-KR') : '수집 내역 없음';
     const unknownPerformance = selectedChannels.find(channel => channel.name === '미분류');
@@ -7654,9 +7759,11 @@ async function renderAdmActivity() {
         <div class="activity-section-head"><div><h3>유입·검색어 상세</h3><p>손님이 어디에서 어떤 검색어로 들어왔는지 봅니다.</p></div></div>
         <div class="activity-table-wrap"><table class="activity-table activity-acquisition-table"><thead><tr><th>들어온 곳</th><th>방문</th><th>평균 관심시간</th><th>예약 관심</th><th>전화 클릭</th><th>예약 생성</th><th>실제 검색어</th><th>광고에 등록한 검색어</th><th>광고 이름</th></tr></thead><tbody>${selectedChannels.map(channel => `<tr><td><strong>${esc(channel.name)}</strong></td><td>${channel.visitors.size}명</td><td>${activityDuration(channel.dwell / Math.max(1, channel.sessions))}</td><td>${channel.intentVisitors.size}명</td><td>${channel.calls}건</td><td>${channel.bookingIds.size}건</td><td>${esc(activityKeywordPreview(channel.searchQueries))}</td><td>${esc(activityKeywordPreview(channel.purchasedKeywords))}</td><td>${esc(activityKeywordPreview([...channel.campaigns, ...channel.adGroups]))}</td></tr>`).join('') || '<tr><td colspan="9">선택한 기간의 유입 내역이 없습니다.</td></tr>'}</tbody></table></div>
       </section>
-      <section class="settings-card">
-        <div class="activity-section-head"><div><h3>검색어별 전환</h3><p>방문만 많은 검색어와 실제로 전화·예약을 만드는 검색어를 구분합니다.</p></div><strong>${keywordRowMap.size}개</strong></div>
-        <div class="activity-table-wrap"><table class="activity-table"><thead><tr><th>검색어</th><th>구분</th><th>들어온 곳</th><th>방문</th><th>전화 클릭</th><th>예약 생성</th></tr></thead><tbody>${keywordRows.map(row => `<tr><td><strong>${esc(row.text)}</strong></td><td>${esc(row.kind)}</td><td>${esc(activityKeywordPreview(row.channels, 2))}</td><td>${row.visitors.size}명 / ${row.sessions.size}회</td><td>${row.calls}건</td><td>${row.bookingIds.size}건</td></tr>`).join('') || '<tr><td colspan="6">선택한 기간에 저장된 검색어가 없습니다. 자연검색어는 네이버·구글이 보내주지 않으면 남지 않습니다.</td></tr>'}</tbody></table></div>
+      <section class="settings-card activity-keyword-card">
+        <div class="activity-section-head"><div><h3>황금 키워드</h3><p>전화·예약이 붙은 검색어가 황금, 방문만 많고 아무 것도 없는 검색어가 낭비입니다. 광고 예산은 황금에 몰고 낭비는 끄면 됩니다.</p></div><strong>황금 ${goldenKeywordCount} · 낭비 ${wastedKeywordCount}</strong></div>
+        <div class="activity-table-wrap"><table class="activity-table activity-keyword-table"><thead><tr><th>검색어</th><th>등급</th><th>방문</th><th>전화</th><th>예약</th><th>매출</th><th>확정</th><th>입고</th><th>구분</th><th>들어온 곳</th><th>광고 순위</th></tr></thead><tbody>${keywordRows.map(row => `<tr><td><strong>${esc(row.text)}</strong></td><td><span class="activity-grade" data-tone="${row.grade.tone}">${row.grade.label}</span></td><td>${row.visitors}명 / ${row.sessions.size}회</td><td>${row.calls}건</td><td>${row.bookings}건</td><td>${row.revenue ? `${row.revenue.toLocaleString()}원` : '—'}</td><td>${row.confirmed}건</td><td>${row.arrived}건</td><td>${esc(row.kind)}</td><td>${esc(activityKeywordPreview(row.channels, 2))}</td><td>${row.rank ? `${row.rank.toFixed(1)}위` : '—'}</td></tr>`).join('') || '<tr><td colspan="11">선택한 기간에 저장된 검색어가 없습니다.</td></tr>'}</tbody></table></div>
+        <p class="activity-data-note">검색어가 남는 경우: 네이버 검색광고 유입(실제 검색어·등록 키워드·광고 순위 모두 저장), 검색어가 주소에 남는 다음·빙·줌 유입, utm_term을 넣은 링크.<br>
+        검색어가 남지 않는 경우: 구글 자연검색은 정책상 검색어를 보내지 않고, 네이버 자연검색도 대부분 보내지 않습니다. 이 방문은 채널만 남습니다. 자연검색어까지 보려면 구글 서치 콘솔과 네이버 서치어드바이저를 따로 연결해야 하고, 검색량·경쟁도는 네이버 검색광고 키워드도구 쪽 자료가 필요합니다. 매출은 같은 차량·같은 날짜의 정산 완료 기록으로 이어붙인 추정값입니다.</p>
       </section>
       <section class="settings-card">
         <div class="activity-section-head"><div><h3>관심이 높았던 페이지</h3><p>평균 관심시간은 세션 수 기준입니다.</p></div></div>
@@ -7665,8 +7772,8 @@ async function renderAdmActivity() {
 
     const logsPanel = `
       <section class="settings-card">
-        <div class="activity-section-head"><div><h3>방문자 이동 경로</h3><p>개인정보 보호를 위해 식별번호 일부를 가렸습니다.</p></div><strong>${journeyRows.length}명</strong></div>
-        <div class="activity-table-wrap"><table class="activity-table journey-table"><thead><tr><th>방문자</th><th>들어온 곳</th><th>이동 경로</th><th>마지막 행동</th></tr></thead><tbody>${journeyRows.map(row => `<tr><td><code>${esc(activityMaskedIp(row.visitor.ip))}</code></td><td>${esc(row.channel)}</td><td>${esc(row.route.join(' → ') || '첫 화면만 확인')}</td><td>${esc(activityLabel(row.last?.event_type))}<small>${esc(new Date(row.last?.created_at).toLocaleString('ko-KR'))}</small></td></tr>`).join('') || '<tr><td colspan="4">선택한 기간의 이동 경로가 없습니다.</td></tr>'}</tbody></table></div>
+        <div class="activity-section-head"><div><h3>방문자 이동 경로</h3><p>한 줄 평가는 저장된 행동 기록으로 판단한 것입니다. 화면 녹화가 아니라 눌린 것과 머문 시간을 근거로 합니다.</p></div><strong>${journeyRows.length}명</strong></div>
+        <div class="activity-table-wrap"><table class="activity-table journey-table"><thead><tr><th>방문자</th><th>들어온 곳</th><th>한 줄 평가</th><th>머문 시간</th><th>이동 경로</th><th>마지막 행동</th></tr></thead><tbody>${journeyRows.map(row => `<tr><td><code>${esc(activityMaskedIp(row.visitor.ip))}</code></td><td>${esc(row.channel)}</td><td><strong>${esc(row.verdict)}</strong></td><td>${esc(activityDuration(row.dwell))}</td><td>${esc(row.route.join(' → ') || '첫 화면만 확인')}</td><td>${esc(activityLabel(row.last?.event_type))}<small>${esc(new Date(row.last?.created_at).toLocaleString('ko-KR'))}</small></td></tr>`).join('') || '<tr><td colspan="6">선택한 기간의 이동 경로가 없습니다.</td></tr>'}</tbody></table></div>
       </section>
       <section class="settings-card">
         <div class="activity-section-head"><div><h3>상세 행동 기록</h3><p>문제 확인이 필요할 때만 사용하는 화면입니다.</p></div><strong>${items.length.toLocaleString()}건</strong></div>

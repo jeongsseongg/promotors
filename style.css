@@ -6135,9 +6135,10 @@ button.step-photo-slot {
   grid-template-columns: repeat(5, minmax(0, 1fr));
 }
 #adm-activity-body .activity-simple-kpis strong {
-  font-size: clamp(21px, 1.65vw, 29px);
+  /* 숫자가 자릿수 사이에서 잘리지 않게 한다. 줄바꿈은 공백에서만 일어난다. */
+  font-size: clamp(19px, 1.5vw, 27px);
   word-break: keep-all;
-  overflow-wrap: anywhere;
+  overflow-wrap: normal;
 }
 @media (max-width: 1180px) {
   #adm-activity-body .activity-owner-kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); }
@@ -6146,3 +6147,51 @@ button.step-photo-slot {
   #adm-activity-body { padding: 10px; border-radius: 20px; }
   #adm-activity-body .activity-owner-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
+
+/* 분석 화면 판 배경과 숫자 카드 정렬 */
+#adm-activity-body {
+  padding: 18px;
+  border-radius: 26px;
+  background: #f4f6f8;
+}
+#adm-activity-body .activity-owner-kpis {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+#adm-activity-body .activity-simple-kpis strong {
+  /* 숫자가 자릿수 사이에서 잘리지 않게 한다. 줄바꿈은 공백에서만 일어난다. */
+  font-size: clamp(19px, 1.5vw, 27px);
+  word-break: keep-all;
+  overflow-wrap: normal;
+}
+#adm-activity-body .activity-keyword-table { min-width: 1000px; }
+#adm-activity-body .activity-grade {
+  display: inline-block;
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+#adm-activity-body .activity-grade[data-tone="gold"] { background: #fdf0c8; color: #7a5a00; }
+#adm-activity-body .activity-grade[data-tone="warm"] { background: #fde6d8; color: #8a3f14; }
+#adm-activity-body .activity-grade[data-tone="cold"] { background: #eef1f5; color: #6b7684; }
+#adm-activity-body .activity-grade[data-tone="plain"] { background: #f4f6f8; color: #8b95a3; }
+#adm-activity-body .activity-data-note {
+  border-radius: 14px;
+  background: #f4f6f8;
+  color: #5d6875;
+  font-size: 12px;
+}
+@media (max-width: 1180px) {
+  #adm-activity-body .activity-owner-kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+@media (max-width: 700px) {
+  #adm-activity-body { padding: 10px; border-radius: 20px; }
+  #adm-activity-body .activity-owner-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+/* 좁은 화면에서 표 칸이 눌려 글자가 세로로 쪼개지지 않게 최소 너비를 준다.
+   :where 로 감싸 특정 표에 지정한 넓은 min-width 가 그대로 이긴다. */
+#adm-activity-body :where(.activity-table) { min-width: 560px; }
+#adm-activity-body .journey-table { min-width: 1040px; }
+#adm-activity-body .journey-table td:nth-child(3) { max-width: 300px; color: var(--navy); }
