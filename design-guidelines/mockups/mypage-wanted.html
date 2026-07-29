@@ -1,0 +1,486 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>마이페이지 첫 화면 — Wanted 토큰 + Pretendard 목업</title>
+
+<!-- 저장해 둔 폰트/토큰을 그대로 사용한다 (사이트 본체와는 무관한 목업) -->
+<link rel="stylesheet" href="../../fonts/pretendard/pretendard.css">
+<link rel="stylesheet" href="../wanted-tokens.css">
+
+<style>
+  /* ── 목업 전용 로컬 토큰 (Wanted 값을 역할별로 별칭) ───────────────── */
+  :root {
+    --font-sans: var(--font-pretendard, 'Pretendard Variable', 'Pretendard', 'Noto Sans KR', sans-serif);
+
+    --c-bg:        var(--wds-background-normal-alternative, #F7F7F8);
+    --c-surface:   var(--wds-background-normal-normal, #FFFFFF);
+    --c-primary:   var(--wds-primary-normal, #0066FF);
+    --c-primary-bg:var(--wds-primary-assistive, #EAF2FE);
+    --c-label:     var(--wds-label-normal, #171719);
+    --c-label-sub: var(--wds-label-alternative, #70737C);
+    --c-label-dim: var(--wds-label-assistive, #AEB0B6);
+    --c-line:      var(--wds-line-normal-normal, #70737C38);
+    --c-line-soft: var(--wds-line-normal-alternative, #70737C14);
+    --c-positive:  var(--wds-status-positive, #00BF40);
+    --c-negative:  var(--wds-status-negative, #FF4242);
+    --c-inverse:   var(--wds-static-white, #FFFFFF);
+
+    /* 8px 배수 간격 */
+    --s1: 4px;  --s2: 8px;  --s3: 12px; --s4: 16px;
+    --s5: 20px; --s6: 24px; --s8: 32px;
+
+    --r-sm: 10px; --r-md: 14px; --r-lg: 18px; --r-full: 999px;
+
+    /* 타이포 5단계 */
+    --t-title:   clamp(20px, 5.4vw, 22px);
+    --t-body:    16px;
+    --t-label:   14px;
+    --t-caption: 12px;
+
+    --tabbar-h: 64px;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    background: var(--c-bg);
+    color: var(--c-label);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  body {
+    /* 390×740 첫 화면 기준. 캡처 시 이 폭에 맞춘다. */
+    max-width: 430px;
+    min-height: 100vh;
+    margin: 0 auto;
+    /* 하단 고정 탭바에 마지막 카드가 가리지 않도록 여유를 둔다 */
+    padding-bottom: calc(var(--tabbar-h) + var(--s4));
+    position: relative;
+  }
+
+  button {
+    font: inherit;
+    color: inherit;
+    border: 0;
+    background: none;
+    cursor: pointer;
+  }
+
+  h1, h2, h3, p { margin: 0; word-break: keep-all; }
+
+  .chevron { color: var(--c-label-dim); flex: 0 0 auto; }
+
+  /* ── 헤더 ───────────────────────────────────────────────────────── */
+  .top {
+    display: flex;
+    align-items: center;
+    gap: var(--s2);
+    height: 56px;
+    padding: 0 var(--s4);
+    background: var(--c-surface);
+  }
+  .top h1 {
+    flex: 1;
+    font-size: var(--t-title);
+    font-weight: 700;
+    letter-spacing: -0.02em;
+  }
+  .top-icon {
+    display: grid;
+    place-items: center;
+    width: 40px;
+    height: 40px;
+    margin-right: -8px;
+    border-radius: var(--r-full);
+    color: var(--c-label-sub);
+  }
+  .top-icon .badge-dot {
+    position: absolute;
+    width: 6px;
+    height: 6px;
+    margin: -12px 0 0 12px;
+    border-radius: var(--r-full);
+    background: var(--c-negative);
+  }
+
+  /* 390×740 첫 화면에 고객센터까지 온전히 들어가도록 세로 간격을 조인다 */
+  main { padding: var(--s3) var(--s4) var(--s4); display: grid; gap: var(--s3); }
+
+  /* ── 프로필 + 차량 ──────────────────────────────────────────────── */
+  .account {
+    display: grid;
+    gap: var(--s3);
+    padding: var(--s4);
+    border-radius: var(--r-lg);
+    background: var(--c-primary);
+    color: var(--c-inverse);
+  }
+  .account-row {
+    display: flex;
+    align-items: center;
+    gap: var(--s3);
+    width: 100%;
+    text-align: left;
+  }
+  .avatar {
+    display: grid;
+    place-items: center;
+    width: 44px;
+    height: 44px;
+    flex: 0 0 auto;
+    border-radius: var(--r-full);
+    background: rgba(255, 255, 255, .18);
+  }
+  .account-name { flex: 1; display: grid; gap: 2px; }
+  .account-name strong { font-size: var(--t-body); font-weight: 700; }
+  /* 파란 배경 위 흰 텍스트는 알파를 .95 이상으로 — .78 이면 대비 3.5:1 로 기준(4.5:1) 미달 */
+  .account-name span { font-size: var(--t-caption); color: rgba(255, 255, 255, .95); }
+  .account .chevron { color: rgba(255, 255, 255, .7); }
+
+  .account-divider { height: 1px; background: rgba(255, 255, 255, .2); }
+
+  .car { display: grid; gap: var(--s1); }
+  .car-label { font-size: var(--t-caption); color: rgba(255, 255, 255, .95); }
+  .car strong { font-size: 20px; font-weight: 700; letter-spacing: -0.02em; }
+  .car-plate { font-size: var(--t-label); color: rgba(255, 255, 255, .95); }
+
+  /* ── 빠른 메뉴 ──────────────────────────────────────────────────── */
+  .quick {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: var(--s2);
+  }
+  .quick button {
+    position: relative;
+    display: grid;
+    justify-items: center;
+    gap: var(--s2);
+    min-height: 78px;
+    padding: var(--s3) var(--s1);
+    border-radius: var(--r-md);
+    background: var(--c-surface);
+    border: 1px solid var(--c-line-soft);
+  }
+  .quick-icon {
+    display: grid;
+    place-items: center;
+    width: 32px;
+    height: 32px;
+    border-radius: var(--r-sm);
+    background: var(--c-primary-bg);
+    color: var(--c-primary);
+  }
+  .quick strong { font-size: var(--t-caption); font-weight: 600; color: var(--c-label); }
+  .quick em {
+    position: absolute;
+    top: 8px;
+    right: 10px;
+    min-width: 18px;
+    height: 18px;
+    padding: 0 5px;
+    border-radius: var(--r-full);
+    background: var(--c-negative);
+    color: var(--c-inverse);
+    font-size: 11px;
+    font-style: normal;
+    font-weight: 700;
+    line-height: 18px;
+    text-align: center;
+  }
+
+  /* ── 작업 현황 ──────────────────────────────────────────────────── */
+  .sec-title {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    font-size: var(--t-body);
+    font-weight: 700;
+  }
+  .sec-title a { font-size: var(--t-caption); font-weight: 600; color: var(--c-label-sub); text-decoration: none; }
+  .progress-sec { display: grid; gap: var(--s2); }
+
+  .progress {
+    display: grid;
+    gap: var(--s4);
+    padding: var(--s4);
+    border-radius: var(--r-lg);
+    background: var(--c-surface);
+    border: 1px solid var(--c-line-soft);
+  }
+  .progress-head { display: grid; gap: var(--s1); }
+  .progress-head strong { font-size: var(--t-body); font-weight: 700; line-height: 1.45; }
+  .progress-head span { font-size: var(--t-label); color: var(--c-label-sub); }
+
+  .steps {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    align-items: start;
+    position: relative;
+  }
+  .steps::before {
+    content: "";
+    position: absolute;
+    top: 15px;
+    left: 12.5%;
+    right: 12.5%;
+    height: 2px;
+    background: var(--c-line-soft);
+  }
+  .step { display: grid; justify-items: center; gap: var(--s2); position: relative; }
+  .step-dot {
+    display: grid;
+    place-items: center;
+    width: 32px;
+    height: 32px;
+    border-radius: var(--r-full);
+    background: var(--c-bg);
+    color: var(--c-label-dim);
+    border: 2px solid var(--c-line-soft);
+  }
+  .step em {
+    font-size: var(--t-caption);
+    font-style: normal;
+    font-weight: 600;
+    /* 미완료 단계도 읽혀야 하므로 dim(#AEB0B6, 2.3:1) 대신 4.7:1 인 보조 라벨색 사용 */
+    color: var(--c-label-sub);
+  }
+  .step.done .step-dot { background: var(--c-primary); border-color: var(--c-primary); color: var(--c-inverse); }
+  .step.done em { color: var(--c-label); }
+  .step.now .step-dot { box-shadow: 0 0 0 4px var(--c-primary-bg); }
+  .step.now em { color: var(--c-primary); font-weight: 700; }
+
+  /* ── 주요 CTA ───────────────────────────────────────────────────── */
+  .cta {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--s2);
+    width: 100%;
+    min-height: 52px;
+    border-radius: var(--r-md);
+    background: var(--c-primary);
+    color: var(--c-inverse);
+    font-size: var(--t-body);
+    font-weight: 700;
+  }
+
+  /* ── 고객센터 (보조 · 외곽선) ───────────────────────────────────── */
+  .support {
+    display: flex;
+    align-items: center;
+    gap: var(--s3);
+    width: 100%;
+    min-height: 64px;
+    padding: 0 var(--s4);
+    border-radius: var(--r-md);
+    background: var(--c-surface);
+    border: 1px solid var(--c-line);
+    text-align: left;
+  }
+  .support-icon {
+    display: grid;
+    place-items: center;
+    width: 36px;
+    height: 36px;
+    flex: 0 0 auto;
+    border-radius: var(--r-full);
+    background: var(--c-primary-bg);
+    color: var(--c-primary);
+  }
+  .support-text { flex: 1; display: grid; gap: 2px; }
+  .support-text strong { font-size: var(--t-label); font-weight: 700; }
+  .support-text span { font-size: var(--t-caption); color: var(--c-label-sub); }
+
+  /* ── 하단 탭바 ──────────────────────────────────────────────────── */
+  .tabbar {
+    position: fixed;
+    left: 50%;
+    bottom: 0;
+    transform: translateX(-50%);
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    width: 100%;
+    max-width: 430px;
+    height: var(--tabbar-h);
+    background: var(--c-surface);
+    border-top: 1px solid var(--c-line-soft);
+  }
+  .tabbar button {
+    display: grid;
+    justify-items: center;
+    align-content: center;
+    gap: var(--s1);
+    color: var(--c-label-dim);
+    font-size: var(--t-caption);
+    font-weight: 600;
+  }
+  .tabbar button[aria-current="page"] { color: var(--c-primary); }
+
+  @media (prefers-color-scheme: dark) {
+    /* wanted-tokens.css 의 다크 모드 값이 그대로 흘러들어온다 */
+    .quick button, .progress, .support { border-color: var(--c-line-soft); }
+  }
+</style>
+</head>
+<body>
+
+<header class="top">
+  <h1>마이</h1>
+  <button type="button" class="top-icon" aria-label="알림 3건">
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <path d="M18 8a6 6 0 1 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/>
+    </svg>
+    <i class="badge-dot"></i>
+  </button>
+  <button type="button" class="top-icon" aria-label="설정">
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-2.9 1.2V21a2 2 0 1 1-4 0v-.1A1.7 1.7 0 0 0 7 19.4a1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1A1.7 1.7 0 0 0 3 15H3a2 2 0 1 1 0-4h.1A1.7 1.7 0 0 0 4.6 7a1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1A1.7 1.7 0 0 0 9 2.6V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 2.9 1.2l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0 1.2 2.9H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1"/>
+    </svg>
+  </button>
+</header>
+
+<main>
+  <section class="account" aria-label="내 정보">
+    <button type="button" class="account-row">
+      <span class="avatar" aria-hidden="true">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
+        </svg>
+      </span>
+      <span class="account-name">
+        <strong>이승현님</strong>
+        <span>안녕하세요!</span>
+      </span>
+      <b class="chevron" aria-hidden="true">›</b>
+    </button>
+
+    <div class="account-divider"></div>
+
+    <div class="car">
+      <span class="car-label">내 차량</span>
+      <strong>BMW 520d</strong>
+      <span class="car-plate">12가 3456 · 2021년식</span>
+    </div>
+  </section>
+
+  <nav class="quick" aria-label="바로가기">
+    <button type="button">
+      <span class="quick-icon" aria-hidden="true">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M14.7 6.3a4 4 0 0 0 5 5l-9 9a2.8 2.8 0 1 1-4-4z"/>
+        </svg>
+      </span>
+      <strong>작업현황</strong>
+    </button>
+    <button type="button">
+      <span class="quick-icon" aria-hidden="true">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="3" y="5" width="18" height="16" rx="2"/><path d="M8 3v4M16 3v4M3 11h18"/>
+        </svg>
+      </span>
+      <strong>예약 내역</strong>
+    </button>
+    <button type="button">
+      <span class="quick-icon" aria-hidden="true">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M14 2H7a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7z"/><path d="M14 2v5h5M9 13h6M9 17h4"/>
+        </svg>
+      </span>
+      <strong>이용 내역</strong>
+    </button>
+    <button type="button">
+      <span class="quick-icon" aria-hidden="true">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M20 12a2 2 0 0 1 0-4V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v2a2 2 0 0 1 0 4v2a2 2 0 0 1 0 4v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2a2 2 0 0 1 0-4z"/><path d="M13 7v10" stroke-dasharray="2 3"/>
+        </svg>
+      </span>
+      <strong>내 쿠폰</strong>
+      <em>2</em>
+    </button>
+  </nav>
+
+  <section class="progress-sec">
+  <h2 class="sec-title">진행 중인 정비 <a href="#">전체보기 ›</a></h2>
+
+  <article class="progress">
+    <div class="progress-head">
+      <strong>엔진오일 교환, 작업 중이에요</strong>
+      <span>프로모터스 안산점 · 오늘 14:00 입고</span>
+    </div>
+
+    <div class="steps">
+      <div class="step done">
+        <span class="step-dot" aria-hidden="true">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+        </span>
+        <em>접수완료</em>
+      </div>
+      <div class="step done now">
+        <span class="step-dot" aria-hidden="true">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a4 4 0 0 0 5 5l-9 9a2.8 2.8 0 1 1-4-4z"/></svg>
+        </span>
+        <em>작업중</em>
+      </div>
+      <div class="step">
+        <span class="step-dot" aria-hidden="true">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+        </span>
+        <em>검수중</em>
+      </div>
+      <div class="step">
+        <span class="step-dot" aria-hidden="true">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="m8.5 12 2.5 2.5 4.5-5"/></svg>
+        </span>
+        <em>완료</em>
+      </div>
+    </div>
+  </article>
+  </section>
+
+  <button type="button" class="cta">
+    정비 예약하기
+  </button>
+
+  <button type="button" class="support">
+    <span class="support-icon" aria-hidden="true">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M4 14v-2a8 8 0 0 1 16 0v2"/><path d="M4 14a2 2 0 0 1 2-2h1v6H6a2 2 0 0 1-2-2zM20 14a2 2 0 0 0-2-2h-1v6h1a2 2 0 0 0 2-2z"/>
+      </svg>
+    </span>
+    <span class="support-text">
+      <strong>고객센터</strong>
+      <span>실시간 채팅으로 문의하세요</span>
+    </span>
+    <b class="chevron" aria-hidden="true">›</b>
+  </button>
+</main>
+
+<nav class="tabbar" aria-label="주요 메뉴">
+  <button type="button">
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3 10 9-7 9 7v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+    소개
+  </button>
+  <button type="button">
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0"/><circle cx="12" cy="10" r="3"/></svg>
+    매장안내
+  </button>
+  <button type="button">
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.7 6.3a4 4 0 0 0 5 5l-9 9a2.8 2.8 0 1 1-4-4z"/></svg>
+    정비사례
+  </button>
+  <button type="button">
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 11v2a1 1 0 0 0 1 1h2l5 4V6L6 10H4a1 1 0 0 0-1 1"/><path d="M16 8a5 5 0 0 1 0 8"/></svg>
+    게시판
+  </button>
+  <button type="button" aria-current="page">
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+    마이
+  </button>
+</nav>
+
+</body>
+</html>
