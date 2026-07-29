@@ -6451,3 +6451,83 @@ button.step-photo-slot {
   font-weight: 800;
   letter-spacing: -0.02em;
 }
+
+/* ---------- 컴포넌트: 탭 → 알약형 세그먼트 ----------
+   마이페이지의 단계 칩과 같은 형태로 맞춘다. 밑줄 탭 → 알약 탭. */
+.tabs,
+.case-branch-tabs {
+  gap: 8px;
+  border-bottom: 0;
+}
+.tab,
+.case-branch-tab {
+  min-height: 40px;
+  padding: 0 16px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text-muted);
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1;
+}
+.tab:hover,
+.case-branch-tab:hover { border-color: var(--navy); color: var(--navy); }
+.tab.active,
+.case-branch-tab.active {
+  border-color: var(--navy);
+  background: var(--navy);
+  color: #fff;
+}
+
+/* ---------- 컴포넌트: 캘린더 ---------- */
+.cal-day {
+  border-radius: 12px;
+  border-color: var(--line);
+  font-weight: 600;
+}
+.cal-day.sel {
+  border-color: var(--navy);
+  box-shadow: 0 4px 12px rgba(30, 36, 100, .22);
+}
+.cal-day .cnt {
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--yellow);
+  color: var(--navy);
+  font-size: 11px;
+  font-weight: 800;
+}
+.cal-day.sel .cnt { background: var(--yellow); color: var(--navy); }
+
+/* ---------- 컴포넌트: 시간 슬롯 ---------- */
+.slot {
+  min-height: 44px;
+  padding: 0 14px;
+  border-radius: 999px;
+  border-color: var(--line);
+  font-size: 14px;
+  font-weight: 700;
+}
+.slot.sel { box-shadow: 0 4px 12px rgba(30, 36, 100, .22); }
+
+/* ---------- 컴포넌트: 주요 실행 버튼 ---------- */
+.modal-submit {
+  min-height: 52px;
+  border-radius: 12px;
+  font-size: 16px;
+  font-weight: 800;
+}
+.mini-btn.add {
+  border-radius: 999px;
+  font-weight: 800;
+}
+
+/* 휴무일 배지는 강조색이 아니라 중립색이다 — '작업 n건' 배지와 구분한다.
+   (마크업이 같은 .cnt 를 쓰므로 .closed-day 로 구분) */
+.cal-day.closed-day .cnt,
+.cal-day.closed-day.sel .cnt {
+  background: #eef0f4;
+  color: var(--text-muted);
+  font-weight: 700;
+}
