@@ -594,16 +594,72 @@ async function supabaseRpc(name, params = {}, options = {}) {
 
 let canonicalMembersRefresh = null;
 let canonicalMembersRefreshedAt = 0;
+let canonicalMembers = [];
+
+function sameCustomer(a, b) {
+  if (!a || !b) return false;
+  if (a.id && b.id && String(a.id) === String(b.id)) return true;
+  const aCar = String(a.car || '').toLowerCase().replace(/[^0-9a-z가-힣]/g, '');
+  const bCar = String(b.car || '').toLowerCase().replace(/[^0-9a-z가-힣]/g, '');
+  if (aCar && bCar && aCar === bCar) return true;
+  const aPhone = normPhone(a.phone);
+  const bPhone = normPhone(b.phone);
+  return !!aPhone && !!bPhone && aPhone === bPhone;
+}
+
+function mergeCustomerDirectory(accountMembers = []) {
+  const directory = [];
+  const banned = store.get('pm-banned-members', [])
+    .filter(entry => ['blocked', 'deleted'].includes(entry?.type))
+    .map(entry => entry.member)
+    .filter(Boolean);
+  const add = (candidate, accountWins = false) => {
+    if (!candidate || banned.some(blocked => sameCustomer(candidate, blocked))) return;
+    const safe = { ...candidate };
+    delete safe.password;
+    const index = directory.findIndex(current => sameCustomer(current, safe));
+    if (index < 0) directory.push(safe);
+    else directory[index] = accountWins
+      ? { ...directory[index], ...safe }
+      : { ...safe, ...directory[index] };
+  };
+  store.get('pm-bookings', [])
+    .filter(booking => booking?.guest !== true)
+    .slice()
+    .sort((a, b) => bookingTimestamp(b) - bookingTimestamp(a))
+    .forEach(booking => add({
+      id: booking.memberId || '',
+      name: booking.name || '',
+      car: booking.car || '',
+      model: booking.model || '',
+      phone: booking.phone || '',
+      role: booking.guest ? 'guest' : 'customer'
+    }));
+  store.get('pm-members', []).forEach(memberRow => add(memberRow, true));
+  accountMembers.forEach(memberRow => add(memberRow, true));
+  return directory;
+}
+
 async function refreshCanonicalMembers(force = false) {
-  if (!authToken || !isAdmin) return store.get('pm-members', []);
-  if (!force && Date.now() - canonicalMembersRefreshedAt < 15000) return store.get('pm-members', []);
-  if (canonicalMembersRefresh) return canonicalMembersRefresh;
+  if (!authToken || !isAdmin) {
+    canonicalMembers = [];
+    return canonicalMembers;
+  }
+  if (!force && Date.now() - canonicalMembersRefreshedAt < 15000) {
+    canonicalMembers = mergeCustomerDirectory(canonicalMembers);
+    return canonicalMembers;
+  }
+  if (canonicalMembersRefresh) {
+    const pendingMembers = await canonicalMembersRefresh;
+    canonicalMembers = mergeCustomerDirectory(pendingMembers);
+    return canonicalMembers;
+  }
   canonicalMembersRefresh = supabaseRpc('pm_customer_accounts', { p_token: authToken })
     .then(rows => {
       if (!Array.isArray(rows)) throw new Error('INVALID_CUSTOMER_ACCOUNTS');
-      store.setLocal('pm-members', rows);
+      canonicalMembers = mergeCustomerDirectory(rows);
       canonicalMembersRefreshedAt = Date.now();
-      return rows;
+      return canonicalMembers;
     })
     .finally(() => { canonicalMembersRefresh = null; });
   return canonicalMembersRefresh;
@@ -1013,15 +1069,22 @@ function activityElementLabel(element) {
 }
 function activityAcquisitionContext(referrerValue = document.referrer || '', urlValue = location.href) {
   let params = new URLSearchParams();
+  let referrerParams = new URLSearchParams();
+  let referrerHost = '';
   try { params = new URL(urlValue, location.origin).searchParams; } catch {}
+  try {
+    const referrerUrl = new URL(referrerValue);
+    referrerParams = referrerUrl.searchParams;
+    referrerHost = referrerUrl.hostname.toLowerCase().replace(/^www\./, '');
+  } catch {}
   const source = String(params.get('utm_source') || '').toLowerCase();
   const medium = String(params.get('utm_medium') || '').toLowerCase();
   const naverMedia = params.get('n_media') || '';
-  const naverQuery = params.get('n_query') || '';
+  const naverQuery = params.get('n_query') || referrerParams.get('query') || '';
   const naverKeyword = params.get('n_keyword') || '';
   const campaign = params.get('utm_campaign') || params.get('n_campaign') || params.get('n_campaign_type') || '';
   const content = params.get('utm_content') || '';
-  const searchQuery = naverQuery || params.get('query') || params.get('q') || '';
+  const searchQuery = naverQuery || params.get('query') || params.get('q') || referrerParams.get('q') || '';
   const purchasedKeyword = naverKeyword || params.get('utm_term') || '';
   const keyword = searchQuery || purchasedKeyword;
   const clickId = params.get('gclid') || params.get('wbraid') || params.get('gbraid') || params.get('fbclid') || params.get('n_click_id') || '';
@@ -1036,6 +1099,8 @@ function activityAcquisitionContext(referrerValue = document.referrer || '', url
   else if (paid && combined.includes('google')) channel = '구글 검색광고';
   else if (paid && (combined.includes('instagram') || combined.includes('facebook') || source === 'ig')) channel = '메타 광고';
   else if (paid) channel = '기타 광고';
+  else if (referrerHost === 'blog.naver.com' || referrerHost === 'm.blog.naver.com' || source.includes('naver_blog')) channel = '네이버 블로그';
+  else if (medium === 'blog' || source.includes('blog') || referrerHost.includes('blog')) channel = '블로그';
   else if (/place\.naver|m\.place\.naver|map\.naver/.test(combined) || source.includes('naver_place')) channel = '네이버 플레이스';
   else if (combined.includes('naver')) channel = '네이버 자연검색';
   else if (combined.includes('google')) channel = '구글 자연검색';
@@ -1058,7 +1123,16 @@ function activityAcquisitionContext(referrerValue = document.referrer || '', url
     adId,
     clickId,
     rank,
+    referrerHost,
     paid
+  };
+}
+function activityPhonePayload(element, href) {
+  const rawPhone = element.dataset?.phone || String(href || '').replace(/^tel:/i, '');
+  const phone = decodeURIComponent(rawPhone).replace(/[^\d+]/g, '');
+  return {
+    branch: element.dataset?.phoneBranch || element.closest('[data-phone-branch]')?.dataset?.phoneBranch || '지점 미확인',
+    phone
   };
 }
 function initActivityTracking() {
@@ -1086,6 +1160,7 @@ function initActivityTracking() {
     const element = event.target.closest('button, a, [role="button"], input[type="submit"]');
     if (!element) return;
     const href = element.getAttribute('href') || '';
+    if (/^tel:/i.test(href)) logEvent('phone_call', activityPhonePayload(element, href));
     logEvent('element_click', {
       label: activityElementLabel(element),
       target: element.id || element.dataset?.view || element.dataset?.mtab || href.slice(0, 120) || element.tagName.toLowerCase()
@@ -1146,6 +1221,7 @@ function renderViewContent(name) {
   if (name === 'adm-work') renderAdmWork();
   if (name === 'adm-approval') renderAdmApproval();
   if (name === 'adm-cust') renderAdmCust();
+  if (name === 'adm-guest') renderAdmGuest();
   if (name === 'adm-prod') renderAdmProd();
   if (name === 'adm-inquiry') renderAdmInquiry();
   if (name === 'adm-settings') renderAdmSettings();
@@ -1197,6 +1273,7 @@ function wireNav() {
       if (btn.dataset.view === 'adm-work') renderAdmWork();
       if (btn.dataset.view === 'adm-approval') renderAdmApproval();
       if (btn.dataset.view === 'adm-cust') renderAdmCust();
+      if (btn.dataset.view === 'adm-guest') renderAdmGuest();
       if (btn.dataset.view === 'adm-prod') renderAdmProd();
       if (btn.dataset.view === 'adm-inquiry') renderAdmInquiry();
       if (btn.dataset.view === 'adm-settings') renderAdmSettings();
@@ -1268,7 +1345,7 @@ function openModal(html, wide, full, backHandler = null) {
   const first = modalCard.querySelector('input, textarea, [contenteditable="true"]');
   if (first) first.focus();
 }
-function closeModal() { modalBackHandler = null; clearModalScreen(); modal.hidden = true; modalCard.classList.remove('full', 'mypage-card', 'mobile-full'); modalCard.innerHTML = ''; syncMobileTabbar(); }
+function closeModal() { modalBackHandler = null; clearModalScreen(); modal.hidden = true; modalCard.classList.remove('full', 'mypage-card', 'mobile-full', 'brand-mypage'); modalCard.innerHTML = ''; syncMobileTabbar(); }
 modal.addEventListener('click', e => { if (e.target === modal) e.preventDefault(); });
 
 /* ---------- 푸터 법적 고지 ---------- */
@@ -1413,6 +1490,7 @@ function applyAuthUI() {
   renderCases();
   if (isTopAdmin()) {
     renderAdmCust();
+    renderAdmGuest();
     renderAdmProd();
     renderAdmApproval();
     renderAdmSettings();
@@ -1632,6 +1710,30 @@ const WORK_STAGES = [
   { label: '검수중', icon: 'search' },
   { label: '완료', icon: 'flag' }
 ];
+const BRAND_MYPAGE_STAGES = [
+  { label: '접수', icon: 'calendar' },
+  { label: '진단', icon: 'search' },
+  { label: '작업', icon: 'wrench' },
+  { label: '검수', icon: 'check' },
+  { label: '출고', icon: 'car' }
+];
+
+function shortBookingDate(booking) {
+  if (!booking?.date) return '예약 일정 없음';
+  const date = new Date(`${String(booking.date).replace(/\./g, '-')}T${booking.time || '00:00'}`);
+  if (Number.isNaN(date.getTime())) return `${booking.date} ${booking.time || ''}`.trim();
+  const dateLabel = date.toLocaleDateString('ko-KR', { month: 'long', day: 'numeric', weekday: 'short' });
+  const timeLabel = date.toLocaleTimeString('ko-KR', { hour: 'numeric', minute: '2-digit' });
+  return `${dateLabel} ${timeLabel}`;
+}
+
+function brandStatusSteps(stageIndex) {
+  return BRAND_MYPAGE_STAGES.map((stage, index) => `
+    <span class="${index < stageIndex ? 'done' : ''} ${index === stageIndex ? 'current' : ''}">
+      <i aria-hidden="true">${MYPAGE_ICONS[stage.icon]}</i>
+      <em>${stage.label}</em>
+    </span>`).join('');
+}
 
 async function openMyPageModal() {
   if (!member) return openMemberModal('login');
@@ -1639,16 +1741,29 @@ async function openMyPageModal() {
   const bookings = getBookings().filter(b => b.car === member.car || b.memberId === member.id);
   const serviceRuns = store.get('pm-service-runs', []).filter(r => r.car === member.car || r.memberId === member.id);
   const notices = getMessagesFor(member).filter(m => m.serviceContext?.runId);
-  const latestBooking = bookings.filter(isActiveBooking).sort((a, b) => bookingTimestamp(b) - bookingTimestamp(a))[0];
+  const latestBookingRecord = bookings.slice().sort((a, b) => bookingTimestamp(b) - bookingTimestamp(a))[0];
+  const latestBooking = bookings
+    .filter(booking => {
+      const linkedRun = runForBooking(booking);
+      return isActiveBooking(booking)
+        && (String(booking.date || '') >= todayKey() || (linkedRun && !isRunCompleted(linkedRun)));
+    })
+    .sort((a, b) => bookingTimestamp(b) - bookingTimestamp(a))[0];
   const latestRun = serviceRuns.slice().sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0))[0];
+  const activeRun = serviceRuns
+    .filter(run => !isRunCompleted(run))
+    .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0))[0];
+  const displayRun = activeRun || (!latestBooking ? latestRun : null);
 
   /* 진행 단계: 0 접수완료 → 1 작업중 → 2 검수중 → 3 완료 (-1: 예약 없음) */
   let stageIndex = -1;
   let statusText = '진행 중인 예약이 없어요';
-  if (latestRun) {
-    const current = (latestRun.steps || [])[latestRun.currentStep] || {};
-    const serviceName = latestRun.serviceName || latestRun.service || (latestBooking?.services || [])[0] || '정비';
-    if (latestRun.completedAt || /완료/.test(latestRun.status || '')) {
+  if (!latestBooking && latestBookingRecord?.status === '취소') {
+    statusText = '예약취소';
+  } else if (displayRun) {
+    const current = (displayRun.steps || [])[displayRun.currentStep] || {};
+    const serviceName = displayRun.serviceName || displayRun.service || (latestBooking?.services || [])[0] || '정비';
+    if (displayRun.completedAt || /완료/.test(displayRun.status || '')) {
       stageIndex = 3;
       statusText = progressServiceText(serviceName, true);
     } else if (current.submitted && !current.approved) {
@@ -1662,64 +1777,106 @@ async function openMyPageModal() {
     stageIndex = 0;
     statusText = `${latestBooking.branch} ${latestBooking.date} ${latestBooking.time} 예약이 접수되었어요`;
   }
-  const stepsHtml = WORK_STAGES.map((stage, i) => `
-    <div class="ws ${stageIndex >= i ? 'done' : ''} ${stageIndex === i ? 'now' : ''}">
-      <span class="ws-icon">${MYPAGE_ICONS[stage.icon]}</span>
-      <em>${stage.label}</em>
-    </div>${i < WORK_STAGES.length - 1 ? `<i class="${stageIndex > i ? 'done' : ''}"></i>` : ''}`).join('');
-  const hasRunPhotos = latestRun && (latestRun.steps || []).some(s => s.approved && (s.photoKeys || []).length);
-  const carMeta = [member.year, member.car].filter(Boolean).join(' · ');
-  const banner = await eventBannerHtml();
+  let brandStageIndex = -1;
+  if (latestBooking) brandStageIndex = 0;
+  if (displayRun) {
+    const current = (displayRun.steps || [])[displayRun.currentStep] || {};
+    brandStageIndex = current.submitted && !current.approved ? 3 : 2;
+  }
+  if (displayRun && (displayRun.completedAt || /완료/.test(displayRun.status || ''))) brandStageIndex = 4;
+
+  const progress = brandStageIndex < 0 ? 0 : Math.round(((brandStageIndex + 1) / BRAND_MYPAGE_STAGES.length) * 100);
+  const currentStageLabel = brandStageIndex < 0 ? '예약 전' : BRAND_MYPAGE_STAGES[brandStageIndex].label;
+  const serviceName = displayRun?.serviceName || displayRun?.service || (latestBooking?.services || [])[0] || '정비 내역 없음';
+  const branchName = displayRun?.branch || latestBooking?.branch || '예약 지점을 선택해주세요';
+  const nextBooking = bookings
+    .filter(b => isActiveBooking(b) && String(b.date || '') >= todayKey())
+    .sort((a, b) => bookingTimestamp(a) - bookingTimestamp(b))[0] || null;
+  const customerMessages = getMessagesFor(member).filter(message => message.from === 'admin');
+  const historyCount = bookings.filter(b => b.status !== '취소').length;
 
   openModal(`
-    <h3>내예약</h3>
-    <section class="mypage-account-card">
-      <button type="button" class="mypage-profile" id="mypage-info">
-        <span class="profile-avatar" aria-hidden="true">${MYPAGE_ICONS.user}</span>
-        <span class="profile-text"><strong>${esc(member.name || '고객')}님</strong><span>안녕하세요!</span></span>
-        <b>›</b>
-      </button>
-      <div class="mypage-account-divider"></div>
-      <div class="mypage-car-text">
-        <span class="mypage-car-label">내 차량</span>
-        <strong>${esc(member.model || '차량 정보를 등록해주세요')}</strong>
-        <span>${esc(carMeta || '-')}</span>
-      </div>
-    </section>
-    <nav class="mypage-quick" aria-label="내예약 바로가기">
-      <button type="button" id="quick-work"><span class="quick-icon">${MYPAGE_ICONS.wrench}</span><strong>작업현황</strong></button>
-      <button type="button" id="mypage-alerts"><span class="quick-icon">${MYPAGE_ICONS.bell}</span><strong>알림</strong>${notices.length ? `<em>${notices.length}</em>` : ''}</button>
-      <button type="button" id="mypage-bookings"><span class="quick-icon">${MYPAGE_ICONS.calendar}</span><strong>예약 내역</strong></button>
-      <button type="button" id="customer-detail-page"><span class="quick-icon">${MYPAGE_ICONS.doc}</span><strong>이용 내역</strong></button>
-      <button type="button" id="mypage-coupons"><span class="quick-icon">${MYPAGE_ICONS.check}</span><strong>내 쿠폰</strong></button>
-      <button type="button" id="mypage-events"><span class="quick-icon">${MYPAGE_ICONS.flag}</span><strong>이벤트</strong></button>
-    </nav>
-    <h4 class="mypage-sec-title">작업 현황</h4>
-    <article class="mypage-progress-card" id="work-status-card">
-      <p class="work-status-text">${esc(statusText)}</p>
-      <div class="work-steps">${stepsHtml}</div>
-      ${hasRunPhotos ? `<button type="button" class="mini-btn view-run-photos" data-run="${esc(latestRun.id)}">작업사진 보기</button>` : ''}
-    </article>
-    ${banner}
-    <button type="button" class="mypage-cs-btn" id="mypage-center">
-      <span class="cs-icon" aria-hidden="true">${MYPAGE_ICONS.headset}</span>
-      <span class="cs-text"><strong>고객센터</strong><span>실시간 채팅으로 문의하세요</span></span>
-      <b>›</b>
-    </button>
+    <div class="brand-mypage-shell">
+      <header class="brand-greeting">
+        <h2>${esc(member.name || '고객')}님, 안녕하세요</h2>
+        <p>${brandStageIndex >= 0 ? '내 차 정비 진행상황을 확인해보세요.' : '정비가 필요할 때 간편하게 예약해보세요.'}</p>
+      </header>
+
+      <section class="brand-now" aria-label="지금 내 차">
+        <div class="brand-now-body">
+          <div class="brand-now-tags">
+            <span>${esc(member.car || '차량번호 미등록')}</span>
+            <strong>${esc(currentStageLabel)}</strong>
+          </div>
+          <div class="brand-now-head">
+            <h3>${esc(member.model || '차량 정보를 등록해주세요')}</h3>
+            <p>${esc(serviceName)} · ${esc(branchName)}</p>
+          </div>
+          <div class="brand-rate">
+            <strong>${progress}<i>%</i></strong>
+            <span>${esc(statusText)}</span>
+          </div>
+          <div class="brand-progress" role="img" aria-label="정비 진행률 ${progress}%"><i style="width:${progress}%"></i></div>
+          <div class="brand-stages">${brandStatusSteps(brandStageIndex)}</div>
+        </div>
+        <button type="button" class="brand-next" id="mypage-next-booking">
+          <span aria-hidden="true">${MYPAGE_ICONS.calendar}</span>
+          <em>${nextBooking ? '다음 예약' : '정비 예약'}</em>
+          <b>${esc(nextBooking ? shortBookingDate(nextBooking) : '예약하기')}</b>
+          <i aria-hidden="true">›</i>
+        </button>
+      </section>
+
+      <section class="brand-menu-group" aria-labelledby="brand-my-car-title">
+        <h3 id="brand-my-car-title">내 차</h3>
+        <div class="brand-menu-list">
+          <button type="button" id="mypage-info"><span aria-hidden="true">${MYPAGE_ICONS.car}</span><strong>내 차 관리</strong><em>${member.model ? esc(member.model) : '차량정보 입력'}</em><i>›</i></button>
+          <button type="button" id="customer-detail-page"><span aria-hidden="true">${MYPAGE_ICONS.doc}</span><strong>정비 이력</strong><em>${historyCount ? `${historyCount}건` : '내역 없음'}</em><i>›</i></button>
+          <button type="button" id="mypage-center"><span aria-hidden="true">${MYPAGE_ICONS.headset}</span><strong>공업사에 한마디</strong><em>${customerMessages.length ? `메시지 ${customerMessages.length}` : '문의하기'}</em><i>›</i></button>
+        </div>
+      </section>
+
+      <section class="brand-menu-group" aria-labelledby="brand-booking-title">
+        <h3 id="brand-booking-title">예약</h3>
+        <div class="brand-menu-list">
+          <button type="button" id="mypage-bookings"><span aria-hidden="true">${MYPAGE_ICONS.calendar}</span><strong>예약 내역</strong><em>${bookings.length ? `${bookings.length}건` : '내역 없음'}</em><i>›</i></button>
+          <button type="button" class="brand-primary-row" id="mypage-reserve"><span aria-hidden="true">${MYPAGE_ICONS.wrench}</span><strong>정비 예약하기</strong><em>예약</em><i>›</i></button>
+          <button type="button" id="quick-work"><span aria-hidden="true">${MYPAGE_ICONS.check}</span><strong>작업사진·현황</strong><em>${notices.length ? `알림 ${notices.length}` : '확인하기'}</em><i>›</i></button>
+        </div>
+      </section>
+
+      <section class="brand-menu-group" aria-labelledby="brand-benefit-title">
+        <h3 id="brand-benefit-title">혜택</h3>
+        <div class="brand-menu-list">
+          <button type="button" id="mypage-coupons"><span aria-hidden="true">${MYPAGE_ICONS.check}</span><strong>내 쿠폰</strong><em>확인하기</em><i>›</i></button>
+          <button type="button" id="mypage-events"><span aria-hidden="true">${MYPAGE_ICONS.flag}</span><strong>이벤트</strong><em>진행 중</em><i>›</i></button>
+        </div>
+      </section>
+
+      <section class="brand-menu-group" aria-labelledby="brand-account-title">
+        <h3 id="brand-account-title">내 정보</h3>
+        <div class="brand-menu-list">
+          <button type="button" id="mypage-account"><span aria-hidden="true">${MYPAGE_ICONS.user}</span><strong>회원정보 수정</strong><em>${esc(member.name || '')}</em><i>›</i></button>
+          <button type="button" id="mypage-alerts"><span aria-hidden="true">${MYPAGE_ICONS.bell}</span><strong>알림</strong><em>${notices.length ? `${notices.length}건` : '새 알림 없음'}</em><i>›</i></button>
+        </div>
+      </section>
+    </div>
   `, true);
-  modalCard.classList.add('mypage-card');
-  wireEventBanner();
+  modalCard.classList.add('mypage-card', 'brand-mypage');
+  syncMobileTabbar(true);
   $('#customer-detail-page').addEventListener('click', openCustomerHistoryModal);
   $('#mypage-alerts').addEventListener('click', openMyAlertsPage);
   $('#mypage-info').addEventListener('click', openMyInfoPage);
+  $('#mypage-account').addEventListener('click', openMyInfoPage);
   $('#mypage-bookings').addEventListener('click', openMyBookingsPage);
   $('#mypage-coupons').addEventListener('click', openMyCouponsPage);
   $('#mypage-events').addEventListener('click', openMyEventsPage);
   $('#mypage-center').addEventListener('click', () => openCustomerCenterModal(member));
   $('#quick-work').addEventListener('click', openWorkStatusPage);
-  modalCard.querySelectorAll('.view-run-photos').forEach(btn => {
-    btn.addEventListener('click', () => openRunPhotosModal(btn.dataset.run));
-  });
+  $('#mypage-reserve').addEventListener('click', () => { closeModal(); openReserveFlow(); });
+  $('#mypage-next-booking').addEventListener('click', nextBooking
+    ? openMyBookingsPage
+    : () => { closeModal(); openReserveFlow(); });
 }
 
 async function openMyCouponsPage() {
@@ -2411,6 +2568,8 @@ async function renderBranches() {
       const a = document.createElement('a');
       a.href = 'tel:' + b.tel.replace(/[^\d]/g, '');
       a.textContent = b.tel;
+      a.dataset.phoneBranch = b.name || '';
+      a.dataset.phone = b.tel || '';
       tel.append(a);
     } else tel.textContent = b.tel;
 
@@ -2539,8 +2698,8 @@ function openBranchPhotoModal(branch, url) {
       <h3>${esc(branch.name || '')}</h3>
       <p>${esc(branch.addr || '')}</p>
       <div class="branch-photo-actions">
-        ${tel ? `<a class="mini-btn add" href="${tel}">전화연결</a>` : ''}
-        ${mobile ? `<a class="mini-btn" href="${mobile}">휴대폰 연결</a>` : ''}
+        ${tel ? `<a class="mini-btn add" href="${tel}" data-phone-branch="${esc(branch.name || '')}" data-phone="${esc(branch.tel || '')}">전화연결</a>` : ''}
+        ${mobile ? `<a class="mini-btn" href="${mobile}" data-phone-branch="${esc(branch.name || '')}" data-phone="${esc(branch.mobile || '')}">휴대폰 연결</a>` : ''}
         <a class="mini-btn" href="${esc(place)}" target="_blank" rel="noopener">플레이스 연결</a>
       </div>
     </div>
@@ -4001,9 +4160,6 @@ function openPhoneBookingBranches() {
     </div>
     <button type="button" class="modal-cancel phone-branch-close" onclick="closeModal()">닫기</button>
   `);
-  $$('.phone-branch-list a').forEach(link => link.addEventListener('click', () => {
-    logEvent('phone_call', { branch: link.dataset.phoneBranch, phone: link.dataset.phone });
-  }));
 }
 
 async function closeAdminBookingDate(date) {
@@ -4424,14 +4580,15 @@ function custRunRowHtml(run) {
 async function renderAdmCust() {
   const body = $('#adm-cust-body');
   if (!isTopAdmin()) { body.innerHTML = ''; return; }
-  body.innerHTML = '<p class="hint">실제 고객 계정을 확인하는 중...</p>';
-  try { await refreshCanonicalMembers(); }
+  body.innerHTML = '<p class="hint">고객 목록을 확인하는 중...</p>';
+  let directoryMembers;
+  try { directoryMembers = await refreshCanonicalMembers(); }
   catch (error) {
-    body.innerHTML = `<p class="form-error">고객 계정 원본을 불러오지 못했습니다. 잘못된 목록을 표시하지 않습니다.</p><small>${esc(error.message || '')}</small>`;
+    body.innerHTML = `<p class="form-error">고객 목록을 불러오지 못했습니다. 잘못된 목록을 표시하지 않습니다.</p><small>${esc(error.message || '')}</small>`;
     return;
   }
   const bookings = getBookings();
-  const members = store.get('pm-members', [])
+  const members = directoryMembers
     .map(m => ({ ...m, latestBooking: latestBookingForMember(m, bookings) }))
     .sort((a, b) => bookingTimestamp(b.latestBooking) - bookingTimestamp(a.latestBooking));
   const customers = getCustomers();
@@ -4713,6 +4870,73 @@ async function renderAdmCust() {
   });
 }
 
+function guestCustomerDirectory() {
+  const guests = [];
+  getBookings()
+    .filter(booking => booking?.guest === true)
+    .slice()
+    .sort((a, b) => bookingTimestamp(b) - bookingTimestamp(a))
+    .forEach(booking => {
+      const profile = {
+        name: booking.name || '',
+        car: booking.car || '',
+        model: booking.model || '',
+        phone: booking.phone || ''
+      };
+      const current = guests.find(entry => sameCustomer(entry, profile));
+      if (current) current.bookings.push(booking);
+      else guests.push({ ...profile, bookings: [booking] });
+    });
+  return guests;
+}
+
+function renderAdmGuest() {
+  const body = $('#adm-guest-body');
+  if (!isTopAdmin()) { body.innerHTML = ''; return; }
+  const guests = guestCustomerDirectory();
+  body.innerHTML = `<div id="guest-list">${guests.length ? '' : '<p class="hint">비회원 예약 고객이 없습니다.</p>'}</div>`;
+  const list = $('#guest-list');
+
+  guests.forEach(guest => {
+    const latest = guest.bookings[0];
+    const card = document.createElement('article');
+    card.className = 'cust-card guest-card';
+    card.innerHTML = `
+      <button type="button" class="cust-summary" aria-expanded="false">
+        <strong>${esc(guest.name || '-')}</strong>
+        <span>${esc(guest.car || '-')}</span>
+        <span>${esc(guest.model || '-')}</span>
+        <span>${esc(guest.phone || '-')}</span>
+        <em>최근 ${esc(latest?.date || '-')} ${esc(latest?.time || '')}</em>
+      </button>
+      <div class="cust-detail" hidden>
+        <div class="cust-head">
+          <strong>${esc(guest.name || '-')}</strong>
+          <span>${esc(guest.car || '-')} · ${esc(guest.model || '-')} · <a href="${phoneHref(guest.phone)}">${esc(guest.phone || '-')}</a></span>
+          <em>비회원 예약 ${guest.bookings.length}건</em>
+        </div>
+        <div class="guest-booking-list">
+          ${guest.bookings.map(booking => `
+            <div class="guest-booking-row">
+              <time>${esc(booking.date || '-')} ${esc(booking.time || '')}</time>
+              <strong>${esc(booking.branch || '-')}</strong>
+              <span>${esc((booking.services || []).join(' · ') || '-')}</span>
+              <em>${esc(bookingStatusLabel(booking))}</em>
+            </div>`).join('')}
+        </div>
+      </div>`;
+    const summary = card.querySelector('.cust-summary');
+    const detail = card.querySelector('.cust-detail');
+    summary.addEventListener('click', () => {
+      const open = detail.hidden;
+      detail.hidden = !open;
+      card.classList.toggle('open', open);
+      summary.setAttribute('aria-expanded', String(open));
+    });
+    list.append(card);
+  });
+}
+
 /* 고객 블랙리스트/삭제: 계정은 회원 목록에서 제거, 기록은 보안 화면에 보관.
    블랙리스트 등록 시 해당 핸드폰번호는 재가입·로그인 불가. 고객 자료(메모·정비내역)는 유지. */
 async function banMember(m, type) {
@@ -4729,10 +4953,10 @@ async function banMember(m, type) {
     at: new Date().toISOString(),
     member: snapshot
   });
-  store.set('pm-banned-members', banned);
-  store.set('pm-members', store.get('pm-members', []).filter(x => x.id !== m.id));
+  await store.set('pm-banned-members', banned);
+  canonicalMembersRefreshedAt = 0;
   openCustCards.delete(m.car);
-  renderAdmCust();
+  await renderAdmCust();
   pmAlert(`${label} 처리되었습니다. 보안 화면에서 확인할 수 있습니다.`);
 }
 
@@ -5034,22 +5258,97 @@ function runAllPhotos(run) {
 }
 
 /* 앨범형 커버: 첫 장 바로 노출 + 장수, 클릭 시 전체 앨범 */
-/* 이미지 확대(라이트박스): 앨범·작업현황 썸네일 클릭 시 화면 전체로 크게 표시 (모바일·PC 공통) */
-function openImageLightbox(src, alt = '작업 사진') {
+/* 이미지 확대 갤러리: 좌우 버튼·키보드·모바일 스와이프로 같은 작업의 사진을 연속 탐색 */
+function openImageLightbox(photos, startIndex = 0) {
   document.querySelector('.image-lightbox')?.remove();
+  const items = (Array.isArray(photos) ? photos : [{ src: photos, alt: '작업 사진' }])
+    .filter(item => item?.src);
+  if (!items.length) return;
+  let currentIndex = Math.min(Math.max(Number(startIndex) || 0, 0), items.length - 1);
+  let touchStartX = null;
   const box = document.createElement('div');
   box.className = 'image-lightbox';
   box.innerHTML = `
     <button type="button" class="lightbox-x" aria-label="닫기">×</button>
-    <img src="${esc(src)}" alt="${esc(alt)}">`;
+    <button type="button" class="lightbox-nav lightbox-prev" aria-label="이전 사진">‹</button>
+    <figure class="lightbox-figure">
+      <img alt="">
+      <figcaption>
+        <span class="lightbox-caption"></span>
+        <span class="lightbox-count" aria-live="polite"></span>
+      </figcaption>
+    </figure>
+    <button type="button" class="lightbox-nav lightbox-next" aria-label="다음 사진">›</button>`;
   document.body.append(box);
-  box.addEventListener('click', e => { if (e.target.tagName !== 'IMG') box.remove(); });
+
+  const image = box.querySelector('img');
+  const caption = box.querySelector('.lightbox-caption');
+  const counter = box.querySelector('.lightbox-count');
+  const prevButton = box.querySelector('.lightbox-prev');
+  const nextButton = box.querySelector('.lightbox-next');
+  const show = nextIndex => {
+    currentIndex = (nextIndex + items.length) % items.length;
+    const current = items[currentIndex];
+    image.src = current.src;
+    image.alt = current.alt || '작업 사진';
+    caption.textContent = current.alt || '작업 사진';
+    counter.textContent = `${currentIndex + 1} / ${items.length}`;
+  };
+  const close = () => {
+    document.removeEventListener('keydown', onKeydown);
+    box.remove();
+  };
+  const onKeydown = event => {
+    if (event.key === 'Escape') close();
+    if (event.key === 'ArrowLeft' && items.length > 1) show(currentIndex - 1);
+    if (event.key === 'ArrowRight' && items.length > 1) show(currentIndex + 1);
+  };
+
+  prevButton.hidden = items.length < 2;
+  nextButton.hidden = items.length < 2;
+  box.querySelector('.lightbox-x').addEventListener('click', close);
+  prevButton.addEventListener('click', () => show(currentIndex - 1));
+  nextButton.addEventListener('click', () => show(currentIndex + 1));
+  box.addEventListener('click', event => { if (event.target === box) close(); });
+  box.addEventListener('touchstart', event => {
+    touchStartX = event.changedTouches[0]?.clientX ?? null;
+  }, { passive: true });
+  box.addEventListener('touchend', event => {
+    if (touchStartX === null || items.length < 2) return;
+    const distance = (event.changedTouches[0]?.clientX ?? touchStartX) - touchStartX;
+    touchStartX = null;
+    if (Math.abs(distance) < 48) return;
+    show(currentIndex + (distance < 0 ? 1 : -1));
+  }, { passive: true });
+  document.addEventListener('keydown', onKeydown);
+  show(currentIndex);
+}
+
+function lightboxPhotoGroup(clickedImage) {
+  const gallery = clickedImage.closest('.album-wrap')
+    || clickedImage.closest('.work-detail')
+    || clickedImage.closest('.stage-photos')
+    || clickedImage.closest('.run-photo-grid')
+    || clickedImage.parentElement;
+  const images = [...gallery.querySelectorAll('.album-item img, .wd-photos img, .stage-photos img, .run-photo-grid img')]
+    .filter(img => img.offsetParent !== null && (img.currentSrc || img.src));
+  const items = images.map(img => ({
+    src: img.currentSrc || img.src,
+    alt: img.alt || '작업 사진'
+  }));
+  return {
+    items: items.length ? items : [{ src: clickedImage.currentSrc || clickedImage.src, alt: clickedImage.alt || '작업 사진' }],
+    index: Math.max(0, images.indexOf(clickedImage))
+  };
 }
 /* 앨범/작업현황/단계 미리보기의 모든 썸네일에 확대 적용 */
 document.addEventListener('click', e => {
   if (e.target.closest('button')) return;
   const img = e.target.closest('.album-item img, .wd-photos img, .stage-photos img, .run-photo-grid img');
-  if (img) openImageLightbox(img.currentSrc || img.src, img.alt);
+  if (img) {
+    const gallery = lightboxPhotoGroup(img);
+    openImageLightbox(gallery.items, gallery.index);
+  }
 });
 
 async function renderRunAlbumCover(run) {
@@ -6832,7 +7131,7 @@ function openLottoAdminModal(editId = '') {
 const ACTIVITY_VIEW_NAMES = Object.freeze({
   intro: '프로모터스', location: '오시는길', cases: '정비사례', guide: '브랜드별 정비 가이드', notice: '공지사항',
   'adm-book': '예약관리', 'adm-work': '작업현황', 'adm-approval': '가입승인',
-  'adm-cust': '고객관리', 'adm-prod': '상품관리', 'adm-inquiry': '고객문의',
+  'adm-cust': '고객관리', 'adm-guest': '비회원관리', 'adm-prod': '상품관리', 'adm-inquiry': '고객문의',
   'adm-settings': '보안', 'adm-activity': '분석'
 });
 const PUBLIC_ACTIVITY_VIEWS = Object.freeze(['intro', 'location', 'cases', 'guide', 'notice']);
@@ -6885,6 +7184,12 @@ function activityDelta(current, previous) {
 function activityChannel(item) {
   if (item?.payload?.channel) return item.payload.channel;
   return activityAcquisitionContext(item?.payload?.referrer || item?.referrer || '', item?.page_url || location.href).channel;
+}
+function activityReferrerLabel(payload = {}) {
+  if (payload.referrerHost) return payload.referrerHost;
+  try { return new URL(payload.referrer || '').hostname.toLowerCase().replace(/^www\./, ''); } catch {}
+  if (payload.source) return payload.source;
+  return '직접 접속';
 }
 function activityMaskedIp(value) {
   const text = String(value || '');
@@ -7141,13 +7446,17 @@ async function renderAdmActivity() {
       campaigns:new Set(),
       searchQueries:new Set(),
       purchasedKeywords:new Set(),
-      adGroups:new Set()
+      adGroups:new Set(),
+      referrers:new Set(),
+      callVisitors:new Set(),
+      calls:0
     });
     const addAcquisitionDetails = (channel, payload = {}) => {
       if (payload.campaign) channel.campaigns.add(payload.campaign);
       if (payload.searchQuery) channel.searchQueries.add(payload.searchQuery);
       if (payload.purchasedKeyword || payload.keyword) channel.purchasedKeywords.add(payload.purchasedKeyword || payload.keyword);
       if (payload.adGroup) channel.adGroups.add(payload.adGroup);
+      channel.referrers.add(activityReferrerLabel(payload));
     };
     sessionStarts.forEach(item => {
       const name = activityChannel(item);
@@ -7166,6 +7475,10 @@ async function renderAdmActivity() {
       if (item.event_type === 'view_open') channel.pageViews += 1;
       if (item.event_type === 'reservation_click') channel.intentVisitors.add(item.visitor_key);
       if (item.event_type === 'signup_complete') channel.signups += 1;
+      if (item.event_type === 'phone_call') {
+        channel.calls += 1;
+        channel.callVisitors.add(item.visitor_key);
+      }
       if (item.event_type === 'booking_complete') {
         const resolvedBookingId = resolvedBookingIdForLog(item);
         const bookingId = resolvedBookingId || activityBookingLogKey(item);
@@ -7226,6 +7539,10 @@ async function renderAdmActivity() {
       if (item.event_type === 'view_open') channel.pageViews += 1;
       if (item.event_type === 'reservation_click') channel.intentVisitors.add(item.visitor_key);
       if (item.event_type === 'signup_complete') channel.signups += 1;
+      if (item.event_type === 'phone_call') {
+        channel.calls += 1;
+        channel.callVisitors.add(item.visitor_key);
+      }
       if (item.event_type === 'booking_complete') {
         const resolvedBookingId = resolvedBookingIdForLog(item);
         const bookingId = resolvedBookingId || activityBookingLogKey(item);
@@ -7254,6 +7571,10 @@ async function renderAdmActivity() {
     const selectedChannels = [...selectedChannelMap.values()].sort((a,b) => b.visitors.size - a.visitors.size);
     const selectedDonut = activityDonut(selectedChannels.map(channel => ({ count:channel.visitors.size })));
     const selectedChannelVisitors = new Set(selectedChannels.flatMap(channel => [...channel.visitors])).size;
+    const selectedPhoneItems = visitorItems
+      .filter(item => item.event_type === 'phone_call')
+      .filter(item => activitySelectedBranch === '전체' || activitySameBranch(item.payload?.branch, activitySelectedBranch));
+    const selectedPhoneVisitors = new Set(selectedPhoneItems.map(item => item.visitor_key).filter(Boolean));
     const selectedTrackedBookingIds = new Set(selectedChannels.flatMap(channel => [...channel.bookingIds]));
     const selectedLinkedBookingIds = new Set(
       selectedChannels
@@ -7314,6 +7635,52 @@ async function renderAdmActivity() {
     });
     const lastCollectedAt = items[0]?.created_at ? new Date(items[0].created_at).toLocaleString('ko-KR') : '수집 내역 없음';
     const unknownPerformance = selectedChannels.find(channel => channel.name === '미분류');
+    const selectedSessionStarts = sessionStarts.filter(item => activitySelectedBranch === '전체' || selectedVisitorKeys.has(item.visitor_key));
+    const phoneSessionIds = new Set(selectedPhoneItems.map(item => item.payload?.sessionId).filter(Boolean));
+    const bookingSessionIds = new Set(
+      visitorItems
+        .filter(item => item.event_type === 'booking_complete')
+        .filter(item => activitySelectedBranch === '전체' || activitySameBranch(item.payload?.branch, activitySelectedBranch))
+        .map(item => item.payload?.sessionId)
+        .filter(Boolean)
+    );
+    const keywordMap = new Map();
+    const addSavedKeyword = (value, type, start) => {
+      const keyword = String(value || '').trim();
+      if (!keyword) return;
+      const channel = activityChannel(start);
+      const key = `${type}:${channel}:${keyword.toLowerCase()}`;
+      const row = keywordMap.get(key) || {
+        keyword,
+        type,
+        channel,
+        visitors:new Set(),
+        sessions:new Set(),
+        phoneSessions:new Set(),
+        bookingSessions:new Set()
+      };
+      if (start.visitor_key) row.visitors.add(start.visitor_key);
+      const sessionId = start.payload?.sessionId;
+      if (sessionId) {
+        row.sessions.add(sessionId);
+        if (phoneSessionIds.has(sessionId)) row.phoneSessions.add(sessionId);
+        if (bookingSessionIds.has(sessionId)) row.bookingSessions.add(sessionId);
+      }
+      keywordMap.set(key, row);
+    };
+    selectedSessionStarts.forEach(start => {
+      addSavedKeyword(start.payload?.searchQuery, '실제 검색어', start);
+      addSavedKeyword(start.payload?.purchasedKeyword, '광고 등록 키워드', start);
+    });
+    const savedKeywords = [...keywordMap.values()].sort((a, b) => b.sessions.size - a.sessions.size || a.keyword.localeCompare(b.keyword, 'ko'));
+    const searchStarts = selectedSessionStarts.filter(item => /검색/.test(activityChannel(item)));
+    const searchableStarts = searchStarts.filter(item => item.payload?.searchQuery || item.payload?.purchasedKeyword);
+    const knownReferrerStarts = selectedSessionStarts.filter(item =>
+      item.payload?.referrerHost || item.payload?.referrer || item.payload?.source || activityChannel(item) !== '직접 접속'
+    );
+    const telElementClicks = visitorItems
+      .filter(item => item.event_type === 'element_click' && /^tel:/i.test(String(item.payload?.target || '')))
+      .filter(item => activitySelectedBranch === '전체' || selectedVisitorKeys.has(item.visitor_key));
     const qualityAlerts = [];
     if (adUnavailableCount) qualityAlerts.push('네이버 광고 숫자를 불러오지 못했습니다. 잠시 후 다시 확인해주세요.');
     if (!adUnavailableCount && selectedChannels.some(channel => channel.name === '네이버 검색광고' && channel.visitors.size) && Number(adTotals.clicks || 0) === 0) {
@@ -7321,6 +7688,13 @@ async function renderAdmActivity() {
     }
     if (unknownPerformance?.visitors.size) qualityAlerts.push(`들어온 곳을 확인할 수 없는 방문이 ${unknownPerformance.visitors.size}명 있습니다.`);
     if (selectedUntrackedBookings.length) qualityAlerts.push(`유입경로가 남지 않은 기존 예약이 ${selectedUntrackedBookings.length}건 있습니다.`);
+    if (searchStarts.length > searchableStarts.length) {
+      qualityAlerts.push(`검색 유입 ${searchStarts.length}건 중 ${searchStarts.length - searchableStarts.length}건은 검색어가 전달되지 않았습니다. 자연검색어는 네이버·구글 정책상 별도 검색 분석 도구 연결이 필요할 수 있습니다.`);
+    }
+    if (telElementClicks.length > selectedPhoneItems.length) {
+      qualityAlerts.push(`이전 전화 링크 클릭 ${telElementClicks.length - selectedPhoneItems.length}건은 일반 클릭으로만 남아 지점별 확인이 어렵습니다. 새 방문부터는 전화 클릭으로 별도 저장됩니다.`);
+    }
+    if (!selectedPhoneItems.length) qualityAlerts.push('선택한 기간에는 저장된 전화 클릭이 없습니다. 전화 클릭 추적은 실제 통화 연결·통화 완료 여부가 아니라 전화 앱을 연 시점까지 확인합니다.');
     if (selectedChannelVisitors < 30) qualityAlerts.push('방문자가 30명보다 적어 비율보다 실제 건수를 중심으로 봐주세요.');
 
     const simpleFunnel = [
@@ -7358,6 +7732,7 @@ async function renderAdmActivity() {
     const dashboardPanel = `
       ${qualityAlerts.length ? `<section class="activity-alerts"><strong>확인할 내용</strong><ul>${qualityAlerts.map(message => `<li>${esc(message)}</li>`).join('')}</ul></section>` : ''}
       <section class="activity-simple-kpis activity-owner-kpis">
+        <article class="${activityZeroClass(selectedPhoneItems.length)}"><span>전화 클릭</span><strong>${selectedPhoneItems.length}건</strong><small>${selectedPhoneVisitors.size}명 · 전화 앱 열기 기준</small></article>
         <article class="${activityZeroClass(selectedBranchRow?.confirmed)}"><span>예약 확정</span><strong>${selectedBranchRow?.confirmed || 0}건</strong><small>예약 생성 ${selectedSubmittedBookings.length}건</small></article>
         <article class="${activityZeroClass(selectedBranchRow?.visits)}"><span>실제 입고</span><strong>${selectedBranchRow?.visits || 0}건</strong><small>예약일 기준</small></article>
         <article class="${activityZeroClass(revenue)}"><span>매출</span><strong>${revenue.toLocaleString()}원</strong><small>정산 완료 기준</small></article>
@@ -7373,18 +7748,29 @@ async function renderAdmActivity() {
       </section>
       <section class="settings-card">
         <div class="activity-section-head"><div><h3>어디서 와서 예약했나</h3><p>방문 합계와 예약 합계를 함께 확인할 수 있습니다.</p></div></div>
-        <div class="activity-table-wrap"><table class="activity-table activity-owner-table"><thead><tr><th>들어온 곳</th><th>방문</th><th>예약 생성</th><th>확정</th><th>입고</th><th>예약 전환</th><th>광고비</th><th>예약당 광고비</th></tr></thead><tbody>${channelTableRows.map(row => `<tr><td><strong>${esc(row.channel.name)}</strong></td><td>${row.channel.visitors.size}명</td><td>${row.created}건</td><td>${row.confirmed}건</td><td>${row.arrived}건</td><td>${activityRatio(row.created, row.channel.visitors.size)}</td><td>${row.adCost === null ? '—' : `${Math.round(row.adCost).toLocaleString()}원`}</td><td>${row.adCost === null || !row.created ? '—' : `${Math.round(row.adCost / row.created).toLocaleString()}원`}</td></tr>`).join('') || '<tr><td colspan="8">선택한 기간의 유입 내역이 없습니다.</td></tr>'}</tbody><tfoot><tr><th>합계</th><th>${channelVisitorTotal}명</th><th>${channelBookingTotal}건</th><th>${selectedBranchRow?.confirmed || 0}건</th><th>${selectedBranchRow?.visits || 0}건</th><th>${activityRatio(channelBookingTotal, channelVisitorTotal)}</th><th>${Math.round(Number(adTotals.cost || 0)).toLocaleString()}원</th><th>${channelBookingTotal ? `${Math.round(Number(adTotals.cost || 0) / channelBookingTotal).toLocaleString()}원` : '—'}</th></tr></tfoot></table></div>
+        <div class="activity-table-wrap"><table class="activity-table activity-owner-table"><thead><tr><th>들어온 곳</th><th>방문</th><th>전화 클릭</th><th>예약 생성</th><th>확정</th><th>입고</th><th>예약 전환</th><th>광고비</th><th>예약당 광고비</th></tr></thead><tbody>${channelTableRows.map(row => `<tr><td><strong>${esc(row.channel.name)}</strong></td><td>${row.channel.visitors.size}명</td><td>${row.channel.calls}건</td><td>${row.created}건</td><td>${row.confirmed}건</td><td>${row.arrived}건</td><td>${activityRatio(row.created, row.channel.visitors.size)}</td><td>${row.adCost === null ? '—' : `${Math.round(row.adCost).toLocaleString()}원`}</td><td>${row.adCost === null || !row.created ? '—' : `${Math.round(row.adCost / row.created).toLocaleString()}원`}</td></tr>`).join('') || '<tr><td colspan="9">선택한 기간의 유입 내역이 없습니다.</td></tr>'}</tbody><tfoot><tr><th>합계</th><th>${channelVisitorTotal}명</th><th>${selectedPhoneItems.length}건</th><th>${channelBookingTotal}건</th><th>${selectedBranchRow?.confirmed || 0}건</th><th>${selectedBranchRow?.visits || 0}건</th><th>${activityRatio(channelBookingTotal, channelVisitorTotal)}</th><th>${Math.round(Number(adTotals.cost || 0)).toLocaleString()}원</th><th>${channelBookingTotal ? `${Math.round(Number(adTotals.cost || 0) / channelBookingTotal).toLocaleString()}원` : '—'}</th></tr></tfoot></table></div>
       </section>
       <section class="settings-card">
         <div class="activity-section-head"><div><h3>지점별 예약 진행</h3><p>예약부터 입고·완료까지 비교합니다.</p></div></div>
-        <div class="activity-table-wrap"><table class="activity-table"><thead><tr><th>지점</th><th>예약 생성</th><th>확정</th><th>입고</th><th>정비 완료</th><th>취소</th></tr></thead><tbody>${branchRows.map(row => `<tr><td><strong>${esc(row.name)}</strong></td><td>${row.bookings}건</td><td>${row.confirmed}건</td><td>${row.visits}건</td><td>${row.completed}건</td><td>${row.cancelled}건</td></tr>`).join('') || '<tr><td colspan="6">선택한 기간의 지점 내역이 없습니다.</td></tr>'}</tbody></table></div>
+        <div class="activity-table-wrap"><table class="activity-table"><thead><tr><th>지점</th><th>전화 클릭</th><th>예약 생성</th><th>확정</th><th>입고</th><th>정비 완료</th><th>취소</th></tr></thead><tbody>${branchRows.map(row => `<tr><td><strong>${esc(row.name)}</strong></td><td>${row.calls}건</td><td>${row.bookings}건</td><td>${row.confirmed}건</td><td>${row.visits}건</td><td>${row.completed}건</td><td>${row.cancelled}건</td></tr>`).join('') || '<tr><td colspan="7">선택한 기간의 지점 내역이 없습니다.</td></tr>'}</tbody></table></div>
       </section>`;
 
     const acquisitionPanel = `
+      ${qualityAlerts.length ? `<section class="activity-alerts"><strong>데이터에서 부족한 점</strong><ul>${qualityAlerts.map(message => `<li>${esc(message)}</li>`).join('')}</ul></section>` : ''}
+      <section class="activity-simple-kpis activity-data-kpis">
+        <article class="${activityZeroClass(savedKeywords.length)}"><span>저장된 키워드</span><strong>${savedKeywords.length}개</strong><small>실제 검색어와 광고 키워드 구분</small></article>
+        <article class="${activityZeroClass(searchableStarts.length)}"><span>검색어 확인</span><strong>${searchableStarts.length}/${searchStarts.length}건</strong><small>검색 유입 중 전달된 건수</small></article>
+        <article class="${activityZeroClass(knownReferrerStarts.length)}"><span>유입처 확인</span><strong>${knownReferrerStarts.length}/${selectedSessionStarts.length}건</strong><small>블로그·검색·외부 사이트 포함</small></article>
+        <article class="${activityZeroClass(selectedPhoneItems.length)}"><span>전화 클릭</span><strong>${selectedPhoneItems.length}건</strong><small>실제 통화 완료는 확인 불가</small></article>
+      </section>
       ${simpleAdPanel}
       <section class="settings-card">
         <div class="activity-section-head"><div><h3>유입·검색어 상세</h3><p>손님이 어디에서 어떤 검색어로 들어왔는지 봅니다.</p></div></div>
-        <div class="activity-table-wrap"><table class="activity-table activity-acquisition-table"><thead><tr><th>들어온 곳</th><th>방문</th><th>평균 관심시간</th><th>예약 관심</th><th>예약 생성</th><th>실제 검색어</th><th>광고에 등록한 검색어</th><th>광고 이름</th></tr></thead><tbody>${selectedChannels.map(channel => `<tr><td><strong>${esc(channel.name)}</strong></td><td>${channel.visitors.size}명</td><td>${activityDuration(channel.dwell / Math.max(1, channel.sessions))}</td><td>${channel.intentVisitors.size}명</td><td>${channel.bookingIds.size}건</td><td>${esc([...channel.searchQueries].join(' · ') || '확인 불가')}</td><td>${esc([...channel.purchasedKeywords].join(' · ') || '확인 불가')}</td><td>${esc([...channel.campaigns, ...channel.adGroups].join(' · ') || '확인 불가')}</td></tr>`).join('') || '<tr><td colspan="8">선택한 기간의 유입 내역이 없습니다.</td></tr>'}</tbody></table></div>
+        <div class="activity-table-wrap"><table class="activity-table activity-acquisition-table"><thead><tr><th>들어온 곳</th><th>유입 사이트</th><th>방문</th><th>평균 관심시간</th><th>예약 관심</th><th>전화 클릭</th><th>예약 생성</th><th>실제 검색어</th><th>광고 등록 키워드</th><th>광고 이름</th></tr></thead><tbody>${selectedChannels.map(channel => `<tr><td><strong>${esc(channel.name)}</strong></td><td>${esc([...channel.referrers].join(' · ') || '직접 접속')}</td><td>${channel.visitors.size}명</td><td>${activityDuration(channel.dwell / Math.max(1, channel.sessions))}</td><td>${channel.intentVisitors.size}명</td><td>${channel.calls}건</td><td>${channel.bookingIds.size}건</td><td>${esc([...channel.searchQueries].join(' · ') || '확인 불가')}</td><td>${esc([...channel.purchasedKeywords].join(' · ') || '확인 불가')}</td><td>${esc([...channel.campaigns, ...channel.adGroups].join(' · ') || '확인 불가')}</td></tr>`).join('') || '<tr><td colspan="10">선택한 기간의 유입 내역이 없습니다.</td></tr>'}</tbody></table></div>
+      </section>
+      <section class="settings-card">
+        <div class="activity-section-head"><div><h3>저장된 검색 키워드</h3><p>선택한 기간에 실제로 전달된 키워드를 중복 없이 모았습니다.</p></div><strong>${savedKeywords.length}개</strong></div>
+        <div class="activity-table-wrap"><table class="activity-table activity-keyword-table"><thead><tr><th>키워드</th><th>구분</th><th>들어온 곳</th><th>방문</th><th>전화 클릭</th><th>예약 생성</th></tr></thead><tbody>${savedKeywords.map(row => `<tr><td><strong>${esc(row.keyword)}</strong></td><td>${esc(row.type)}</td><td>${esc(row.channel)}</td><td>${row.visitors.size}명 / ${row.sessions.size}회</td><td>${row.phoneSessions.size}건</td><td>${row.bookingSessions.size}건</td></tr>`).join('') || '<tr><td colspan="6">전달되어 저장된 검색 키워드가 없습니다.</td></tr>'}</tbody></table></div>
       </section>
       <section class="settings-card">
         <div class="activity-section-head"><div><h3>관심이 높았던 페이지</h3><p>평균 관심시간은 세션 수 기준입니다.</p></div></div>
@@ -7706,17 +8092,18 @@ function renderAdmSettings() {
       const label = entry.type === 'blocked' ? '블랙리스트를 해제' : '계정을 복구';
       if (!await pmConfirm(`${entry.member?.name || entry.member?.car || '회원'}님의 ${label}할까요?\n다시 로그인과 가입이 가능해집니다.`, { title: '블랙리스트', okText: '확인' })) return;
       const members = store.get('pm-members', []);
-      if (entry.member?.id && members.some(x => x.id === entry.member.id)) {
-        pmAlert('같은 아이디로 가입된 회원이 이미 있어 복구할 수 없습니다. 기록삭제로 블랙리스트만 해제할 수 있습니다.');
-        return;
-      }
-      if (entry.member) {
+      if (entry.member && !members.some(x =>
+        (entry.member.id && x.id === entry.member.id)
+        || (entry.member.car && x.car === entry.member.car)
+        || (entry.member.phone && normPhone(x.phone) === normPhone(entry.member.phone))
+      )) {
         members.push(entry.member);
-        store.set('pm-members', members);
+        await store.set('pm-members', members);
       }
-      store.set('pm-banned-members', banned.filter(b => b.id !== entry.id));
+      await store.set('pm-banned-members', banned.filter(b => b.id !== entry.id));
+      canonicalMembersRefreshedAt = 0;
       renderAdmSettings();
-      renderAdmCust();
+      await renderAdmCust();
     });
   });
   $$('.ban-remove').forEach(btn => {
@@ -7985,17 +8372,95 @@ function renderAdmInquiry() {
    이벤트 배너 + 앱 설치 (PWA)
    ============================================================ */
 let deferredInstallPrompt = null;
+const APP_LAUNCH_PARAM = 'app_launch';
 window.addEventListener('beforeinstallprompt', e => {
   e.preventDefault();
   deferredInstallPrompt = e;
 });
 window.addEventListener('appinstalled', () => {
   deferredInstallPrompt = null;
-  pmAlert('프로모터스 앱이 홈 화면에 추가되었습니다.', '설치 완료');
+  showInstalledAppLaunchSheet();
 });
 
 const isStandaloneApp = () =>
   window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+
+function installedAppLaunchUrl() {
+  const url = new URL('/', location.origin);
+  url.searchParams.set(APP_LAUNCH_PARAM, 'installed');
+  return url;
+}
+
+function openInstalledApp() {
+  const url = installedAppLaunchUrl();
+  const isAndroid = /Android/i.test(navigator.userAgent);
+  if (isAndroid && location.protocol === 'https:') {
+    location.href = `intent://${url.host}${url.pathname}${url.search}#Intent;scheme=https;action=android.intent.action.VIEW;category=android.intent.category.BROWSABLE;end`;
+    return;
+  }
+  location.href = url.href;
+}
+
+function showInstalledAppLaunchSheet() {
+  document.querySelector('.install-sheet-backdrop')?.remove();
+  const isAndroid = /Android/i.test(navigator.userAgent);
+  let seconds = isAndroid ? 6 : 0;
+  const backdrop = document.createElement('div');
+  backdrop.className = 'install-sheet-backdrop';
+  backdrop.innerHTML = `
+    <div class="install-sheet" role="dialog" aria-modal="true" aria-label="설치 완료 및 앱 실행">
+      <span class="install-sheet-grip" aria-hidden="true"></span>
+      <img src="images/logo-icon.png" alt="" class="install-sheet-logo">
+      <strong class="install-sheet-title">설치 승인이 완료됐어요</strong>
+      <p class="install-sheet-sub">프로모터스 앱을 준비하고 있습니다</p>
+      <p class="install-sheet-note">
+        ${isAndroid
+          ? '휴대폰이 앱 등록을 마치면 <b><span data-install-count>6</span>초 후 자동으로 앱을 엽니다.</b>'
+          : '아래 버튼을 누르면 설치된 프로모터스 앱으로 이동합니다.'}
+      </p>
+      <button type="button" class="install-sheet-copy install-sheet-open-app">지금 앱으로 열기</button>
+      <button type="button" class="install-sheet-close">나중에 열기</button>
+    </div>`;
+  document.body.append(backdrop);
+
+  let timer = null;
+  let interval = null;
+  const cleanup = () => {
+    if (timer) clearTimeout(timer);
+    if (interval) clearInterval(interval);
+  };
+  const close = () => {
+    cleanup();
+    backdrop.remove();
+  };
+  backdrop.addEventListener('click', e => { if (e.target === backdrop) close(); });
+  backdrop.querySelector('.install-sheet-close').addEventListener('click', close);
+  backdrop.querySelector('.install-sheet-open-app').addEventListener('click', () => {
+    cleanup();
+    openInstalledApp();
+  });
+
+  if (isAndroid) {
+    const counter = backdrop.querySelector('[data-install-count]');
+    interval = setInterval(() => {
+      seconds -= 1;
+      if (counter) counter.textContent = String(Math.max(0, seconds));
+      if (seconds <= 0 && interval) {
+        clearInterval(interval);
+        interval = null;
+      }
+    }, 1000);
+    timer = setTimeout(openInstalledApp, 6000);
+  }
+}
+
+function consumeInstalledAppLaunch() {
+  const url = new URL(location.href);
+  if (url.searchParams.get(APP_LAUNCH_PARAM) !== 'installed') return false;
+  url.searchParams.delete(APP_LAUNCH_PARAM);
+  history.replaceState(history.state, '', `${url.pathname}${url.search}${url.hash}`);
+  return true;
+}
 
 async function requestAppInstall() {
   if (isStandaloneApp()) {
@@ -8003,22 +8468,31 @@ async function requestAppInstall() {
     return;
   }
 
+  const ua = navigator.userAgent;
+  const isIOS = /iPhone|iPad|iPod/i.test(ua) || (/Macintosh/i.test(ua) && navigator.maxTouchPoints > 1);
+  const isAndroid = /Android/i.test(ua);
+  const inAppBrowser = /NAVER|KAKAOTALK|Instagram|FBAN|FBAV|Line\/|DaumApps|; wv\)/i.test(ua);
+
   /* 1) 설치 프롬프트 지원 브라우저(안드로이드 크롬·삼성인터넷·엣지 등): 시스템 설치창 즉시 표시 */
   if (deferredInstallPrompt) {
     const promptEvent = deferredInstallPrompt;
     deferredInstallPrompt = null;
     promptEvent.prompt();
-    try { await promptEvent.userChoice; } catch {}
+    try {
+      const choice = await promptEvent.userChoice;
+      if (choice?.outcome === 'accepted') return;
+    } catch {}
+    showInstallGuide(isAndroid ? 'android' : 'desktop');
     return;
   }
 
-  const ua = navigator.userAgent;
-  const isIOS = /iPhone|iPad|iPod/i.test(ua) || (/Macintosh/i.test(ua) && navigator.maxTouchPoints > 1);
-  const isAndroid = /Android/i.test(ua);
-  const inAppBrowser = /NAVER|KAKAOTALK|Instagram|FBAN|FBAV|Line\/|DaumApps|; wv\)/i.test(ua);
   /* 안드로이드 인앱 브라우저(네이버·카카오 등)는 설치를 막으므로 Chrome으로 열어서 진행 */
   if (isAndroid && inAppBrowser && location.protocol === 'https:') {
-    location.href = `intent://${location.host}${location.pathname}#Intent;scheme=https;package=com.android.chrome;S.browser_fallback_url=${encodeURIComponent(location.href)};end`;
+    openCurrentPageInAndroidChrome();
+    return;
+  }
+  if (isAndroid && inAppBrowser) {
+    showInstallGuide('android-inapp');
     return;
   }
   if (isIOS) {
@@ -8034,6 +8508,16 @@ async function requestAppInstall() {
   }
   /* 프롬프트 미지원 데스크톱·기타 안드로이드 브라우저: 단계별 설치 안내 시트 표시 */
   showInstallGuide(isAndroid ? 'android' : 'desktop');
+}
+
+/* 안드로이드 인앱 브라우저에서 현재 주소를 Chrome으로 전달하고, 차단되면 복사 안내로 전환 */
+function openCurrentPageInAndroidChrome() {
+  const url = new URL(location.href);
+  const scheme = url.protocol.replace(':', '') || 'https';
+  location.href = `intent://${url.host}${url.pathname}${url.search}#Intent;scheme=${scheme};package=com.android.chrome;end`;
+  setTimeout(() => {
+    if (!document.hidden) showInstallGuide('android-inapp');
+  }, 1600);
 }
 
 /* iOS 인앱 브라우저·크롬 등에서 현재 페이지를 Safari로 열기 (앱별 스킴 → 공통 스킴 순) */
@@ -8075,10 +8559,20 @@ function showInstallGuide(platform) {
       ['safari', '<b>Safari</b>를 열고 주소창에 붙여넣어 접속해주세요'],
       ['share', '공유 버튼 → <b>홈 화면에 추가</b>를 선택해주세요']
     ],
+    'android-inapp': [
+      ['menu', '오른쪽 위 <b>메뉴(⋮)</b>에서 <b>다른 브라우저로 열기</b>를 눌러주세요'],
+      ['copy', '메뉴가 없다면 아래 버튼으로 <b>링크를 복사</b>해주세요'],
+      ['plus', '<b>Chrome</b> 주소창에 붙여넣고 메뉴 → <b>앱 설치</b>를 눌러주세요']
+    ],
     android: [
       ['menu', '브라우저 오른쪽 위 <b>메뉴(⋮)</b>를 눌러주세요'],
       ['plus', '<b>홈 화면에 추가</b> 또는 <b>앱 설치</b>를 선택해주세요'],
       ['check', '<b>설치</b>를 누르면 홈 화면에 앱이 생겨요!']
+    ],
+    desktop: [
+      ['menu', '브라우저 오른쪽 위 <b>메뉴(⋮)</b>를 눌러주세요'],
+      ['plus', '<b>프로모터스 설치</b> 또는 <b>앱 설치</b>를 선택해주세요'],
+      ['check', '<b>설치</b>를 누르면 바탕 화면에서 바로 열 수 있어요']
     ]
   };
   const steps = stepsByPlatform[platform] || stepsByPlatform.android;
@@ -8086,7 +8580,9 @@ function showInstallGuide(platform) {
   const notesByPlatform = {
     ios: '아이폰은 Apple 정책에 따라 모든 앱·웹 서비스가 Safari의 \'홈 화면에 추가\' 기능을 통해서만 설치할 수 있어요. 아래 순서대로 하면 10초면 충분해요!',
     'ios-inapp': '지금 보고 계신 앱 속 브라우저는 Apple 정책상 홈 화면 추가 기능이 제공되지 않아요. Safari로 열어주시면 바로 이어서 설치하실 수 있어요.',
-    android: '지금 사용 중인 브라우저는 자동 설치 기능을 제공하지 않아요. 아래 방법으로 간단히 추가하실 수 있고, Chrome으로 접속하시면 버튼 한 번에 설치돼요.'
+    'android-inapp': '카카오톡·네이버 같은 앱 안에서는 설치가 차단될 수 있어요. 아래 방법으로 Chrome에서 열면 정상적으로 설치할 수 있어요.',
+    android: '지금 사용 중인 브라우저는 자동 설치 기능을 제공하지 않아요. 아래 방법으로 간단히 추가하실 수 있고, Chrome으로 접속하시면 버튼 한 번에 설치돼요.',
+    desktop: '설치창이 자동으로 열리지 않았어요. 아래 순서대로 브라우저 메뉴에서 직접 설치할 수 있어요.'
   };
   const backdrop = document.createElement('div');
   backdrop.className = 'install-sheet-backdrop';
@@ -8105,7 +8601,7 @@ function showInstallGuide(platform) {
             <span class="install-step-text">${text}</span>
           </li>`).join('')}
       </ol>
-      ${platform === 'ios-inapp' ? '<button type="button" class="install-sheet-copy">링크 복사하기</button>' : ''}
+      ${platform === 'ios-inapp' || platform === 'android-inapp' ? '<button type="button" class="install-sheet-copy">링크 복사하기</button>' : ''}
       <button type="button" class="install-sheet-close">닫기</button>
     </div>`;
   document.body.append(backdrop);
@@ -8114,16 +8610,17 @@ function showInstallGuide(platform) {
   backdrop.querySelector('.install-sheet-close').addEventListener('click', close);
   backdrop.querySelector('.install-sheet-copy')?.addEventListener('click', async e => {
     const btn = e.currentTarget;
+    const browserName = platform === 'android-inapp' ? 'Chrome' : 'Safari';
     try {
       await navigator.clipboard.writeText(location.href);
-      btn.textContent = '복사 완료! Safari에 붙여넣어 주세요';
+      btn.textContent = `복사 완료! ${browserName}에 붙여넣어 주세요`;
     } catch {
       /* 클립보드 권한이 막힌 인앱 브라우저 대비 폴백 */
       const ta = document.createElement('textarea');
       ta.value = location.href;
       document.body.append(ta);
       ta.select();
-      try { document.execCommand('copy'); btn.textContent = '복사 완료! Safari에 붙여넣어 주세요'; } catch {}
+      try { document.execCommand('copy'); btn.textContent = `복사 완료! ${browserName}에 붙여넣어 주세요`; } catch {}
       ta.remove();
     }
   });
@@ -8172,6 +8669,7 @@ function showAdminViewFromMenu(view) {
   if (view === 'adm-work') renderAdmWork();
   if (view === 'adm-approval') renderAdmApproval();
   if (view === 'adm-cust') renderAdmCust();
+  if (view === 'adm-guest') renderAdmGuest();
   if (view === 'adm-prod') renderAdmProd();
   if (view === 'adm-inquiry') renderAdmInquiry();
   if (view === 'adm-settings') renderAdmSettings();
@@ -8181,47 +8679,124 @@ function showAdminViewFromMenu(view) {
 /* 관리자용 마이(설정): 고객 내예약 페이지와 같은 전체화면 구성 */
 async function openAdminSettingsPage() {
   rememberModalScreen('admin-settings');
-  const menus = [
-    { view: 'adm-book', label: '예약관리', icon: 'calendar' },
-    { view: 'adm-work', label: '작업현황', icon: 'wrench' },
-    { view: 'adm-inquiry', label: '고객문의', icon: 'headset' },
-    ...(isTopAdmin() ? [
-      { view: 'adm-approval', label: '작업승인', icon: 'check' },
-      { view: 'adm-cust', label: '고객관리', icon: 'user' },
-      { view: 'adm-prod', label: '상품관리', icon: 'doc' },
-      { view: 'adm-settings', label: '보안', icon: 'lock' },
-      ...(isDeveloper() ? [{ view: 'adm-activity', label: '분석', icon: 'search' }] : [])
-    ] : [])
-  ];
-  const banner = await eventBannerHtml();
+  const todayValue = todayKey();
+  const allowedBranches = currentAdminBranches().map(branch => branch.name);
+  const inScope = item => !allowedBranches.length || allowedBranches.includes(item?.branch);
+  const allBookings = getBookings().filter(inScope);
+  const todayBookings = allBookings
+    .filter(booking => booking.date === todayValue && isActiveBooking(booking))
+    .sort((a, b) => String(a.time || '').localeCompare(String(b.time || '')));
+  const activeRuns = getServiceRuns().filter(inScope).filter(run => !isRunCompleted(run));
+  const approvalCount = activeRuns.filter(run => {
+    const step = (run.steps || [])[run.currentStep];
+    return step?.submitted && !step?.approved;
+  }).length;
+  const newCount = todayBookings.filter(booking => String(booking.status || '').trim() === '신규').length;
+  const confirmedCount = todayBookings.filter(booking => !isNewBooking(booking)).length;
+  const completedToday = getServiceRuns().filter(inScope).filter(run =>
+    isRunCompleted(run) && String(run.completedAt || run.updatedAt || '').slice(0, 10) === todayValue).length;
+  const confirmationRate = todayBookings.length ? Math.round((confirmedCount / todayBookings.length) * 100) : 0;
+  const nextBooking = allBookings
+    .filter(booking => isActiveBooking(booking) && String(booking.date || '') >= todayValue)
+    .sort((a, b) => bookingTimestamp(a) - bookingTimestamp(b))[0] || null;
+
+  const inquiryMessages = store.get('pm-messages', [])
+    .filter(message => !message.serviceContext?.runId)
+    .filter(inquiryVisibleToAdmin)
+    .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
+  const inquiryLatest = new Map();
+  inquiryMessages.forEach(message => {
+    const key = message.memberId || message.car || message.customer?.id || message.customer?.phone || message.id;
+    if (!inquiryLatest.has(key)) inquiryLatest.set(key, message);
+  });
+  const pendingInquiryCount = [...inquiryLatest.values()].filter(message => message.from !== 'admin').length;
+  const customerCount = mergeCustomerDirectory(canonicalMembers).length;
+  const guestCount = new Set(allBookings.filter(booking => booking.guest).map(booking => booking.phone || booking.car || booking.id)).size;
+  const productCount = store.get('pm-products', []).length;
+  const branchLabel = isGeneralAdmin() && adminBranches.length
+    ? adminBranches.join(' · ')
+    : allowedBranches.length === 1
+      ? allowedBranches[0]
+      : '전체 지점';
+  const roleLabel = isDeveloper() ? '개발자' : isTopAdmin() ? '메인관리자' : '지점관리자';
+
   openModal(`
-    <h3>설정</h3>
-    <section class="mypage-account-card">
-      <div class="mypage-profile admin-profile">
-        <span class="profile-avatar" aria-hidden="true">${MYPAGE_ICONS.user}</span>
-        <span class="profile-text">
-          <strong>관리자 모드</strong>
-          <span>프로모터스</span>
-        </span>
-      </div>
-    </section>
-    <h4 class="mypage-sec-title">관리 메뉴</h4>
-    <nav class="mypage-quick admin-settings-quick" aria-label="관리 메뉴">
-      ${menus.map(menu => `
-        <button type="button" data-adm-view="${menu.view}">
-          <span class="quick-icon">${MYPAGE_ICONS[menu.icon]}</span>
-          <strong>${menu.label}</strong>
-        </button>`).join('')}
-    </nav>
-    ${banner}
-    <button type="button" class="mypage-cs-btn" id="admin-settings-logout">
-      <span class="cs-icon" aria-hidden="true">${MYPAGE_ICONS.user}</span>
-      <span class="cs-text"><strong>로그아웃</strong><span>관리자 모드를 종료합니다</span></span>
-      <b>›</b>
-    </button>
+    <div class="brand-mypage-shell">
+      <header class="brand-greeting">
+        <h2>관리자님, 안녕하세요</h2>
+        <p>${newCount || approvalCount ? `확인이 필요한 신규 예약 ${newCount}건과 승인 대기 ${approvalCount}건이 있어요.` : '새로 확인할 예약과 승인 대기가 없습니다.'}</p>
+      </header>
+
+      <section class="brand-now admin-brand-now" aria-label="지금 매장">
+        <div class="brand-now-body">
+          <div class="brand-now-tags">
+            <span>${esc(branchLabel)}</span>
+            <strong>관리중</strong>
+          </div>
+          <div class="brand-now-head">
+            <h3>오늘 예약 ${todayBookings.length}건</h3>
+            <p>신규 ${newCount} · 확정 ${confirmedCount} · 출고 ${completedToday}</p>
+          </div>
+          <div class="brand-rate">
+            <strong>${confirmationRate}<i>%</i></strong>
+            <span>확정 ${confirmedCount} / ${todayBookings.length}건</span>
+          </div>
+          <div class="brand-progress" role="img" aria-label="오늘 예약 확정률 ${confirmationRate}%"><i style="width:${confirmationRate}%"></i></div>
+          <div class="admin-brand-counts">
+            <button type="button" class="${newCount ? 'alert' : ''}" data-adm-view="adm-book"><b>${newCount}</b><em>신규</em></button>
+            <button type="button" data-adm-view="adm-book"><b>${confirmedCount}</b><em>확정</em></button>
+            <button type="button" data-adm-view="adm-work"><b>${activeRuns.length}</b><em>작업중</em></button>
+            <button type="button" class="${approvalCount ? 'alert' : ''}" data-adm-view="${isTopAdmin() ? 'adm-approval' : 'adm-work'}"><b>${approvalCount}</b><em>승인대기</em></button>
+            <button type="button" data-adm-view="adm-work"><b>${completedToday}</b><em>출고</em></button>
+          </div>
+        </div>
+        <button type="button" class="brand-next" data-adm-view="adm-book">
+          <span aria-hidden="true">${MYPAGE_ICONS.calendar}</span>
+          <em>${nextBooking ? '다음 입고' : '다음 예약'}</em>
+          <b>${esc(nextBooking ? `${shortBookingDate(nextBooking)} · ${nextBooking.car || ''}` : '예약 일정 없음')}</b>
+          <i aria-hidden="true">›</i>
+        </button>
+      </section>
+
+      <section class="brand-menu-group" aria-labelledby="admin-today-title">
+        <h3 id="admin-today-title">오늘 할 일</h3>
+        <div class="brand-menu-list">
+          <button type="button" data-adm-view="adm-book"><span aria-hidden="true">${MYPAGE_ICONS.calendar}</span><strong>예약관리</strong><em>${newCount ? `신규 ${newCount}` : `${todayBookings.length}건`}</em><i>›</i></button>
+          ${isTopAdmin() ? `<button type="button" data-adm-view="adm-approval"><span aria-hidden="true">${MYPAGE_ICONS.check}</span><strong>작업승인</strong><small>메인</small><em>${approvalCount ? `대기 ${approvalCount}` : '대기 없음'}</em><i>›</i></button>` : ''}
+          <button type="button" data-adm-view="adm-inquiry"><span aria-hidden="true">${MYPAGE_ICONS.headset}</span><strong>고객문의</strong><em>${pendingInquiryCount ? `답변 ${pendingInquiryCount}` : '답변 완료'}</em><i>›</i></button>
+        </div>
+      </section>
+
+      <section class="brand-menu-group" aria-labelledby="admin-work-title">
+        <h3 id="admin-work-title">작업 · 고객</h3>
+        <div class="brand-menu-list">
+          <button type="button" data-adm-view="adm-work"><span aria-hidden="true">${MYPAGE_ICONS.wrench}</span><strong>작업현황</strong><em>진행 ${activeRuns.length}건</em><i>›</i></button>
+          ${isTopAdmin() ? `<button type="button" data-adm-view="adm-cust"><span aria-hidden="true">${MYPAGE_ICONS.user}</span><strong>고객관리</strong><small>메인</small><em>${customerCount}명</em><i>›</i></button>
+          <button type="button" data-adm-view="adm-guest"><span aria-hidden="true">${MYPAGE_ICONS.user}</span><strong>비회원관리</strong><small>메인</small><em>${guestCount}명</em><i>›</i></button>` : ''}
+        </div>
+      </section>
+
+      ${isTopAdmin() ? `
+      <section class="brand-menu-group" aria-labelledby="admin-operation-title">
+        <h3 id="admin-operation-title">운영 설정</h3>
+        <div class="brand-menu-list">
+          <button type="button" data-adm-view="adm-prod"><span aria-hidden="true">${MYPAGE_ICONS.doc}</span><strong>상품관리</strong><small>메인</small><em>${productCount}개</em><i>›</i></button>
+          <button type="button" data-adm-view="adm-settings"><span aria-hidden="true">${MYPAGE_ICONS.lock}</span><strong>보안</strong><small>메인</small><em>설정 확인</em><i>›</i></button>
+          ${isDeveloper() ? `<button type="button" data-adm-view="adm-activity"><span aria-hidden="true">${MYPAGE_ICONS.search}</span><strong>분석</strong><small>개발자</small><em>최근 활동</em><i>›</i></button>` : ''}
+        </div>
+      </section>` : ''}
+
+      <section class="brand-menu-group" aria-labelledby="admin-account-title">
+        <h3 id="admin-account-title">계정</h3>
+        <div class="brand-menu-list">
+          <button type="button" data-adm-view="adm-book"><span aria-hidden="true">${MYPAGE_ICONS.user}</span><strong>관리자 모드</strong><em>${esc(roleLabel)} · ${esc(branchLabel)}</em><i>›</i></button>
+          <button type="button" id="admin-settings-logout"><span aria-hidden="true">${MYPAGE_ICONS.lock}</span><strong>로그아웃</strong><em>관리자 모드 종료</em><i>›</i></button>
+        </div>
+      </section>
+    </div>
   `, true);
-  modalCard.classList.add('mypage-card');
-  wireEventBanner();
+  modalCard.classList.add('mypage-card', 'brand-mypage');
+  syncMobileTabbar(true);
   modalCard.querySelectorAll('[data-adm-view]').forEach(btn => {
     btn.addEventListener('click', () => {
       closeModal();
@@ -8283,6 +8858,7 @@ async function startApp() {
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('sw.js?v=20260725-photos').catch(() => {});
   }
+  const installedAppLaunch = consumeInstalledAppLaunch();
   /* 로컬 캐시로 즉시 화면을 그리고, 원격 데이터는 백그라운드에서 갱신한다.
      첫 진입 화면이 나왔다가 다른 화면으로 튀는 현상을 막는다. */
   wireNav();
@@ -8318,6 +8894,15 @@ async function startApp() {
   const savedView = getScreenState().view;
   const initialView = showView(savedView || getHomeView());
   renderViewContent(initialView);
+  if (installedAppLaunch) {
+    setTimeout(() => {
+      if (isStandaloneApp()) {
+        pmAlert('프로모터스 앱으로 정상 실행되었습니다.', '앱 실행 완료');
+      } else {
+        pmAlert('설치는 승인됐지만 브라우저로 열렸습니다.\n전체 앱 목록에서 프로모터스를 검색해 실행해주세요.', '앱 위치 확인');
+      }
+    }, 300);
+  }
 
   /* 원격 데이터 수신 후 화면 전환 없이 내용만 다시 그린다 */
   await hydrateSupabaseData();
