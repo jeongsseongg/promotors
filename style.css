@@ -6354,3 +6354,100 @@ button.step-photo-slot {
 @media (max-width: 900px) {
   .mobile-tabbar button.active { color: var(--navy); }
 }
+
+/* ============================================================
+   브랜드 화면 공통 레이어 — 14개 화면 일괄 적용
+   마이페이지(.brand-mypage)에서 확정한 시각 언어를 나머지 화면에도 건다.
+   Pretendard · 네이비+옐로우 · 8px 간격 · 흰 카드 + --line 테두리.
+   개별 화면 마크업은 건드리지 않고 공통 요소만 덮어쓴다.
+   ============================================================ */
+
+/* ---------- 화면 제목 (소개 히어로 제외) ---------- */
+.view:not(#view-intro) > header.intro h2 {
+  font-size: clamp(26px, 3.2vw, 38px);
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  text-shadow: none;
+  word-break: keep-all;
+}
+.view:not(#view-intro) > header.intro .intro-sub {
+  margin-top: 10px;
+  gap: 14px;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+.view:not(#view-intro) > header.intro .intro-sub .line {
+  width: 36px;
+  height: 1px;
+  background: var(--line);
+}
+
+/* ---------- 버튼 ---------- */
+.mini-btn {
+  min-height: 40px;
+  padding: 0 14px;
+  border-radius: 10px;
+  border-color: var(--line);
+  color: var(--text-muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+.mini-btn.add {
+  min-height: 44px;
+  padding: 0 18px;
+  border-radius: 10px;
+}
+.mini-btn.danger { color: var(--red); border-color: #e6c9c5; }
+
+/* ---------- 입력 ---------- */
+.adm-body input[type="text"],
+.adm-body input[type="tel"],
+.adm-body input[type="email"],
+.adm-body input[type="number"],
+.adm-body input[type="date"],
+.adm-body input[type="search"],
+.adm-body input[type="password"],
+.adm-body select,
+.adm-body textarea {
+  min-height: 44px;
+  padding: 10px 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--navy);
+  font-family: inherit;
+  font-size: 15px;
+}
+.adm-body textarea { min-height: 96px; line-height: 1.6; }
+.adm-body input:focus-visible,
+.adm-body select:focus-visible,
+.adm-body textarea:focus-visible {
+  outline: 2px solid var(--navy);
+  outline-offset: 1px;
+}
+
+/* ---------- 카드 면 ---------- */
+.adm-body .settings-card,
+.adm-body .adm-card,
+.adm-body .cal-wrap,
+.adm-body .run-card,
+.adm-body .approval-card {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface);
+  box-shadow: none;
+}
+
+/* ---------- 목록 행: 최소 터치 영역 확보 ---------- */
+.adm-body li,
+.adm-body .adm-row {
+  word-break: keep-all;
+}
+
+/* ---------- 모바일 상단 바 ---------- */
+.adm-mobile-bar strong {
+  font-size: 17px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
