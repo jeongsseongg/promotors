@@ -1,0 +1,14 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "kr.promotors.app",
+      "sha256_cert_fingerprints": [
+        "68:29:2B:13:A2:54:7E:82:50:55:FB:0F:9C:B8:86:D7:58:E9:E0:70:AB:FF:B6:AD:0B:BF:57:E0:67:57:24:0D",
+        "45:1B:85:1E:2F:CC:66:EE:5B:48:AD:A5:2D:11:DE:D7:2E:E6:DC:FE:8B:17:B5:F8:EF:15:79:CE:31:EC:15:AF",
+        "24:4E:42:B8:04:9D:69:A1:89:2A:27:CA:84:5C:39:7F:D3:31:C7:23:B7:E5:31:71:9E:CB:A7:F0:1D:FB:24:3C"
+      ]
+    }
+  }
+]

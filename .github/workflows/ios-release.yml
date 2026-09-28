@@ -1,0 +1,83 @@
+name: Promotors iOS
+on:
+  push:
+    branches: [codex/ios-release-20260928]
+    paths: ['ios-app/**', '.github/workflows/ios-release.yml']
+  workflow_dispatch:
+    inputs:
+      upload:
+        description: Upload signed build to App Store Connect
+        type: boolean
+        default: false
+permissions:
+  contents: read
+concurrency:
+  group: promotors-ios
+  cancel-in-progress: false
+jobs:
+  build:
+    runs-on: macos-26
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: ios-app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Prepare native project
+        run: |
+          set -euo pipefail
+          xcodebuild -version
+          npm ci --ignore-scripts
+          npx cap sync ios
+      - name: Build simulator
+        run: |
+          set -euo pipefail
+          xcodebuild -project ios/App/App.xcodeproj -scheme App -configuration Debug -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' -derivedDataPath "$RUNNER_TEMP/PromotorsSimulator" CODE_SIGNING_ALLOWED=NO build > "$RUNNER_TEMP/simulator.log" 2>&1 || { tail -100 "$RUNNER_TEMP/simulator.log"; exit 1; }
+          echo 'Simulator build succeeded' >> "$GITHUB_STEP_SUMMARY"
+      - name: Install distribution identity
+        env:
+          P12_BASE64: ${{ secrets.IOS_P12_BASE64 }}
+          P12_PASSWORD: ${{ secrets.IOS_P12_PASSWORD }}
+          PROFILE_BASE64: ${{ secrets.IOS_PROFILE_BASE64 }}
+        run: |
+          set -euo pipefail
+          umask 077
+          printf '%s' "$P12_BASE64" | base64 --decode > "$RUNNER_TEMP/distribution.p12"
+          printf '%s' "$PROFILE_BASE64" | base64 --decode > "$RUNNER_TEMP/distribution.mobileprovision"
+          KEYCHAIN_PASSWORD=$(openssl rand -base64 32)
+          echo "::add-mask::$KEYCHAIN_PASSWORD"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$RUNNER_TEMP/signing.keychain-db"
+          security set-keychain-settings -lut 21600 "$RUNNER_TEMP/signing.keychain-db"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$RUNNER_TEMP/signing.keychain-db"
+          security import "$RUNNER_TEMP/distribution.p12" -P "$P12_PASSWORD" -A -t cert -f pkcs12 -k "$RUNNER_TEMP/signing.keychain-db"
+          security set-key-partition-list -S apple-tool:,apple: -k "$KEYCHAIN_PASSWORD" "$RUNNER_TEMP/signing.keychain-db" >/dev/null
+          security list-keychains -d user -s "$RUNNER_TEMP/signing.keychain-db"
+          mkdir -p "$HOME/Library/MobileDevice/Provisioning Profiles"
+          cp "$RUNNER_TEMP/distribution.mobileprovision" "$HOME/Library/MobileDevice/Provisioning Profiles/promotors.mobileprovision"
+      - name: Archive signed application
+        run: |
+          set -euo pipefail
+          xcodebuild -project ios/App/App.xcodeproj -scheme App -configuration Release -destination 'generic/platform=iOS' -archivePath "$RUNNER_TEMP/Promotors.xcarchive" DEVELOPMENT_TEAM=Z8QYZ8K855 CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY='Apple Distribution' PROVISIONING_PROFILE_SPECIFIER='Promotors App Store 20260928' CURRENT_PROJECT_VERSION="$GITHUB_RUN_NUMBER" archive > "$RUNNER_TEMP/archive.log" 2>&1 || { tail -100 "$RUNNER_TEMP/archive.log"; exit 1; }
+          echo "Signed archive build $GITHUB_RUN_NUMBER succeeded" >> "$GITHUB_STEP_SUMMARY"
+      - name: Export and upload
+        if: github.event_name == 'workflow_dispatch' && inputs.upload
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_PRIVATE_KEY: ${{ secrets.ASC_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          mkdir -p "$HOME/.appstoreconnect/private_keys"
+          printf '%s' "$ASC_PRIVATE_KEY" > "$HOME/.appstoreconnect/private_keys/AuthKey_${ASC_KEY_ID}.p8"
+          python3 - <<'PY'
+          import plistlib, os
+          options={'method':'app-store-connect','destination':'export','teamID':'Z8QYZ8K855','signingStyle':'manual','signingCertificate':'Apple Distribution','provisioningProfiles':{'kr.promotors.app':'Promotors App Store 20260928'}}
+          with open(os.environ['RUNNER_TEMP']+'/ExportOptions.plist','wb') as f: plistlib.dump(options,f)
+          PY
+          xcodebuild -exportArchive -archivePath "$RUNNER_TEMP/Promotors.xcarchive" -exportPath "$RUNNER_TEMP/export" -exportOptionsPlist "$RUNNER_TEMP/ExportOptions.plist"
+          xcrun altool --upload-app --type ios --file "$RUNNER_TEMP/export/App.ipa" --apiKey "$ASC_KEY_ID" --apiIssuer "$ASC_ISSUER_ID"
+          echo 'Build uploaded to App Store Connect; processing and review submission remain separate.' >> "$GITHUB_STEP_SUMMARY"

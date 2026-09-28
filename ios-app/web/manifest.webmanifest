@@ -1,0 +1,26 @@
+{
+  "name": "프로모터스 - 수입차 정비 전문",
+  "short_name": "프로모터스",
+  "description": "수입차 전문 정비센터 프로모터스. 정비예약, 지점 안내, 실제 정비사례를 확인하세요.",
+  "id": "/",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#0f1f3d",
+  "lang": "ko",
+  "icons": [
+    {
+      "src": "images/logo-icon.png",
+      "sizes": "1254x1254",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "images/logo-icon.png",
+      "sizes": "1254x1254",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}
