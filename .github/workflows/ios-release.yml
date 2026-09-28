@@ -37,6 +37,35 @@ jobs:
           set -euo pipefail
           xcodebuild -project ios/App/App.xcodeproj -scheme App -configuration Debug -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' -derivedDataPath "$RUNNER_TEMP/PromotorsSimulator" CODE_SIGNING_ALLOWED=NO build > "$RUNNER_TEMP/simulator.log" 2>&1 || { tail -100 "$RUNNER_TEMP/simulator.log"; exit 1; }
           echo 'Simulator build succeeded' >> "$GITHUB_STEP_SUMMARY"
+      - name: Launch native app and capture device screens
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/native-screens"
+          xcrun simctl list devices available -j > "$RUNNER_TEMP/devices.json"
+          python3 - <<'PY' > "$RUNNER_TEMP/selected-devices.txt"
+          import json,os
+          data=json.load(open(os.environ['RUNNER_TEMP']+'/devices.json'))
+          devices=[d for group in data['devices'].values() for d in group]
+          for kind,needle in [('iphone','iPhone'),('ipad','iPad Pro 13')]:
+              found=next((d for d in devices if needle in d['name']),None)
+              if not found: raise SystemExit('Required simulator unavailable: '+needle)
+              print(kind+' '+found['udid'])
+          PY
+          while read -r kind device; do
+            xcrun simctl boot "$device"
+            xcrun simctl bootstatus "$device" -b
+            xcrun simctl status_bar "$device" override --time '9:41' --dataNetwork wifi --wifiMode active --wifiBars 3 --batteryState charged --batteryLevel 100
+            xcrun simctl install "$device" "$RUNNER_TEMP/PromotorsSimulator/Build/Products/Debug-iphonesimulator/App.app"
+            xcrun simctl launch "$device" kr.promotors.app
+            sleep 20
+            xcrun simctl io "$device" screenshot "$RUNNER_TEMP/native-screens/$kind.png"
+            xcrun simctl shutdown "$device"
+          done < "$RUNNER_TEMP/selected-devices.txt"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: native-screens
+          path: ${{ runner.temp }}/native-screens
+          retention-days: 7
       - name: Install distribution identity
         env:
           P12_BASE64: ${{ secrets.IOS_P12_BASE64 }}
