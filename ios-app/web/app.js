@@ -374,6 +374,7 @@ async function uploadStorageAsset(key, blob) {
     method: 'POST',
     headers: {
       ...storageHeaders(supa, blob.type || 'application/octet-stream'),
+      ...window.PMPrivacyEpoch.headers(),
       'cache-control': bucket === SUPABASE_PUBLIC_ASSET_BUCKET ? '31536000' : '3600',
       'x-upsert': 'false'
     },
@@ -381,7 +382,15 @@ async function uploadStorageAsset(key, blob) {
   });
   const data = await response.json().catch(() => null);
   const alreadyExists = response.status === 409 || /already exists/i.test(String(data?.message || ''));
-  if (!response.ok && !alreadyExists) throw new Error(data?.message || `Storage ${response.status}`);
+  if (!response.ok && !alreadyExists) {
+    const cause = String(data?.message || data?.error || '');
+    if (/PRIVACY_EPOCH_CHANGED|ASSET_PENDING_ERASURE/.test(cause)) {
+      const error = new Error('데이터가 변경되어 사진을 저장할 수 없습니다. 화면을 새로고침한 후 다시 시도해 주세요.');
+      error.code = /ASSET_PENDING_ERASURE/.test(cause) ? 'ASSET_PENDING_ERASURE' : 'PRIVACY_EPOCH_CHANGED';
+      privacyReload(); throw error;
+    }
+    throw new Error(data?.message || `Storage ${response.status}`);
+  }
   return response.ok;
 }
 
@@ -576,12 +585,67 @@ function supabaseHeaders(supa, prefer = 'return=minimal') {
   };
 }
 
+
+const PM_PRIVATE_MUTATORS = new Set([
+  'pm_sync_write','pm_sync_merge_by_id','pm_sync_delete_by_id','pm_promo_write',
+  'pm_member_booking_create','pm_change_password','pm_coupon_use','pm_event_enter',
+  'pm_admin_account_create','pm_admin_account_branches','pm_admin_account_delete',
+  'pm_branch_hours_write','pm_register','pm_guest_booking_create',
+  'pm_guest_booking_create_v2','pm_guest_booking_cancel'
+]);
+let privacyReloading = false;
+function privacyStopError(error) {
+  return /PRIVACY_EPOCH|ASSET_PENDING_ERASURE|ACCOUNT_DELETION_PENDING|AUTH_REQUIRED|SESSION_CHANGED/.test(String(error?.code || '') + ' ' + String(error?.message || ''));
+}
+function privacyClearMemory() {
+  locallyModifiedKeys.clear();
+  SUPABASE_DATA_KEYS.filter(key => !SUPABASE_PUBLIC_DATA_KEYS.has(key)).forEach(key => {
+    delete remoteState[key]; localStorage.removeItem(key);
+  });
+  ['pm-member','pm-auto-member','pm-signup-draft','pm-current-customer'].forEach(key => localStorage.removeItem(key));
+  canonicalMembers = []; canonicalMembersRefreshedAt = 0; canonicalMembersRefresh = null;
+  promoState = { coupons: [], assignments: [], couponUsage: [], events: [], entries: [] }; promoLoaded = false;
+  for (const url of objectUrls.values()) URL.revokeObjectURL(url);
+  objectUrls.clear();
+  Object.keys(remoteAssets).forEach(key => delete remoteAssets[key]);
+}
+async function privacyClearAssets() {
+  if (!window.indexedDB) return;
+  const db = await assetDb.open();
+  await new Promise((resolve, reject) => {
+    const tx = db.transaction('files','readwrite'); tx.objectStore('files').clear();
+    tx.oncomplete = () => { db.close(); resolve(); };
+    tx.onerror = () => { db.close(); reject(tx.error); };
+  });
+}
+function privacyReload() {
+  if (privacyReloading) return;
+  privacyReloading = true;
+  privacyClearMemory();
+  window.PMPrivacyEpoch.reset();
+  privacyClearAssets().finally(() => location.reload());
+}
+window.addEventListener('pm-privacy-epoch-change', event => {
+  const {epoch,previousEpoch,source} = event.detail;
+  if (source === 'reset') return;
+  if ((previousEpoch !== null && epoch !== previousEpoch) || source === 'broadcast' || source === 'storage') privacyReload();
+});
+
 async function supabaseRpc(name, params = {}, options = {}) {
   const supa = getSupabaseConfig();
   if (!supa) throw new Error('SUPABASE_NOT_CONFIGURED');
+  const capturedToken = params.p_token || '';
+  const privateWrite = PM_PRIVATE_MUTATORS.has(name);
+  const writeHeaders = privateWrite ? (options.headers || window.PMPrivacyEpoch.headers()) : {};
+  if (privateWrite && writeHeaders['x-promotors-data-epoch'] !== window.PMPrivacyEpoch.headers()['x-promotors-data-epoch']) {
+    const error = new Error('정보가 갱신되어 화면을 새로고침합니다. 새 화면에서 다시 시도해 주세요.');
+    error.code = 'PRIVACY_EPOCH_CHANGED';
+    privacyReload(); throw error;
+  }
+  if (capturedToken && name !== 'pm_logout' && capturedToken !== authToken) throw new Error('SESSION_CHANGED');
   const res = await fetch(`${supa.url}/rest/v1/rpc/${name}`, {
     method: 'POST',
-    headers: supabaseHeaders(supa, 'return=representation'),
+    headers: { ...supabaseHeaders(supa, 'return=representation'), ...writeHeaders },
     body: JSON.stringify(params),
     keepalive: !!options.keepalive
   });
@@ -592,8 +656,18 @@ async function supabaseRpc(name, params = {}, options = {}) {
     const error = new Error(data?.message || data?.hint || `Supabase ${res.status}`);
     error.status = res.status;
     error.details = data;
+    if (/PRIVACY_EPOCH_CHANGED/.test(error.message)) {
+      error.code = 'PRIVACY_EPOCH_CHANGED';
+      error.message = '정보가 갱신되어 화면을 새로고침합니다. 새 화면에서 다시 시도해 주세요.';
+      privacyReload();
+    }
+    if (/ACCOUNT_DELETION_PENDING/.test(error.message)) {
+      error.code = 'ACCOUNT_DELETION_PENDING';
+      error.message = '탈퇴 신청 처리 중에는 정보를 변경할 수 없습니다. 탈퇴 신청을 취소한 후 이용해 주세요.';
+    }
     throw error;
   }
+  if (capturedToken && name !== 'pm_logout' && capturedToken !== authToken) throw new Error('SESSION_CHANGED');
   return data;
 }
 
@@ -673,7 +747,8 @@ async function refreshCanonicalMembers(force = false) {
 function saveAuthSession(result, { remember = false, admin = false } = {}) {
   if (authToken && authToken !== result?.token) window.PMPush?.disconnect();
   authToken = result?.token || '';
-  setTimeout(() => window.PMPush?.sessionChanged(), 0);
+  window.PMPrivacyEpoch.reset();
+  setTimeout(() => { window.PMPush?.sessionChanged(); window.PMDeletionBridge?.sessionChanged(); }, 0);
   if (!authToken) return;
   sessionStorage.setItem('pm-auth-token', authToken);
   if (remember) localStorage.setItem('pm-auth-token', authToken);
@@ -690,6 +765,7 @@ function saveAuthSession(result, { remember = false, admin = false } = {}) {
 }
 
 function clearAuthSession() {
+  window.PMPrivacyEpoch.reset();
   window.PMPush?.disconnect();
   const token = authToken;
   authToken = '';
@@ -704,30 +780,31 @@ function clearAuthSession() {
   store.del('pm-auto-login');
   store.del('pm-auto-member');
   if (token) supabaseRpc('pm_logout', { p_token: token }).catch(() => {});
+  setTimeout(() => { if (!authToken) hydrateSupabaseData(); }, 0);
 }
 
 async function syncSupabaseData(key, value) {
   if (isHydratingSupabase || !SUPABASE_DATA_KEYS.includes(key) || !authToken) return true;
-  let lastError = null;
+  const token = authToken;
+  let headers;
+  try { headers = window.PMPrivacyEpoch.headers(); } catch { return false; }
+  let lastError;
   for (let attempt = 0; attempt < 3; attempt += 1) {
     try {
+      if (token !== authToken || privacyReloading) return false;
+      if (headers['x-promotors-data-epoch'] !== window.PMPrivacyEpoch.headers()['x-promotors-data-epoch']) return false;
       await supabaseRpc(SUPABASE_ID_MERGE_KEYS.has(key) ? 'pm_sync_merge_by_id' : 'pm_sync_write', {
-        p_token: authToken,
-        p_key: key,
-        p_payload: value,
-        p_page_url: location.href
-      });
+        p_token: token, p_key: key, p_payload: value, p_page_url: location.href
+      }, { headers });
       locallyModifiedKeys.delete(key);
       return true;
-    } catch (err) {
-      lastError = err;
+    } catch (error) {
+      lastError = error;
+      if (privacyStopError(error)) { locallyModifiedKeys.delete(key); return false; }
       if (attempt < 2) await new Promise(resolve => setTimeout(resolve, 500 * (attempt + 1)));
     }
   }
-  console.warn('Supabase save failed', key, lastError);
-  setTimeout(() => {
-    if (locallyModifiedKeys.has(key)) syncSupabaseData(key, store.get(key, value));
-  }, 5000);
+  console.warn('Supabase save failed; manual retry required', key, lastError);
   return false;
 }
 
@@ -735,15 +812,24 @@ async function hydrateSupabaseData() {
   const supa = getSupabaseConfig();
   if (!supa) return { ok: false, reason: 'not-configured' };
   try {
-    const rows = await supabaseRpc('pm_sync_read', { p_token: authToken || null });
+    const hydrateToken = authToken;
+    const rows = await supabaseRpc('pm_sync_read', { p_token: hydrateToken || null });
     if (!Array.isArray(rows)) throw new Error('INVALID_SYNC_RESPONSE');
     const publicRows = authToken
       ? await supabaseRpc('pm_sync_read', { p_token: null }).catch(() => [])
       : rows;
+    if (hydrateToken !== authToken) throw new Error('SESSION_CHANGED');
     isHydratingSupabase = true;
+    await window.PMPrivacyEpoch.accept(rows, { resetPrivateCache: async ({rows: fresh}) => {
+      privacyClearMemory();
+      await privacyClearAssets();
+      if (hydrateToken !== authToken || privacyReloading) throw new Error('SESSION_CHANGED');
+      fresh.forEach(row => { if (row.data_key !== 'pm-auth-context') store.setLocal(row.data_key, row.payload); });
+    }});
+    if (hydrateToken !== authToken || privacyReloading) throw new Error('SESSION_CHANGED');
     const context = rows.find(row => row.data_key === 'pm-auth-context')?.payload || { authenticated: false };
     rows.forEach(row => {
-      if (row.data_key !== 'pm-auth-context' && !locallyModifiedKeys.has(row.data_key)) store.setLocal(row.data_key, row.payload);
+      if (row.data_key !== 'pm-auth-context' && row.data_key !== 'pm-privacy-epoch' && !locallyModifiedKeys.has(row.data_key)) store.setLocal(row.data_key, row.payload);
     });
     /* 자동로그인 세션의 사설 데이터 복원과 무관하게 공개 이미지/콘텐츠는 서버 값을 확정 적용한다. */
     if (Array.isArray(publicRows)) {
@@ -1386,11 +1472,11 @@ const LEGAL_MODAL_CONTENT = {
       <section><h4>제6조 문의 및 분쟁</h4><p>서비스 관련 문의는 아래 연락처로 접수할 수 있습니다. 본 약관에 정하지 않은 사항은 관계 법령 및 상관례에 따릅니다.</p></section>`
   },
   privacy: {
-    title: '개인정보 처리방침', updated: '시행일: 2026년 7월 16일',
+    title: '개인정보 처리방침 개정안', updated: '공지일: 2026년 9월 28일 · 시행 예정일: 2026년 10월 5일',
     body: `
       <section><h4>1. 개인정보 처리자 및 문의처</h4><p>상호: 프로모터스 안산점 / 대표자: 이승현 / 주소: 경기도 안산시 단원구 이삭로 6, 1층(고잔동)<br>개인정보 관련 문의: <a href="tel:0318319738">031-831-9738</a>, <a href="mailto:promotors3986@naver.com">promotors3986@naver.com</a></p></section>
       <section><h4>2. 수집 항목과 처리 목적</h4><ul><li>회원가입: 아이디, 비밀번호, 이름, 생년월일, 차량명, 차량번호, 휴대전화번호, 이메일·주소(선택) — 회원 식별, 생일 쿠폰·회원 혜택 및 정비 서비스 제공</li><li>정비예약: 예약 일시·지점·선택 서비스·요청 메모·쿠폰 및 회원·차량 정보 — 예약 확인, 혜택 적용, 정비 상담 및 진행 안내</li><li>정비 진행현황: 정비기록, 작업사진, 고객문의 내용 — 정비 이력 관리 및 고객 응대</li><li>서비스 이용기록: 접속 IP 주소, 브라우저 정보, 유입 경로, 익명 세션 식별값, 화면 이동·체류시간, 버튼 클릭·전화 연결·사이트 이탈 기록 — 중복 방문 구분, 서비스 이용성 분석 및 보안 점검</li></ul></section>
-      <section><h4>3. 보유 및 이용 기간</h4><p>회원정보는 회원 탈퇴 또는 처리 목적 달성 시까지 보유합니다. 예약·정비기록 및 고객문의는 분쟁 대응과 서비스 이력 확인을 위해 최종 이용일로부터 5년간 보관합니다. 접속 IP를 포함한 서비스 이용기록은 이용성 분석 및 보안 점검에 필요한 기간 동안 보관 후 삭제하며, 관계 법령상 별도 보존이 필요한 경우에는 해당 기간 동안 보관합니다.</p></section>
+      <p>아래는 개인정보 보관을 최소화하는 개정 방침으로, 2026년 10월 5일부터 시행됩니다. 시행 전에는 <a href="/privacy/current-policy.html">현재 적용 중인 개인정보처리방침</a>을 확인해 주세요. 현재 방침에 따른 개인정보 삭제·회원 탈퇴 요청은 계속할 수 있습니다.</p><section><h4>3. 보유 및 이용 기간</h4><p>이 서비스는 정비 상담·예약을 제공하며 온라인 결제·판매를 하지 않습니다. 탈퇴 신청 72시간 후 계정, 연락처 등 회원 프로필, 예약, 일반 고객문의, 개인 작업사진과 계정에 연결된 이용로그 등 불필요한 개인정보를 삭제합니다. 실제 삭제가 시작되기 전에는 언제든 신청을 취소할 수 있습니다.</p><p>정비 이력은 개인 식별정보를 제거해 남깁니다. 별도로 법정 보관이 필요한 완료 정비기록은 자동차등록번호, 정비의뢰일, 정비완료일 및 정비작업내용만 최소한으로 분리 보관합니다. 자동차관리법 시행규칙 제134조제1항제1호에 따라 정비 완료일부터 1년간 보관한 뒤 파기합니다.</p><p>실제 진행 중인 정비, 소유권이 확인되지 않은 자료 또는 명시적인 분쟁이 있는 경우에는 해당 자료에 대해 추가 확인을 진행합니다. 삭제 처리가 끝나기 전에는 완료로 표시하지 않습니다.</p></section>
       <section><h4>4. 제3자 제공 및 처리위탁</h4><p>회사는 이용자의 개인정보를 판매하거나 광고 목적의 제3자에게 제공하지 않습니다. 서비스 데이터 저장·동기화를 위해 Supabase Inc.의 클라우드 서비스를 이용할 수 있으며, 이는 서비스 운영을 위한 처리위탁에 해당합니다. 해외 저장이 발생할 수 있으므로 개인정보 관련 문의 또는 열람·정정·삭제 요청은 위 연락처로 할 수 있습니다.</p></section>
       <section><h4>5. 정보주체의 권리</h4><p>이용자는 자신의 개인정보에 대해 열람, 정정·삭제, 처리정지 및 동의철회를 요구할 수 있습니다. 회원 탈퇴 또는 위 연락처를 통해 요청할 수 있으며, 법령상 제한 사유가 없으면 지체 없이 처리합니다.</p></section>
       <section><h4>6. 파기 절차 및 방법</h4><p>보유기간이 경과하거나 처리 목적이 달성된 개인정보는 복구할 수 없는 방법으로 삭제합니다. 전자파일은 기술적으로 복구가 불가능한 방식으로 삭제하고, 종이 문서는 분쇄 또는 소각합니다.</p></section>
@@ -2175,7 +2261,7 @@ function openMyInfoPage() {
       <p class="form-ok" id="pw-ok"></p>
       <button type="submit" class="modal-submit">비밀번호 변경</button>
     </form>
-    <p><a href="/account-deletion/">회원 탈퇴 및 개인정보 삭제 요청</a></p>
+    <p><button type="button" class="mini-btn danger" id="pm-account-delete">회원 탈퇴</button></p>
     <div class="modal-actions"><button type="button" class="modal-submit" id="back-my-page">내예약</button></div>
   `, true, false, openMyPageModal);
   modalCard.classList.add('mypage-card');
@@ -5527,6 +5613,7 @@ function selectedProductForBooking(booking) {
 }
 
 function pushAdminNotification(message, payload = {}) {
+  if (!isAdmin) return;
   const list = store.get('pm-admin-notifications', []);
   list.unshift({ id: `note-${Date.now()}-${Math.random().toString(36).slice(2)}`, message, payload, read: false, createdAt: new Date().toISOString() });
   store.set('pm-admin-notifications', list.slice(0, 200));
@@ -5540,6 +5627,7 @@ function adminActorLabel() {
 }
 
 function logWorkAudit(action, run, stepName = '', detail = '', actor = '') {
+  if (!isAdmin) return;
   const list = store.get('pm-work-audit', []);
   const step = stepName ? (run?.steps || []).find(s => s.name === stepName) : null;
   const entry = {
@@ -6280,6 +6368,7 @@ function renderAdmWork() {
     list.append(card);
   });
   renderAdmWorkHistory(workHistory, allowedBranches);
+  window.PMRepairHistory.render();
 }
 
 /* 단계 칩 클릭: 해당 단계 사진 최대 3장 미리보기, 4장 이상이면 전체보기 버튼 노출 */
@@ -9182,7 +9271,7 @@ document.body.dataset.view = document.querySelector('.view.active')?.id.replace(
 async function startApp() {
   /* PWA: 홈 화면 추가(앱 설치)를 위해 서비스워커 등록 */
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('sw.js?v=1790446226281').catch(() => {});
+    navigator.serviceWorker.register('sw.js?v=1790592719062').catch(() => {});
   }
   const installedAppLaunch = consumeInstalledAppLaunch();
   /* 로컬 캐시로 즉시 화면을 그리고, 원격 데이터는 백그라운드에서 갱신한다.
@@ -9246,6 +9335,7 @@ async function startApp() {
   renderIntroSlides();
   restoreModalScreen();
   window.PMPush?.sessionChanged();
+  window.PMDeletionBridge?.sessionChanged();
 }
 
 startApp();
