@@ -41,6 +41,10 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/native-screens"
+          APP_BUNDLE="$RUNNER_TEMP/PromotorsSimulator/Build/Products/Debug-iphonesimulator/App.app"
+          test -s "$APP_BUNDLE/AppIcon60x60@2x.png"
+          cp "$APP_BUNDLE/AppIcon60x60@2x.png" "$RUNNER_TEMP/native-screens/compiled-app-icon.png"
+          cp ios/App/App/Assets.xcassets/AppIcon.appiconset/AppIcon-512@2x.png "$RUNNER_TEMP/native-screens/store-icon.png"
           xcrun simctl list devices available -j > "$RUNNER_TEMP/devices.json"
           python3 - <<'PY' > "$RUNNER_TEMP/selected-devices.txt"
           import json,os
