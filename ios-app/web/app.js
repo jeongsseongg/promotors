@@ -1434,12 +1434,15 @@ $$('.case-branch-tab').forEach(button => {
 /* ============================================================
    모달 공용
    ============================================================ */
+document.documentElement.classList.toggle('native-app', !!window.Capacitor?.isNativePlatform?.());
 const modal = $('#modal');
 const modalCard = $('#modal-card');
 let modalBackHandler = null;
 
 function openModal(html, wide, full, backHandler = null) {
   modalBackHandler = backHandler;
+  modalCard.classList.remove('mypage-card', 'mobile-full', 'brand-mypage');
+  modalCard.scrollTop = 0;
   modalCard.classList.toggle('wide', !!wide);
   modalCard.classList.toggle('full', !!full);
   modalCard.innerHTML = `<button type="button" class="modal-x" id="modal-x" aria-label="닫기">×</button>${html}`;
@@ -1453,8 +1456,8 @@ function openModal(html, wide, full, backHandler = null) {
       closeModal();
     }
   });
-  const first = modalCard.querySelector('input, textarea, [contenteditable="true"]');
-  if (first) first.focus();
+  const first = modalCard.querySelector('input:not([disabled]):not([readonly]), textarea, [contenteditable="true"]');
+  if (first && !matchMedia('(max-width: 900px), (pointer: coarse)').matches) first.focus({ preventScroll: true });
 }
 function closeModal() { modalBackHandler = null; clearModalScreen(); modal.hidden = true; modalCard.classList.remove('full', 'mypage-card', 'mobile-full', 'brand-mypage'); modalCard.innerHTML = ''; syncMobileTabbar(); }
 modal.addEventListener('click', e => { if (e.target === modal) e.preventDefault(); });
@@ -1704,13 +1707,14 @@ function openMemberModal(tab) {
       <p class="form-error" id="m-error"></p>
       <div class="modal-actions">
         <button type="submit" class="modal-submit">${tab === 'login' ? '로그인' : '가입하기'}</button>
-        <button type="button" class="modal-cancel" onclick="document.getElementById('modal').hidden=true">취소</button>
+        <button type="button" class="modal-cancel" id="member-cancel">취소</button>
       </div>
     </form>
   `);
 
   /* 모바일에서는 로그인/회원가입을 전체화면 페이지로 표시 */
   modalCard.classList.add('mobile-full');
+  $('#member-cancel').addEventListener('click', closeModal);
   modalCard.querySelectorAll('.mtab').forEach(b =>
     b.addEventListener('click', () => openMemberModal(b.dataset.t)));
   $('#m-id').value = tab === 'signup' ? (draft.id || '') : rememberedId;
@@ -2268,33 +2272,47 @@ function openMyInfoPage() {
   myPageBackActions();
   $('#mi-address-find').addEventListener('click', () => openAddressSearch($('#mi-address')));
 
-  const saveMemberEverywhere = () => {
-    const members = store.get('pm-members', []);
-    const idx = members.findIndex(m => m.id === member.id);
-    if (idx > -1) {
-      members[idx] = { ...members[idx], ...member };
-      store.set('pm-members', members);
-    }
-    store.set('pm-member', member);
-    if (store.get('pm-auto-login', false)) store.setLocal('pm-auto-member', member);
-  };
-
-  $('#my-info-form').addEventListener('submit', e => {
+  $('#my-info-form').addEventListener('submit', async e => {
     e.preventDefault();
-    const err = $('#mi-error'), ok = $('#mi-ok');
+    const form = e.currentTarget;
+    const submit = form.querySelector('[type="submit"]');
+    if (submit.disabled) return;
+    const err = form.querySelector('#mi-error'), ok = form.querySelector('#mi-ok');
     err.textContent = ''; ok.textContent = '';
-    const name = $('#mi-name').value.trim();
-    const model = $('#mi-model').value.trim();
-    const car = $('#mi-car').value.trim();
-    const phone = $('#mi-phone').value.trim();
-    const email = $('#mi-email').value.trim();
-    const address = $('#mi-address').value.trim();
+    const name = form.querySelector('#mi-name').value.trim();
+    const model = form.querySelector('#mi-model').value.trim();
+    const car = form.querySelector('#mi-car').value.trim();
+    const phone = form.querySelector('#mi-phone').value.trim();
+    const email = form.querySelector('#mi-email').value.trim();
+    const address = form.querySelector('#mi-address').value.trim();
     if (!name || !car) { err.textContent = '이름과 차량번호는 필수입니다.'; return; }
     const members = store.get('pm-members', []);
     if (members.some(m => m.car === car && m.id !== member.id)) { err.textContent = '이미 등록된 차량번호입니다.'; return; }
-    member = { ...member, name, model, car, phone, email, address };
-    saveMemberEverywhere();
-    ok.textContent = '저장되었습니다.';
+    const index = members.findIndex(m => m.id === member.id);
+    if (index < 0 || !authToken || isHydratingSupabase) {
+      err.textContent = '회원 정보를 불러온 뒤 다시 저장해주세요.'; return;
+    }
+    const token = authToken;
+    const updated = { ...member, name, model, car, phone, email, address };
+    const nextMembers = members.map((item, i) => i === index ? { ...item, ...updated } : item);
+    submit.disabled = true;
+    submit.textContent = '저장 중';
+    try {
+      const saved = await syncSupabaseData('pm-members', nextMembers);
+      if (!saved || token !== authToken) throw new Error('PROFILE_SAVE_FAILED');
+      store.setLocal('pm-members', nextMembers);
+      member = updated;
+      store.setLocal('pm-member', member);
+      if (store.get('pm-auto-login', false)) store.setLocal('pm-auto-member', member);
+      ok.textContent = '저장되었습니다.';
+    } catch {
+      err.textContent = '정보를 저장하지 못했습니다. 입력한 내용은 유지됩니다. 연결 상태를 확인하고 다시 시도해주세요.';
+    } finally {
+      if (form.isConnected) {
+        submit.disabled = false;
+        submit.textContent = '정보 저장';
+      }
+    }
   });
 
   $('#my-pw-form').addEventListener('submit', async e => {
@@ -2304,7 +2322,7 @@ function openMyInfoPage() {
     const current = $('#pw-current').value;
     const next = $('#pw-new').value;
     const next2 = $('#pw-new2').value;
-    if (!validMemberPassword(next)) { err.textContent = '비밀번호는 영어 또는 한글과 숫자를 포함해 8자 이상이어야 합니다.'; return; }
+    if (!validMemberPassword(next)) { err.textContent = '비밀번호는 영어 또는 한글과 숫자를 포함해 10자 이상이어야 합니다.'; return; }
     if (next !== next2) { err.textContent = '새 비밀번호 확인이 일치하지 않습니다.'; return; }
     if (next === current) { err.textContent = '현재 비밀번호와 다른 비밀번호를 입력해주세요.'; return; }
     try {
@@ -2312,9 +2330,13 @@ function openMyInfoPage() {
       $('#pw-current').value = $('#pw-new').value = $('#pw-new2').value = '';
       ok.textContent = '비밀번호가 안전하게 변경되었습니다.';
     } catch (error) {
-      err.textContent = error.message === 'INVALID_PASSWORD'
-        ? '현재 비밀번호가 일치하지 않습니다.'
-        : '비밀번호는 영문과 숫자를 포함해 10자 이상이어야 합니다.';
+      const code = String(error.code || '') + ' ' + String(error.message || '');
+      err.textContent = /INVALID_PASSWORD/.test(code) ? '현재 비밀번호가 일치하지 않습니다.'
+        : /WEAK_PASSWORD/.test(code) ? '비밀번호는 문자와 숫자를 포함해 10자 이상이어야 합니다.'
+        : /ACCOUNT_DELETION_PENDING/.test(code) ? '탈퇴 신청 중에는 비밀번호를 변경할 수 없습니다.'
+        : /AUTH_REQUIRED|INVALID_SESSION|SESSION_CHANGED/.test(code) ? '다시 로그인한 후 시도해 주세요.'
+        : /PRIVACY_EPOCH/.test(code) ? '정보가 갱신되었습니다. 새로고침 후 다시 시도해 주세요.'
+        : '비밀번호를 변경하지 못했습니다. 연결 상태를 확인하고 다시 시도해 주세요.';
     }
   });
 }
@@ -2490,25 +2512,43 @@ function openCustomerCenterModal(customer = member) {
     else openWorkStatusPage();
   });
   const textarea = $('#message-body');
-  const send = () => {
+  let sending = false, pendingMessage;
+  const send = async () => {
     const text = textarea.value.trim();
-    if (!text) return;
-    const all = store.get('pm-messages', []);
-    all.push({
+    if (!text || sending) return;
+    const token = authToken;
+    const form = textarea.closest('form');
+    const submit = form?.querySelector('[type="submit"]');
+    if (!pendingMessage || pendingMessage.message !== text) pendingMessage = {
       id: `msg-${Date.now()}-${Math.random().toString(36).slice(2)}`,
-      memberId: target.id || target.car || '',
-      car: target.car || '',
-      from: isAdmin ? 'admin' : 'customer',
-      message: text,
-      serviceContext: null,
-      customer: target,
-      createdAt: new Date().toISOString()
-    });
-    store.set('pm-messages', all);
-    if (!isAdmin) pushAdminNotification(`${target.name || target.car || '고객'}님의 새 채팅 문의가 도착했습니다.`, { type: 'inquiry', car: target.car || '' });
-    textarea.value = '';
-    updateChatList(true);
-    textarea.focus();
+      memberId: target.id || target.car || '', car: target.car || '',
+      from: isAdmin ? 'admin' : 'customer', message: text,
+      serviceContext: null, customer: target, createdAt: new Date().toISOString()
+    };
+    const message = pendingMessage;
+    sending = true;
+    if (submit) submit.disabled = true;
+    try {
+      if (!token) throw new Error('AUTH_REQUIRED');
+      await supabaseRpc('pm_sync_merge_by_id', {
+        p_token: token, p_key: 'pm-messages', p_payload: [message], p_page_url: location.href
+      });
+      if (token !== authToken) return;
+      const all = store.get('pm-messages', []);
+      if (!all.some(item => item.id === message.id)) store.setLocal('pm-messages', [...all, message]);
+      pendingMessage = undefined;
+      if (textarea.isConnected && textarea.value.trim() === text) textarea.value = '';
+      if (textarea.isConnected) { updateChatList(true); textarea.focus(); }
+    } catch (error) {
+      if (textarea.isConnected) await pmAlert(
+        /ACCOUNT_DELETION_PENDING/.test(String(error.code || '') + ' ' + String(error.message || ''))
+          ? '탈퇴 신청 중에는 문의를 보낼 수 없습니다. 신청을 취소한 후 이용해 주세요.'
+          : '문의를 보내지 못했습니다. 입력 내용은 유지됩니다. 다시 시도해 주세요.'
+      );
+    } finally {
+      sending = false;
+      if (submit?.isConnected) submit.disabled = false;
+    }
   };
   $('#message-form').addEventListener('submit', e => { e.preventDefault(); send(); });
   textarea.addEventListener('keydown', e => {
@@ -4236,7 +4276,18 @@ function renderServiceStep() {
   }
 
   $('#svc-back').addEventListener('click', () => renderCalendar());
-  $('#svc-confirm').addEventListener('click', async () => {
+  let bookingSubmitting = false;
+  $('#svc-confirm').addEventListener('click', async event => {
+    if (bookingSubmitting) return;
+    const submit = event.currentTarget;
+    const selection = { ...cal };
+    const token = authToken;
+    const customer = member;
+    const selectionCurrent = () => submit.isConnected && token === authToken && customer === member
+      && ['branch', 'y', 'm', 'selDate', 'selTime'].every(key => selection[key] === cal[key]);
+    bookingSubmitting = true;
+    submit.disabled = true;
+    try {
     const services = [...list.querySelectorAll('input:checked')].map(c => c.value);
     const memo = $('#svc-memo').value.trim();
     if (!services.length && !memo) { pmAlert('서비스를 선택하거나 기타 메모를 입력해주세요.'); return; }
@@ -4252,8 +4303,10 @@ function renderServiceStep() {
     const arr = getBookings();
     let latestAvailability;
     try {
-      latestAvailability = await loadBookingAvailability(cal.branch, cal.y, cal.m, true);
+      latestAvailability = await loadBookingAvailability(selection.branch, selection.y, selection.m, true);
+      if (!selectionCurrent()) return;
     } catch (error) {
+      if (!selectionCurrent()) return;
       console.warn('Booking availability recheck failed', error);
       await pmAlert('예약 가능 시간을 확인하지 못했습니다. 잠시 후 다시 시도해주세요.');
       return;
@@ -4280,8 +4333,7 @@ function renderServiceStep() {
         try { return JSON.parse(sessionStorage.getItem('pm-activity-acquisition') || '{}'); } catch { return {}; }
       })()
     };
-    const submit = $('#svc-confirm');
-    submit.disabled = true;
+    if (!selectionCurrent()) return;
     try {
       let savedBooking = booking;
       if (!member && getSupabaseConfig()) {
@@ -4289,6 +4341,7 @@ function renderServiceStep() {
           p_booking: booking,
           p_page_url: location.href
         });
+        if (token !== authToken) return;
         savedBooking = saved || booking;
         arr.push(savedBooking);
         store.setLocal('pm-bookings', arr);
@@ -4298,6 +4351,7 @@ function renderServiceStep() {
           p_booking: booking,
           p_page_url: location.href
         });
+        if (token !== authToken) return;
         savedBooking = saved || booking;
         arr.push(savedBooking);
         store.setLocal('pm-bookings', arr);
@@ -4320,6 +4374,7 @@ function renderServiceStep() {
       });
       clearBookingAvailability();
     } catch (error) {
+      if (!selectionCurrent()) return;
       submit.disabled = false;
       const code = String(error?.message || '');
       if (code.includes('BOOKING_SLOT_TAKEN')) {
@@ -4335,11 +4390,16 @@ function renderServiceStep() {
       }
       return;
     }
-    const guestPin = !member ? actor.bookingPin : '';
+    if (!selectionCurrent()) return;
+    const guestPin = !customer ? actor.bookingPin : '';
     const done = `${cal.branch} ${cal.selTime} 예약 신청이 접수되었습니다. 관리자가 확인하면 예약으로 변경됩니다.`;
     cal.selTime = null;
     guestBooking = null;
     openBookingDoneModal(done, guestPin);
+    } finally {
+      bookingSubmitting = false;
+      if (submit.isConnected) submit.disabled = false;
+    }
   });
 }
 

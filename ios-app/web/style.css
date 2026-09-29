@@ -6707,3 +6707,93 @@ button.step-photo-slot {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
+/* 고객 화면: 입력 확대와 배경 스크롤 없이 한 화면 안에서 이동한다. */
+html:has(#modal:not([hidden])),
+html:has(:is(.pm-delete-dialog, .pm-notify-dialog)[open]),
+body:has(#modal:not([hidden])),
+body:has(:is(.pm-delete-dialog, .pm-notify-dialog)[open]) {
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+#modal-card form,
+#modal-card label,
+#modal-card .address-field,
+#modal-card .password-field { min-width: 0; }
+#modal-card input,
+#modal-card textarea,
+#modal-card select { min-width: 0; max-width: 100%; font-size: 16px; }
+#modal-card .address-field { grid-template-columns: minmax(0, 1fr) auto; }
+#modal-card .event-banner { margin-inline: 0; }
+#modal-card { overflow-wrap: anywhere; overscroll-behavior: contain; }
+@media (max-width: 900px) {
+  #modal { padding: 0; background: var(--white, #fff); }
+  #modal #modal-card {
+    position: fixed;
+    inset: 0;
+    width: 100%;
+    max-width: none;
+    height: 100%;
+    height: 100dvh;
+    max-height: 100%;
+    margin: 0;
+    border: 0;
+    border-radius: 0;
+    padding: calc(16px + env(safe-area-inset-top)) 16px calc(88px + env(safe-area-inset-bottom));
+    overflow-x: hidden;
+    overflow-y: auto;
+    box-shadow: none;
+    scroll-padding-block: 56px 96px;
+  }
+  #modal .modal-card.full { display: block; }
+  #modal .modal-card.full form { overflow: visible; }
+  body:has(#modal input:focus, #modal textarea:focus) .mobile-tabbar { display: none; }
+  :is(.pm-delete-dialog, .pm-notify-dialog)[open] {
+    inset: 0;
+    width: 100%;
+    max-width: none;
+    height: 100%;
+    height: 100dvh;
+    max-height: 100%;
+    margin: 0;
+    border: 0;
+    border-radius: 0;
+    padding: env(safe-area-inset-top) 0 env(safe-area-inset-bottom);
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+}
+.native-app #modal { padding: 0; background: var(--white, #fff); }
+.native-app #modal #modal-card {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  max-width: none;
+  height: 100%;
+  height: 100dvh;
+  max-height: 100%;
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  padding: calc(16px + env(safe-area-inset-top)) 16px calc(88px + env(safe-area-inset-bottom));
+  overflow-x: hidden;
+  overflow-y: auto;
+  box-shadow: none;
+  scroll-padding-block: 56px 96px;
+}
+.native-app #modal .modal-card.full { display: block; }
+.native-app #modal .modal-card.full form { overflow: visible; }
+.native-app :is(.pm-delete-dialog, .pm-notify-dialog)[open] {
+  inset: 0;
+  width: 100%;
+  max-width: none;
+  height: 100%;
+  height: 100dvh;
+  max-height: 100%;
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  padding: env(safe-area-inset-top) 0 env(safe-area-inset-bottom);
+  overflow-x: hidden;
+  overflow-y: auto;
+}
