@@ -6746,7 +6746,7 @@ body:has(:is(.pm-delete-dialog, .pm-notify-dialog)[open]) {
   }
   #modal .modal-card.full { display: block; }
   #modal .modal-card.full form { overflow: visible; }
-  body:has(#modal input:focus, #modal textarea:focus) .mobile-tabbar { display: none; }
+  body:has(#modal input:not([type="checkbox"]):not([type="radio"]):focus, #modal textarea:focus) .mobile-tabbar { display: none; }
   :is(.pm-delete-dialog, .pm-notify-dialog)[open] {
     inset: 0;
     width: 100%;
