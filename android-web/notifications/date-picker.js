@@ -55,7 +55,10 @@ function buildFields(today, limit, initial, wheels, inputs) {
     input.addEventListener('input', () => { markSelected(fields[index]); updateDays(index); });
   }
   function markSelected(field) {
-    for (const option of field.list.children) option.setAttribute('aria-selected', String(option.dataset.value === field.input.value));
+    for (const option of field.list.children) {
+      const selected = option.dataset.value === field.input.value;
+      option.setAttribute('aria-selected', String(selected)); option.tabIndex = selected ? 0 : -1;
+    }
   }
   function fillOptions(field, start, end) {
     field.list.replaceChildren();
@@ -63,6 +66,10 @@ function buildFields(today, limit, initial, wheels, inputs) {
       const option = document.createElement('button'); option.type = 'button'; option.setAttribute('role', 'option');
       option.dataset.value = String(number); option.textContent = `${number}${field.label === '연' ? '년' : field.label}`;
       option.addEventListener('click', () => { field.input.value = String(number); markSelected(field); updateDays(field.index); });
+      option.addEventListener('keydown', event => {
+        const next = event.key === 'ArrowDown' ? option.nextElementSibling : event.key === 'ArrowUp' ? option.previousElementSibling : event.key === 'Home' ? field.list.firstElementChild : event.key === 'End' ? field.list.lastElementChild : null;
+        if (next) { event.preventDefault(); next.click(); next.focus(); }
+      });
       field.list.append(option);
     }
     markSelected(field);
