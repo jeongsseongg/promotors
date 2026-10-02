@@ -3,6 +3,20 @@
   "appName": "프로모터스",
   "webDir": "web",
   "loggingBehavior": "debug",
-  "android": { "allowMixedContent": false },
-  "ios": { "contentInset": "automatic" }
+  "android": {
+    "allowMixedContent": false
+  },
+  "ios": {
+    "contentInset": "automatic"
+  },
+  "plugins": {
+    "PushNotifications": {
+      "presentationOptions": [
+        "badge",
+        "sound",
+        "banner",
+        "list"
+      ]
+    }
+  }
 }

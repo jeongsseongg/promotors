@@ -1,6 +1,9 @@
 # Dependencies and build output
 node_modules/
 dist/
+android-twa/.gradle/
+android-twa/**/build/
+android-twa/local.properties
 
 # Local environment and credentials
 .env
