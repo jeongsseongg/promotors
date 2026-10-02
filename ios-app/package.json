@@ -9,9 +9,11 @@
     "ios": "cap open ios"
   },
   "dependencies": {
-    "@capacitor/core": "8.5.1",
     "@capacitor/android": "8.5.1",
-    "@capacitor/ios": "8.5.1"
+    "@capacitor/camera": "8.2.4",
+    "@capacitor/core": "8.5.1",
+    "@capacitor/ios": "8.5.1",
+    "@capacitor/push-notifications": "8.1.2"
   },
   "devDependencies": {
     "@capacitor/cli": "8.5.1"

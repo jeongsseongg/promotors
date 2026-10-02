@@ -1,5 +1,7 @@
 (function (global) {
   'use strict';
+  const native = global.PMNativePush;
+  const getPermission = () => native?.available ? native.permission : global.Notification?.permission;
   const DEVICE_KEY = 'pm-push-device-v1';
   const labels = { booking: '예약 접수·변경·취소', repair: '정비 진행·사진·출고 안내', reminders: '예약 전날·정기점검 알림', marketing: '이벤트·혜택 알림 (선택)' };
   const defaults = { enabled: false, booking: true, repair: true, reminders: true, marketing: false };
@@ -16,7 +18,7 @@
     return node;
   }
   function supported() {
-    return global.isSecureContext && 'Notification' in global && 'PushManager' in global && 'serviceWorker' in navigator;
+    return native?.available || global.isSecureContext && 'Notification' in global && 'PushManager' in global && 'serviceWorker' in navigator;
   }
   function unsupportedMessage() {
     return global.Capacitor?.getPlatform?.() === 'ios'
@@ -45,7 +47,7 @@
     } finally { clearTimeout(timer); }
   }
   async function requestPermission() {
-    if (Notification.permission !== 'default') return Notification.permission;
+    if (getPermission() !== 'default') return getPermission();
     let timer;
     try {
       return await Promise.race([
@@ -58,7 +60,7 @@
     let dialog, content, feedback, busy = false, state, opener, generation = 0;
     async function call(action, data = {}, token = getToken()) {
       if (!token) throw new Error('로그인 후 알림을 이용해 주세요.');
-      let result = await rpc('pm_notifications', { p_token: token, p_action: action, p_data: data });
+      let result = await rpc(action === 'native_subscribe' ? 'pm_native_push_subscribe' : 'pm_notifications', { p_token: token, p_action: action, p_data: data });
       if (result?.error) throw new Error('알림 요청을 처리하지 못했습니다. 잠시 후 다시 시도해 주세요.');
       if (result?.data !== undefined) result = result.data;
       if (Array.isArray(result) && result.length === 1 && !result[0]?.title) result = result[0];
@@ -82,7 +84,8 @@
       state = await call('state');
       state.preferences = { ...defaults, ...state.preferences };
       state.deviceConnected = false;
-      if (supported() && Notification.permission === 'granted') {
+      if (native?.available) { await native.check(); state.deviceConnected = native.connected; }
+      else if (supported() && getPermission() === 'granted') {
         const registration = await navigator.serviceWorker.getRegistration();
         state.deviceConnected = Boolean(await registration?.pushManager?.getSubscription());
       }
@@ -91,8 +94,15 @@
     async function subscribe() {
       const sessionGeneration = generation;
       if (!supported()) throw new Error(unsupportedMessage());
-      const permission = await requestPermission();
-      if (permission !== 'granted') throw new Error('기기 설정에서 프로모터스 알림을 허용한 후 다시 켜 주세요.');
+      const granted = native?.available ? await native.request() : await requestPermission();
+      if (granted !== 'granted') throw new Error('기기 설정에서 프로모터스 알림을 허용한 후 다시 켜 주세요.');
+      if (native?.available) {
+        const token = getToken();
+        await native.subscribe((action, data) => call(action, data, token), deviceId());
+        if (sessionGeneration !== generation) throw new Error('로그인 상태가 변경되었습니다.');
+        await call('preferences', { enabled: true });
+        return;
+      }
       if (!state.publicKey) throw new Error('알림 발송 준비 중입니다. 잠시 후 다시 시도해 주세요.');
       const registration = await worker();
       let subscription = await registration.pushManager.getSubscription();
@@ -113,11 +123,13 @@
       }
     }
     async function localUnsubscribe() {
+      if (native?.available) { await native.clear(); return; }
       const registration = await clearBinding();
       const subscription = await registration?.pushManager?.getSubscription();
       if (subscription) await subscription.unsubscribe();
     }
     async function clearBinding() {
+      if (native?.available) { await native.clear(); return; }
       if (!('serviceWorker' in navigator)) return;
       const registration = await navigator.serviceWorker.getRegistration();
       registration?.active?.postMessage({ type: 'PM_PUSH_BINDING', binding: null });
@@ -140,10 +152,18 @@
       const sessionGeneration = generation;
       if (!getToken()) { await disconnect(); return; }
       if (!supported()) { await clearBinding(); return; }
+      if (native?.available) {
+        const token = getToken();
+        const current = await call('state');
+        if (sessionGeneration !== generation) return;
+        if (await native.check() === 'granted' && current.preferences?.enabled) await native.subscribe((action, data) => call(action, data, token), deviceId());
+        else await native.clear();
+        return;
+      }
       const registration = await navigator.serviceWorker.getRegistration();
       const subscription = await registration?.pushManager.getSubscription();
       if (!subscription) { await clearBinding(); return; }
-      if (Notification.permission !== 'granted') {
+      if (getPermission() !== 'granted') {
         await disconnect();
         return;
       }
@@ -191,7 +211,7 @@
     function settings() {
       const section = element('section', undefined, 'pm-notify-section');
       section.append(element('h3', '알림 설정'));
-      const permission = !supported() ? unsupportedMessage() : Notification.permission === 'granted' ? '기기 알림이 허용되어 있어요.' : Notification.permission === 'denied' ? '기기 알림이 차단되어 있어요. 기기 또는 브라우저 설정에서 허용해 주세요.' : '알림 켜기를 누르면 기기 알림 권한을 요청해요.';
+      const permission = !supported() ? unsupportedMessage() : getPermission() === 'granted' ? '기기 알림이 허용되어 있어요.' : getPermission() === 'denied' ? '기기 알림이 차단되어 있어요. 기기 또는 브라우저 설정에서 허용해 주세요.' : '알림 켜기를 누르면 기기 알림 권한을 요청해요.';
       section.append(element('p', permission, 'pm-notify-muted'));
       section.append(element('p', '알림을 연결하면 기기 식별값과 푸시 구독 정보를 계정에 연결해 저장합니다. 로그아웃하거나 이 기기의 알림을 끄면 발송 연결이 해제됩니다.', 'pm-notify-muted'));
       section.append(deviceControls());
@@ -216,7 +236,7 @@
       }
       section.append(element('p', '이벤트·혜택 알림은 동의한 경우에만 발송합니다. 언제든 끌 수 있어요.', 'pm-notify-muted'));
       const testButton = button('테스트 알림 보내기', () => perform(async () => {
-        if (!supported() || Notification.permission !== 'granted' || !state.preferences.enabled || !state.deviceConnected) throw new Error('먼저 이 기기에서 알림을 켜 주세요.');
+        if (!supported() || getPermission() !== 'granted' || !state.preferences.enabled || !state.deviceConnected) throw new Error('먼저 이 기기에서 알림을 켜 주세요.');
         await call('test', { deviceId: deviceId() });
         status('발송 요청했습니다. 잠시 후 기기에서 실제 수신을 확인해 주세요.');
       }));
@@ -341,7 +361,10 @@
       });
       return form;
     }
-    return { open, disconnect, restore };
+    async function enable() {
+      await refresh(); await subscribe(); await refresh();
+    }
+    return { open, disconnect, restore, enable };
   }
   global.PMNotifications = Object.freeze({ create });
 })(window);

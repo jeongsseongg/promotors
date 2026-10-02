@@ -9,6 +9,10 @@ on:
         description: Upload signed build to App Store Connect
         type: boolean
         default: false
+      simulator_only:
+        description: Validate native build without distribution signing
+        type: boolean
+        default: false
 permissions:
   contents: read
 concurrency:
@@ -71,6 +75,7 @@ jobs:
           path: ${{ runner.temp }}/native-screens
           retention-days: 7
       - name: Install distribution identity
+        if: inputs.simulator_only != true
         env:
           P12_BASE64: ${{ secrets.IOS_P12_BASE64 }}
           P12_PASSWORD: ${{ secrets.IOS_P12_PASSWORD }}
@@ -91,12 +96,13 @@ jobs:
           mkdir -p "$HOME/Library/MobileDevice/Provisioning Profiles"
           cp "$RUNNER_TEMP/distribution.mobileprovision" "$HOME/Library/MobileDevice/Provisioning Profiles/promotors.mobileprovision"
       - name: Archive signed application
+        if: inputs.simulator_only != true
         run: |
           set -euo pipefail
           xcodebuild -project ios/App/App.xcodeproj -scheme App -configuration Release -destination 'generic/platform=iOS' -archivePath "$RUNNER_TEMP/Promotors.xcarchive" DEVELOPMENT_TEAM=Z8QYZ8K855 CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY='Apple Distribution' PROVISIONING_PROFILE_SPECIFIER='Promotors App Store 20260928' CURRENT_PROJECT_VERSION="$GITHUB_RUN_NUMBER" archive > "$RUNNER_TEMP/archive.log" 2>&1 || { tail -100 "$RUNNER_TEMP/archive.log"; exit 1; }
           echo "Signed archive build $GITHUB_RUN_NUMBER succeeded" >> "$GITHUB_STEP_SUMMARY"
       - name: Export and upload
-        if: github.event_name == 'workflow_dispatch' && inputs.upload
+        if: github.event_name == 'workflow_dispatch' && inputs.upload && inputs.simulator_only != true
         env:
           ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
           ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}

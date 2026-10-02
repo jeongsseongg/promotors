@@ -52,7 +52,14 @@
       await pmAlert('알림 내용을 열 수 없습니다. 로그인 상태와 예약·작업 권한을 확인해 주세요.');
     }
   }
+  async function enable() {
+    if (!authToken) return false;
+    await api.enable();
+    localStorage.removeItem('pm-push-opt-in-v1');
+    return true;
+  }
   async function resume() {
+    if (authToken && localStorage.getItem('pm-push-opt-in-v1')) await enable().catch(() => {});
     await api.restore().catch(() => {});
     if (!pendingId) return;
     if (!authToken) { openMemberModal('login'); return; }
@@ -67,7 +74,7 @@
     return transition;
   }
   window.PMPush = {
-    open: () => authToken ? api.open() : openMemberModal('login'), disconnect,
+    enable, open: () => authToken ? api.open() : openMemberModal('login'), disconnect,
     sessionChanged: () => { transition = transition.then(resume); return transition; }
   };
   document.addEventListener('click', event => {
@@ -75,6 +82,9 @@
       event.preventDefault(); event.stopImmediatePropagation(); window.PMPush.open();
     }
   }, true);
+  window.addEventListener('pm-native-notification', event => {
+    pendingId = String(event.detail.id || ''); window.PMPush.sessionChanged();
+  });
   navigator.serviceWorker?.addEventListener('message', event => {
     if (event.data?.type === 'PM_PUSH_OPEN') {
       pendingId = String(event.data.id || ''); window.PMPush.sessionChanged();

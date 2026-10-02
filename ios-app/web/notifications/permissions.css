@@ -1,0 +1,17 @@
+.pm-permission-dialog {
+  --permission-width: 27rem;
+  --permission-control: 3rem;
+  box-sizing: border-box;
+  max-width: var(--permission-width);
+  padding: var(--pm-notify-space-2xl);
+}
+.pm-permission-brand { margin: 0 0 var(--pm-notify-space-lg); font-weight: 800; }
+.pm-permission-dialog h2 { font-size: clamp(1.375rem, 5vw, 1.5rem); line-height: 1.3; word-break: keep-all; margin: 0; }
+.pm-permission-lead { margin: var(--pm-notify-space-sm) 0 var(--pm-notify-space-lg); color: var(--pm-notify-muted); word-break: keep-all; }
+.pm-permission-list { margin: 0; padding: 0; list-style: none; }
+.pm-permission-list li { padding: var(--pm-notify-space-sm) 0; border-top: var(--pm-notify-border-width) solid var(--pm-notify-divider); }
+.pm-permission-list p { margin: var(--pm-notify-space-xs) 0 0; color: var(--pm-notify-muted); word-break: keep-all; }
+.pm-permission-actions { display: grid; gap: var(--pm-notify-space-sm); }
+.pm-permission-actions button { min-height: var(--permission-control); margin: 0; }
+.pm-permission-note, .pm-permission-status { color: var(--pm-notify-muted); margin: var(--pm-notify-space-sm) 0; word-break: keep-all; }
+.pm-permission-status:empty { display: none; }
