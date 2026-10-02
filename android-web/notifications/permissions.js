@@ -74,7 +74,10 @@
       transfer.items.add(new File([blob], `vehicle-${Date.now()}.${photo.format}`, { type: blob.type || `image/${photo.format}` }));
       input.files = transfer.files; input.dispatchEvent(new Event('change', { bubbles: true }));
     } catch (error) {
-      if (!/cancel/i.test(error.message || '')) window.pmAlert?.('카메라를 사용할 수 없습니다. 기기 설정에서 카메라 권한을 확인하거나 사진첩에서 선택해 주세요.');
+      if (!/cancel/i.test(error?.message || '')) {
+        const tell = typeof pmAlert === 'function' ? pmAlert : window.alert;
+        tell('카메라를 사용할 수 없습니다. 기기 설정에서 카메라 권한을 확인하거나 사진첩에서 선택해 주세요.');
+      }
     }
   }, true);
   window.PMPermissions = { show };
