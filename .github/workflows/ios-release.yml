@@ -54,6 +54,7 @@ jobs:
           test -s "$APP_BUNDLE/AppIcon60x60@2x.png"
           cp "$APP_BUNDLE/AppIcon60x60@2x.png" "$RUNNER_TEMP/native-screens/compiled-app-icon.png"
           cp ios/App/App/Assets.xcassets/AppIcon.appiconset/AppIcon-512@2x.png "$RUNNER_TEMP/native-screens/store-icon.png"
+          swiftc scripts/check-native-screen.swift -o "$RUNNER_TEMP/check-native-screen"
           xcrun simctl list devices available -j > "$RUNNER_TEMP/devices.json"
           python3 - <<'PY' > "$RUNNER_TEMP/selected-devices.txt"
           import json,os
@@ -70,8 +71,20 @@ jobs:
             xcrun simctl status_bar "$device" override --time '9:41' --dataNetwork wifi --wifiMode active --wifiBars 3 --batteryState charged --batteryLevel 100
             xcrun simctl install "$device" "$RUNNER_TEMP/PromotorsSimulator/Build/Products/Debug-iphonesimulator/App.app"
             xcrun simctl launch "$device" kr.promotors.app
-            sleep 20
-            xcrun simctl io "$device" screenshot "$RUNNER_TEMP/native-screens/$kind.png"
+            screen_ready=false
+            for attempt in 1 2 3 4 5 6; do
+              sleep 20
+              xcrun simctl io "$device" screenshot "$RUNNER_TEMP/native-screens/$kind.png"
+              if "$RUNNER_TEMP/check-native-screen" "$RUNNER_TEMP/native-screens/$kind.png"; then
+                screen_ready=true
+                break
+              fi
+              echo "$kind screen is still blank on attempt $attempt"
+            done
+            if [ "$screen_ready" != true ]; then
+              echo "::error::$kind did not render app content within 120 seconds"
+              exit 1
+            fi
             xcrun simctl shutdown "$device"
           done < "$RUNNER_TEMP/selected-devices.txt"
       - uses: actions/upload-artifact@v4
@@ -141,6 +154,7 @@ jobs:
           chmod +x gradlew
           ./gradlew --no-daemon bundleRelease assembleRelease
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: android-store-bundle
           path: |
