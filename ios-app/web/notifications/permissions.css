@@ -2,7 +2,11 @@
   --permission-width: 27rem;
   --permission-control: 3rem;
   box-sizing: border-box;
+  width: min(var(--permission-width), calc(100% - var(--pm-notify-space-2xl)));
   max-width: var(--permission-width);
+  height: auto;
+  max-height: 90dvh;
+  border-radius: var(--pm-notify-radius-lg);
   padding: var(--pm-notify-space-2xl);
 }
 .pm-permission-brand { margin: 0 0 var(--pm-notify-space-lg); font-weight: 800; }
