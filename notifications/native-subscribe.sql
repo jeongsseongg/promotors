@@ -10,23 +10,25 @@ begin
   select ac.* into a from public.pm_sessions s join public.pm_accounts ac using(login_id)
   where s.token_hash=public.pm_token_hash(p_token) and s.expires_at>now() and ac.active;
   if a.login_id is null then raise exception 'AUTH_REQUIRED'; end if;
-  if p_action<>'native_subscribe' then raise exception 'INVALID_ACTION'; end if;
+  if p_action is distinct from 'native_subscribe' then raise exception 'INVALID_ACTION'; end if;
   did=(p_data->>'deviceId')::uuid; value=lower(p_data->>'token');
   if did is null or value is null or value !~ '^[a-f0-9]{64}$' then raise exception 'INVALID_DEVICE'; end if;
   endpoint_value='apns:kr.promotors.app:'||value;
   insert into public.pm_push_preferences(login_id) values(a.login_id) on conflict do nothing;
   perform 1 from public.pm_push_preferences where login_id=a.login_id for update;
   if (select count(*) from public.pm_push_devices where login_id=a.login_id and revoked_at is null)>=20
-    and not exists(select 1 from public.pm_push_devices where device_id=did and login_id=a.login_id) then
+    and not exists(select 1 from public.pm_push_devices where (device_id=did or endpoint=endpoint_value) and login_id=a.login_id) then
     raise exception 'DEVICE_LIMIT';
   end if;
   select * into dev from public.pm_push_devices where device_id=did for update;
   if dev.device_id is not null and dev.login_id<>a.login_id and dev.endpoint<>endpoint_value then
     raise exception 'DEVICE_CONFLICT';
   end if;
-  if exists(select 1 from public.pm_push_devices where endpoint=endpoint_value and device_id<>did) then
-    raise exception 'DEVICE_CONFLICT';
-  end if;
+  -- Reinstallation can retain the APNs token while replacing local deviceId.
+  -- Revoke the old binding without deleting its delivery audit records.
+  update public.pm_push_devices set revoked_at=now(),binding=gen_random_uuid(),
+    endpoint='revoked:'||device_id::text||':'||endpoint
+  where endpoint=endpoint_value and device_id<>did;
   current_binding=case when dev.device_id=did and dev.session_hash=public.pm_token_hash(p_token)
     and dev.endpoint=endpoint_value and dev.revoked_at is null then dev.binding else gen_random_uuid() end;
   insert into public.pm_push_devices(device_id,login_id,session_hash,subscription,endpoint,binding)

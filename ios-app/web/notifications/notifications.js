@@ -96,6 +96,7 @@
       if (!supported()) throw new Error(unsupportedMessage());
       const granted = native?.available ? await native.request() : await requestPermission();
       if (granted !== 'granted') throw new Error('기기 설정에서 프로모터스 알림을 허용한 후 다시 켜 주세요.');
+      if (sessionGeneration !== generation) throw new Error('로그인 상태가 변경되었습니다. 다시 시도해 주세요.');
       if (native?.available) {
         const token = getToken();
         await native.subscribe((action, data) => call(action, data, token), deviceId());
@@ -157,7 +158,7 @@
         const current = await call('state');
         if (sessionGeneration !== generation) return;
         if (await native.check() === 'granted' && current.preferences?.enabled) await native.subscribe((action, data) => call(action, data, token), deviceId());
-        else await native.clear();
+        else if (native.connected) await native.clear();
         return;
       }
       const registration = await navigator.serviceWorker.getRegistration();
