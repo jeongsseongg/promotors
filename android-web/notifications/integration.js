@@ -90,9 +90,6 @@
       event.preventDefault(); event.stopImmediatePropagation(); window.PMPush.open();
     }
   }, true);
-  window.addEventListener('pm-native-notification', event => {
-    pendingId = String(event.detail.id || ''); window.PMPush.sessionChanged();
-  });
   navigator.serviceWorker?.addEventListener('message', event => {
     if (event.data?.type === 'PM_PUSH_OPEN') {
       pendingId = String(event.data.id || ''); window.PMPush.sessionChanged();
