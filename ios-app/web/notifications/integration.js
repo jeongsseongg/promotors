@@ -74,7 +74,7 @@
     const id = pendingId; pendingId = '';
     const url = new URL(location.href); url.searchParams.delete('notification');
     history.replaceState(history.state, '', url);
-    await openTarget({ notificationId: id });
+    await api.open(id);
   }
   function disconnect() {
     unread = null;

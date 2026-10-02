@@ -23,7 +23,7 @@ export async function sendAPNS(subscription: { token: string }, payload: { id: s
       'apns-push-type': 'alert', 'apns-priority': '10', 'apns-expiration': String(Math.floor(Date.now()/1000)+300),
       'apns-collapse-id': payload.id, 'content-type': 'application/json' },
     body: JSON.stringify({ aps: { alert: { title: payload.category === 'marketing' ? '(광고) 프로모터스' : '프로모터스 알림',
-      body: payload.category === 'marketing' ? '이벤트 안내가 있습니다. 수신거부: 앱 알림 설정' : '새로운 안내가 도착했습니다. 앱에서 확인해 주세요.' }, sound: 'default' },
+      body: payload.category === 'marketing' ? '이벤트 안내가 있습니다. 수신거부: 앱 알림 설정' : '새로운 안내가 도착했습니다. 앱에서 확인해 주세요.' }, sound: '02-precision-check.wav' },
       id: payload.id, binding: payload.binding })
   });
   const reason = response.ok ? '' : (await response.json().catch(() => ({}))).reason;

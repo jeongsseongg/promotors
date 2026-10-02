@@ -3,7 +3,7 @@
   const native = global.PMNativePush;
   const getPermission = () => native?.available ? native.permission : global.Notification?.permission;
   const DEVICE_KEY = 'pm-push-device-v1';
-  const labels = { booking: '예약 접수·변경·취소', repair: '정비 진행·사진·출고 안내', reminders: '예약 전날·정기점검 알림', marketing: '이벤트·혜택 알림 (선택)' };
+  const labels = { booking: '예약 접수·확정·변경·취소', repair: '정비 진행·사진·출고 안내', reminders: '예약 전날·정기점검 알림', marketing: '이벤트·혜택 알림 (선택)' };
   const defaults = { enabled: false, booking: true, repair: true, reminders: true, marketing: false };
   function element(tag, text, className) {
     const node = document.createElement(tag);
@@ -185,7 +185,7 @@
       feedback = undefined;
       opener?.focus();
     }
-    async function open() {
+    async function open(notificationId) {
       if (dialog) { dialog.focus(); return; }
       opener = document.activeElement;
       dialog = element('dialog', undefined, 'pm-notify-dialog');
@@ -202,16 +202,24 @@
       dialog.addEventListener('cancel', event => { event.preventDefault(); close(); });
       document.body.append(dialog);
       dialog.showModal();
-      await perform(async () => { await refresh(); status(''); });
+      await perform(async () => { await refresh(); status('');
+        if (notificationId) document.getElementById(`pm-notice-${notificationId}`)?.scrollIntoView({ block: 'nearest' });
+      });
     }
     function render() {
       if (!content) return;
-      content.replaceChildren(settings(), inbox());
+      content.replaceChildren(inbox(), settings());
       if (state.admin || state.canViewLogs) content.append(admin());
     }
     function settings() {
       const section = element('section', undefined, 'pm-notify-section');
-      section.append(element('h3', '알림 설정'));
+      section.append(element('h3', '앱 알림 설정'));
+      const audio = element('audio');
+      audio.src = 'notifications/02-precision-check.wav'; audio.preload = 'none';
+      section.append(button('알림음 듣기', () => {
+        audio.currentTime = 0; audio.play().catch(() => status('소리를 재생하지 못했습니다.', true));
+      }));
+      section.append(element('p', '프로모터스 기본 알림음 · 정밀 체크', 'pm-notify-muted'));
       const permission = !supported() ? unsupportedMessage() : getPermission() === 'granted' ? '기기 알림이 허용되어 있어요.' : getPermission() === 'denied' ? '기기 알림이 차단되어 있어요. 기기 또는 브라우저 설정에서 허용해 주세요.' : '알림 켜기를 누르면 기기 알림 권한을 요청해요.';
       section.append(element('p', permission, 'pm-notify-muted'));
       section.append(element('p', '알림을 연결하면 기기 식별값과 푸시 구독 정보를 계정에 연결해 저장합니다. 로그아웃하거나 이 기기의 알림을 끄면 발송 연결이 해제됩니다.', 'pm-notify-muted'));
@@ -296,27 +304,8 @@
       return form;
     }
     function inbox() {
-      const section = element('section', undefined, 'pm-notify-section');
-      section.append(element('h3', '알림함'), button('모두 읽음', () => perform(async () => {
-        await call('read', { all: true }); await refresh(); status('모두 읽음으로 표시했습니다.');
-      })));
-      const list = element('ul', undefined, 'pm-notify-list');
-      const items = Array.isArray(state.items) ? state.items : [];
-      if (!items.length) section.append(element('p', '아직 도착한 알림이 없습니다.', 'pm-notify-muted'));
-      for (const item of items) {
-        const row = element('li', undefined, item.read_at ? 'pm-notify-item' : 'pm-notify-item pm-notify-unread');
-        row.append(element('strong', item.title || '프로모터스 알림'), element('p', item.body || ''));
-        const time = new Date(item.created_at);
-        row.append(element('small', `${item.read_at ? '읽음' : '읽지 않음'} · ${Number.isNaN(time.getTime()) ? '' : time.toLocaleString('ko-KR')}`));
-        row.append(button(item.target ? '내용 확인' : '읽음으로 표시', () => perform(async () => {
-          await call('read', { id: item.id });
-          if (item.target && openTarget) { close(); await openTarget({ ...item.target, notificationId: item.id }); }
-          else await refresh();
-        })));
-        list.append(row);
-      }
-      section.append(list);
-      return section;
+      return global.PMNotificationInbox.render({ items: state.items, preferences: state.preferences,
+        labels, element, button, perform, call, refresh, status, close, openTarget });
     }
     function admin() {
       const section = element('section', undefined, 'pm-notify-section');
