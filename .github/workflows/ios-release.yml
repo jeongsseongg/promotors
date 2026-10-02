@@ -20,7 +20,7 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: promotors-ios
+  group: promotors-${{ inputs.android_only && 'android' || 'ios' }}
   cancel-in-progress: false
 jobs:
   build:
