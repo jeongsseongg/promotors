@@ -1,4 +1,4 @@
-/* Category opt-out uses the same account preferences as the delivery worker. */
+/* Reading notifications does not change receiving preferences. */
 (() => {
   'use strict';
   function render(api) {
@@ -23,14 +23,6 @@
         if (item.target && openTarget) { close(); await openTarget({ ...item.target, notificationId: item.id }); }
         else await refresh();
       })));
-      if (label) {
-        const enabled = Boolean(preferences[item.category]);
-        actions.append(button(enabled ? '이 종류 알림 끄기' : '이 종류 알림 켜기', () => perform(async () => {
-          if (!enabled && item.category === 'marketing' && !window.confirm('이벤트·혜택 푸시 알림 수신에 동의할까요? 언제든 설정에서 끌 수 있습니다.')) return;
-          await call('preferences', { [item.category]: !enabled });
-          await refresh(); status(`${label} 알림 수신을 ${enabled ? '껐습니다' : '켰습니다'}.`);
-        })));
-      }
       row.append(actions); list.append(row);
     }
     section.append(list); return section;

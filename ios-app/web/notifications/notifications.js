@@ -57,7 +57,7 @@
     } finally { clearTimeout(timer); }
   }
   function create({ rpc, getToken, openTarget }) {
-    let dialog, content, feedback, busy = false, state, opener, generation = 0;
+    let dialog, content, feedback, busy = false, state, opener, generation = 0, activeTab = 'recent', tabs;
     async function call(action, data = {}, token = getToken()) {
       if (!token) throw new Error('로그인 후 알림을 이용해 주세요.');
       let result = await rpc(action === 'native_subscribe' ? 'pm_native_push_subscribe' : 'pm_notifications', { p_token: token, p_action: action, p_data: data });
@@ -187,18 +187,26 @@
     }
     async function open(notificationId) {
       if (dialog) { dialog.focus(); return; }
+      await Promise.all([import('./inbox.js?v=20261002'), import('./settings.js?v=20261002')]);
+      activeTab = 'recent';
       opener = document.activeElement;
       dialog = element('dialog', undefined, 'pm-notify-dialog');
       dialog.setAttribute('aria-labelledby', 'pm-notify-title');
       const header = element('header', undefined, 'pm-notify-header');
       const title = element('h2', '알림');
       title.id = 'pm-notify-title';
-      header.append(title, button('닫기', close));
+      header.append(title, button('닫기', close, 'pm-notify-button pm-notify-text-button'));
+      tabs = element('nav', undefined, 'pm-notify-tabs');
+      tabs.setAttribute('aria-label', '알림 화면');
+      for (const [key, label] of [['recent', '최근 알림'], ['settings', '알림 설정']]) {
+        const tab = button(label, () => { activeTab = key; status(''); render(); }, 'pm-notify-tab');
+        tab.dataset.tab = key; tabs.append(tab);
+      }
       feedback = element('p', '알림을 불러오는 중입니다.', 'pm-notify-status');
       feedback.setAttribute('role', 'status');
       feedback.setAttribute('aria-live', 'polite');
       content = element('div', undefined, 'pm-notify-content');
-      dialog.append(header, feedback, content);
+      dialog.append(header, tabs, feedback, content);
       dialog.addEventListener('cancel', event => { event.preventDefault(); close(); });
       document.body.append(dialog);
       dialog.showModal();
@@ -208,51 +216,17 @@
     }
     function render() {
       if (!content) return;
-      content.replaceChildren(inbox(), settings());
-      if (state.admin || state.canViewLogs) content.append(admin());
+      for (const tab of tabs.children) tab.setAttribute('aria-current', tab.dataset.tab === activeTab ? 'page' : 'false');
+      content.replaceChildren(activeTab === 'recent' ? inbox() : settings());
+      if (activeTab === 'settings' && (state.admin || state.canViewLogs)) content.append(admin());
     }
     function settings() {
-      const section = element('section', undefined, 'pm-notify-section');
-      section.append(element('h3', '앱 알림 설정'));
-      const audio = element('audio');
-      audio.src = 'notifications/02-precision-check.wav'; audio.preload = 'none';
-      section.append(button('알림음 듣기', () => {
-        audio.currentTime = 0; audio.play().catch(() => status('소리를 재생하지 못했습니다.', true));
-      }));
-      section.append(element('p', '프로모터스 기본 알림음 · 정밀 체크', 'pm-notify-muted'));
-      const permission = !supported() ? unsupportedMessage() : getPermission() === 'granted' ? '기기 알림이 허용되어 있어요.' : getPermission() === 'denied' ? '기기 알림이 차단되어 있어요. 기기 또는 브라우저 설정에서 허용해 주세요.' : '알림 켜기를 누르면 기기 알림 권한을 요청해요.';
-      section.append(element('p', permission, 'pm-notify-muted'));
-      section.append(element('p', '알림을 연결하면 기기 식별값과 푸시 구독 정보를 계정에 연결해 저장합니다. 로그아웃하거나 이 기기의 알림을 끄면 발송 연결이 해제됩니다.', 'pm-notify-muted'));
-      section.append(deviceControls());
-      for (const [key, label] of Object.entries(labels)) {
-        const row = element('label', undefined, 'pm-notify-toggle');
-        const input = element('input');
-        input.type = 'checkbox';
-        input.checked = Boolean(state.preferences[key]);
-        input.addEventListener('change', () => {
-          if (busy) { input.checked = Boolean(state.preferences[key]); return; }
-          const value = input.checked;
-          perform(async () => {
-            try {
-              await call('preferences', { [key]: value });
-              state.preferences[key] = value;
-              status('알림 설정을 저장했습니다.');
-            } catch (error) { input.checked = !value; throw error; }
-          });
-        });
-        row.append(input, element('span', label));
-        section.append(row);
-      }
-      section.append(element('p', '이벤트·혜택 알림은 동의한 경우에만 발송합니다. 언제든 끌 수 있어요.', 'pm-notify-muted'));
-      const testButton = button('테스트 알림 보내기', () => perform(async () => {
-        if (!supported() || getPermission() !== 'granted' || !state.preferences.enabled || !state.deviceConnected) throw new Error('먼저 이 기기에서 알림을 켜 주세요.');
-        await call('test', { deviceId: deviceId() });
-        status('발송 요청했습니다. 잠시 후 기기에서 실제 수신을 확인해 주세요.');
-      }));
-      testButton.disabled = !supported();
-      section.append(testButton);
-      section.append(maintenance());
-      return section;
+      return global.PMNotificationSettings.render({ element, button, state, perform, call, refresh,
+        status, deviceControls, test: () => perform(async () => {
+          if (!supported() || getPermission() !== 'granted' || !state.preferences.enabled || !state.deviceConnected) throw new Error('먼저 이 기기에서 알림을 켜 주세요.');
+          await call('test', { deviceId: deviceId() });
+          status('발송 요청했어요. 기기에서 실제 수신을 확인해 주세요.');
+        }) });
     }
     async function disablePush(allDevices) {
       generation += 1;
@@ -265,43 +239,22 @@
       status(allDevices ? '모든 기기의 푸시 알림을 껐습니다. 알림함은 계속 이용할 수 있어요.' : '이 기기의 알림을 껐습니다. 다른 기기의 알림 설정은 유지됩니다.');
     }
     function deviceControls() {
-      const controls = element('div', undefined, 'pm-notify-device-controls');
+      const controls = element('div', undefined, 'pm-notify-setting-group');
       const enabled = state.preferences.enabled;
-      const connected = state.deviceConnected;
-      const turnOff = enabled && connected;
-      const toggle = button(turnOff ? '전체 푸시 알림 끄기' : '이 기기에서 알림 켜기', () => perform(async () => {
+      const turnOff = enabled && state.deviceConnected;
+      const row = element('div', undefined, 'pm-notify-setting-row');
+      const text = element('div'); text.append(element('strong', '앱 푸시 알림'),
+        element('p', turnOff ? '이 기기에 알림이 연결되어 있어요' : getPermission() === 'denied' ? '휴대폰 설정에서 알림을 허용해 주세요' : '예약과 정비 소식을 기기 알림으로 받아요', 'pm-notify-row-description'));
+      const toggle = button('', () => perform(async () => {
         if (turnOff) await disablePush(true);
-        else { await subscribe(); await refresh(); status('이 기기에 알림이 연결되었습니다.'); }
-      }), 'pm-notify-button pm-notify-primary');
-      toggle.disabled = !supported() && !turnOff;
-      controls.append(toggle);
-      if (enabled && !connected) controls.append(button('전체 푸시 알림 끄기', () => perform(() => disablePush(true))));
-      if (connected) controls.append(button('이 기기만 알림 끄기', () => perform(() => disablePush(false))));
+        else { await subscribe(); await refresh(); status('이 기기에 알림이 연결되었어요.'); }
+      }), 'pm-notify-switch');
+      toggle.setAttribute('role', 'switch'); toggle.setAttribute('aria-label', '앱 푸시 알림');
+      toggle.setAttribute('aria-checked', String(Boolean(turnOff))); toggle.disabled = !supported() && !turnOff;
+      row.append(text, toggle); controls.append(row);
+      if (enabled && !state.deviceConnected) controls.append(button('모든 기기의 알림 끄기', () => perform(() => disablePush(true)), 'pm-notify-button pm-notify-text-button'));
+      if (state.deviceConnected) controls.append(button('이 기기만 알림 끄기', () => perform(() => disablePush(false)), 'pm-notify-button pm-notify-text-button'));
       return controls;
-    }
-    function maintenance() {
-      const form = element('form', undefined, 'pm-notify-form');
-      const label = element('label', '다음 정기점검 알림 날짜');
-      const date = element('input');
-      date.type = 'date';
-      date.required = true;
-      const today = new Date();
-      date.min = [today.getFullYear(), String(today.getMonth() + 1).padStart(2, '0'), String(today.getDate()).padStart(2, '0')].join('-');
-      if (state.maintenanceDate) date.value = state.maintenanceDate;
-      label.append(date);
-      const submit = element('button', '점검 알림 예약', 'pm-notify-button');
-      submit.type = 'submit';
-      form.append(label, submit);
-      form.addEventListener('submit', event => {
-        event.preventDefault();
-        perform(async () => { await call('maintenance', { date: date.value }); status('점검 알림 날짜를 저장했습니다.'); });
-      });
-      form.append(button('점검 알림 예약 취소', () => perform(async () => {
-        await call('maintenance', { date: null });
-        date.value = '';
-        status('점검 알림 예약을 취소했습니다.');
-      })));
-      return form;
     }
     function inbox() {
       return global.PMNotificationInbox.render({ items: state.items, preferences: state.preferences,

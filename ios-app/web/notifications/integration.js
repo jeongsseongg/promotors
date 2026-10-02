@@ -85,6 +85,13 @@
     enable, open: () => authToken ? api.open() : openMemberModal('login'), disconnect,
     sessionChanged: () => { transition = transition.then(resume); return transition; }
   };
+  window.addEventListener('load', () => {
+    if (window.PMPermissions) return;
+    const styles = document.createElement('link');
+    styles.rel = 'stylesheet'; styles.href = 'notifications/permissions.css?v=20261002';
+    document.head.append(styles);
+    import('./permissions.js?v=20261002').catch(() => console.warn('알림 권한 안내를 불러오지 못했습니다.'));
+  }, { once: true });
   document.addEventListener('click', event => {
     if (event.target.closest('#mypage-alerts, #admin-push-settings')) {
       event.preventDefault(); event.stopImmediatePropagation(); window.PMPush.open();
