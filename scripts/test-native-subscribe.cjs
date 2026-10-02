@@ -35,6 +35,10 @@ test('native subscription respects auth gates, ownership, token validation and l
     const switched = await subscribe('token-b'); assert.notEqual(switched.binding, renewed.binding);
     const row = (await db.query('select login_id, subscription, revoked_at from pm_push_devices')).rows[0];
     assert.equal(row.login_id, 'b'); assert.equal(row.subscription.transport, 'apns'); assert.equal(row.revoked_at, null);
+    const reinstall = await subscribe('token-b', 'a'.repeat(64), '22222222-2222-4222-8222-222222222222');
+    assert.notEqual(reinstall.binding, switched.binding);
+    const devices = (await db.query('select device_id, revoked_at from pm_push_devices order by device_id')).rows;
+    assert.equal(devices.length, 2); assert.ok(devices[0].revoked_at); assert.equal(devices[1].revoked_at, null);
     const allowed = (await db.query("select has_function_privilege('anon','pm_native_push_subscribe(text,text,jsonb)','execute') as allowed")).rows[0];
     assert.equal(allowed.allowed, true);
   } finally { await db.close(); }
