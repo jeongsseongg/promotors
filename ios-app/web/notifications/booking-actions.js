@@ -2,6 +2,7 @@
 export function createBookingActions({ rpc, getToken, isAdmin, onChanged, canView = () => true }) {
   let loadError = '', items = [], upcoming = [], loaded = false, detail, selected, feedback, busy = false, timer, generation = 0;
   const listeners = new Set();
+  let suspended = false;
   function el(tag, text, cls) {
     const node = document.createElement(tag);
     if (text !== undefined) node.textContent = text;
@@ -28,6 +29,7 @@ export function createBookingActions({ rpc, getToken, isAdmin, onChanged, canVie
   }
   async function refresh() {
     if (!isAdmin() || !getToken()) return reset();
+    suspended = false;
     let result;
     try { result = await request('pending'); loadError = ''; }
     catch (error) { loadError = '처리 대기 예약을 불러오지 못했어요. 다시 열어 주세요.'; for (const notify of listeners) notify(); throw error; }
@@ -43,6 +45,7 @@ export function createBookingActions({ rpc, getToken, isAdmin, onChanged, canVie
   function pending() { return ['신규', '승인대기'].includes(selected?.status); }
   function close(force = false) { if (busy && force !== true) return; detail?.close(); detail?.remove(); detail = undefined; selected = undefined; }
   function reset() {
+    suspended = true;
     generation += 1; clearInterval(timer); items = []; upcoming = []; loaded = false; loadError = ''; close(true);
     for (const notify of listeners) notify();
   }
@@ -147,6 +150,6 @@ export function createBookingActions({ rpc, getToken, isAdmin, onChanged, canVie
     }
   }
   return { open, render, start, refresh, reset,
-    snapshot: () => ({ items, upcoming, loaded, error: loadError, active: Boolean(isAdmin() && getToken()) }),
+    snapshot: () => ({ items, upcoming, loaded, error: loadError, active: Boolean(!suspended && isAdmin() && getToken()) }),
     listen: fn => { listeners.add(fn); return () => listeners.delete(fn); } };
 }
