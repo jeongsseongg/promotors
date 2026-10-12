@@ -7,7 +7,10 @@ test('native subscription respects auth gates, ownership, token validation and l
   try {
     await db.exec(`
       create role anon; create role authenticated;
-      create table pm_accounts(login_id text primary key, active boolean);
+      create table pm_accounts(login_id text primary key, active boolean, role text default 'general');
+      create schema pm_privacy;
+      create function pm_privacy.before_write(p_token text) returns void language plpgsql as $$
+      begin if p_token='erasing' then raise exception 'ACCOUNT_RESTRICTED'; end if; end $$;
       create table pm_sessions(login_id text, token_hash text primary key, expires_at timestamptz);
       create table pm_push_preferences(login_id text primary key);
       create table pm_push_devices(device_id uuid primary key,login_id text,session_hash text,subscription jsonb,endpoint text unique,
@@ -15,7 +18,7 @@ test('native subscription respects auth gates, ownership, token validation and l
       create function pm_token_hash(text) returns text language sql as 'select md5($1)';
       create function pm_notifications(p_token text,p_action text,p_data jsonb) returns jsonb language plpgsql as $$
       begin if p_token='erasing' then raise exception 'ACCOUNT_RESTRICTED'; end if; return '{}'::jsonb; end $$;
-      insert into pm_accounts values('a',true),('b',true);
+      insert into pm_accounts(login_id,active) values('a',true),('b',true);
       insert into pm_sessions values('a',md5('token-a'),now()+interval '1 hour'),('b',md5('token-b'),now()+interval '1 hour');
     `);
     await db.exec(fs.readFileSync(path.join(__dirname, '../notifications/native-subscribe.sql'), 'utf8'));
@@ -29,6 +32,13 @@ test('native subscription respects auth gates, ownership, token validation and l
     await assert.rejects(subscribe('token-a', 'bad'), /INVALID_DEVICE/);
     const first = await subscribe('token-a');
     assert.ok(first.binding); assert.equal((await subscribe('token-a')).binding, first.binding);
+    const activity = (auth, data) => db.query('select pm_native_push_subscribe($1,$2,$3::jsonb)',
+      [auth, 'native_activity', JSON.stringify({deviceId:did,binding:first.binding,kind:'update',token:'b'.repeat(64),...data})]);
+    await activity('token-a');
+    assert.equal((await db.query('select subscription from pm_push_devices')).rows[0].subscription.activityUpdate,'b'.repeat(64));
+    await assert.rejects(activity('token-b'),/DEVICE_BINDING_REQUIRED/);
+    await assert.rejects(activity('token-a',{kind:null}),/INVALID_DEVICE/);
+    await assert.rejects(activity('token-a',{token:'b'.repeat(257)}),/INVALID_DEVICE/);
     await assert.rejects(subscribe('token-b', 'b'.repeat(64)), /DEVICE_CONFLICT/);
     await db.exec('update pm_push_devices set revoked_at=now()');
     const renewed = await subscribe('token-a'); assert.notEqual(renewed.binding, first.binding);
