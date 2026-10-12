@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - codex/cloudflare-release-20261013
   workflow_dispatch:
 
 permissions:
@@ -37,8 +38,10 @@ jobs:
         with:
           name: dist
           path: dist
+          include-hidden-files: true
 
   deploy-firebase:
+    if: ${{ false }}
     needs: build
     runs-on: ubuntu-latest
     env:
@@ -106,7 +109,7 @@ jobs:
 
       - name: Deploy to Cloudflare Pages
         if: ${{ env.CLOUDFLARE_API_TOKEN != '' && env.CLOUDFLARE_ACCOUNT_ID != '' }}
-        run: npx wrangler pages deploy dist --project-name promotors-site
+        run: npx wrangler pages deploy dist --project-name promotors-site --branch main
 
       - name: Fail when Cloudflare secrets are missing
         if: ${{ env.CLOUDFLARE_API_TOKEN == '' || env.CLOUDFLARE_ACCOUNT_ID == '' }}

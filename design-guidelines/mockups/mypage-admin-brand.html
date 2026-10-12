@@ -1,0 +1,405 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>마이(설정) — 관리자 화면 · 인사 + 지금 매장 + 메뉴 4묶음</title>
+
+<!-- 고객 마이페이지(mypage-brand.html)와 같은 시각 언어. 폰트는 Pretendard, 색은 브랜드 네이비+옐로우 -->
+<link rel="stylesheet" href="../../fonts/pretendard/pretendard.css">
+
+<style>
+  :root {
+    --font-sans: var(--font-pretendard, 'Pretendard Variable', 'Pretendard', 'Noto Sans KR', sans-serif);
+
+    --navy: #1e2464;
+    --navy-deep: #171c4f;
+    --yellow: #f5c400;
+    --red: #c0392b;
+    --green: #16834b;
+    --line: #dfe3e8;
+    --text-muted: #596675;
+
+    --bg: #eef0f4;
+    --surface: #ffffff;
+    --label: #14183c;
+    --label-sub: #70737c;
+    --label-dim: #9aa5b1;
+
+    --s1: 4px; --s2: 8px; --s3: 12px; --s4: 16px; --s5: 20px; --s6: 24px;
+    --r-md: 14px; --r-lg: 18px; --r-full: 999px;
+
+    --t-title: 22px;
+    --t-body: 16px;
+    --t-label: 14px;
+    --t-caption: 12px;
+
+    --tabbar-h: 64px;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--label);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  body {
+    max-width: 430px;
+    min-height: 100vh;
+    margin: 0 auto;
+    padding: var(--s5) var(--s4) calc(var(--tabbar-h) + var(--s5));
+    display: grid;
+    gap: var(--s5);
+  }
+
+  button { font: inherit; color: inherit; border: 0; background: none; cursor: pointer; }
+  h1, h2, p { margin: 0; word-break: keep-all; }
+  .chevron { flex: 0 0 auto; color: var(--label-dim); }
+
+  /* ── 1. 인사 ─────────────────────────────────────────────────────── */
+  .greet { display: grid; gap: var(--s2); }
+  .greet h1 { font-size: var(--t-title); font-weight: 800; letter-spacing: -0.03em; }
+  .greet p { font-size: var(--t-label); color: var(--text-muted); line-height: 1.5; }
+  .greet p b { color: var(--navy); font-weight: 700; }
+
+  /* ── 2. 지금 매장 ────────────────────────────────────────────────── */
+  .now {
+    border-radius: var(--r-lg);
+    background: var(--navy);
+    color: #fff;
+    overflow: hidden;
+  }
+  .now-body { display: grid; gap: var(--s4); padding: var(--s5) var(--s4); }
+
+  .now-tags { display: flex; align-items: center; gap: var(--s2); }
+  .branch {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 12px;
+    border: 1px solid rgba(255, 255, 255, .45);
+    border-radius: var(--r-full);
+    font-size: var(--t-caption);
+    font-weight: 600;
+  }
+  .branch span { font-size: 10px; opacity: .8; }
+  .state {
+    padding: 5px 12px;
+    border-radius: var(--r-full);
+    background: var(--yellow);
+    color: var(--navy);
+    font-size: var(--t-caption);
+    font-weight: 800;
+  }
+
+  .now-head { display: grid; gap: var(--s1); }
+  .now-head strong { font-size: 26px; font-weight: 800; letter-spacing: -0.03em; }
+  .now-head span { font-size: var(--t-label); color: rgba(255, 255, 255, .9); }
+
+  .now-rate { display: flex; align-items: baseline; justify-content: space-between; gap: var(--s3); }
+  .now-rate strong { font-size: 34px; font-weight: 800; color: var(--yellow); letter-spacing: -0.03em; }
+  .now-rate strong i { font-size: 20px; font-style: normal; }
+  .now-rate span { font-size: var(--t-label); font-weight: 600; color: rgba(255, 255, 255, .92); }
+
+  .bar { height: 8px; border-radius: var(--r-full); background: rgba(255, 255, 255, .2); overflow: hidden; }
+  .bar i { display: block; height: 100%; border-radius: var(--r-full); background: var(--yellow); }
+
+  /* 상태별 건수 — 고객 화면의 단계 칩과 같은 자리 */
+  .counts { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
+  .counts button {
+    display: grid;
+    justify-items: center;
+    gap: 2px;
+    min-height: 52px;
+    padding: var(--s2) 2px;
+    border-radius: 9px;
+    background: rgba(255, 255, 255, .12);
+    color: rgba(255, 255, 255, .92);
+  }
+  .counts b { font-size: 18px; font-weight: 800; }
+  .counts em { font-size: 11px; font-style: normal; font-weight: 600; }
+  .counts button.alert { background: var(--yellow); color: var(--navy); }
+
+  .next-book {
+    display: flex;
+    align-items: center;
+    gap: var(--s2);
+    width: 100%;
+    min-height: 52px;
+    padding: 0 var(--s4);
+    background: var(--navy-deep);
+    color: #fff;
+    text-align: left;
+  }
+  .next-book .ico { color: var(--yellow); display: grid; place-items: center; }
+  .next-book em { flex: 1; font-style: normal; font-size: var(--t-label); font-weight: 600; }
+  .next-book b { font-size: var(--t-label); font-weight: 700; }
+  .next-book .chevron { color: rgba(255, 255, 255, .6); }
+
+  /* ── 3. 메뉴 4묶음 ───────────────────────────────────────────────── */
+  .group { display: grid; gap: var(--s2); }
+  .group > h2 {
+    padding-left: var(--s1);
+    font-size: var(--t-caption);
+    font-weight: 700;
+    color: var(--label-sub);
+  }
+  .list {
+    border-radius: var(--r-md);
+    background: var(--surface);
+    overflow: hidden;
+  }
+  .row {
+    display: flex;
+    align-items: center;
+    gap: var(--s3);
+    width: 100%;
+    min-height: 56px;
+    padding: 0 var(--s4);
+    text-align: left;
+  }
+  .row + .row { border-top: 1px solid var(--line); }
+  .row .ico { flex: 0 0 auto; display: grid; place-items: center; color: var(--navy); }
+  .row strong { flex: 1; font-size: var(--t-body); font-weight: 600; }
+  .row .meta { font-size: var(--t-label); color: var(--label-sub); }
+  .row .meta.count { display: inline-flex; align-items: center; gap: 5px; color: var(--navy); font-weight: 700; }
+  .row .meta.count::before {
+    content: "";
+    width: 6px;
+    height: 6px;
+    border-radius: var(--r-full);
+    background: var(--red);
+  }
+  .row .meta.ok { color: var(--green); font-weight: 700; }
+
+  /* 메인관리자 전용 표시 */
+  .row .only {
+    padding: 2px 7px;
+    border-radius: var(--r-full);
+    background: #eef0f6;
+    color: var(--navy);
+    font-size: 11px;
+    font-weight: 700;
+  }
+
+  /* ── 하단 탭바 ───────────────────────────────────────────────────── */
+  .tabbar {
+    position: fixed;
+    left: 50%;
+    bottom: 0;
+    transform: translateX(-50%);
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    width: 100%;
+    max-width: 430px;
+    height: var(--tabbar-h);
+    background: var(--surface);
+    border-top: 1px solid var(--line);
+  }
+  .tabbar button {
+    display: grid;
+    justify-items: center;
+    align-content: center;
+    gap: var(--s1);
+    color: var(--label-dim);
+    font-size: var(--t-caption);
+    font-weight: 600;
+  }
+  .tabbar button[aria-current="page"] { color: var(--navy); font-weight: 700; }
+</style>
+</head>
+<body>
+
+<!-- 1. 인사 -->
+<header class="greet">
+  <h1>관리자님, 안녕하세요</h1>
+  <p>확인을 기다리는 <b>신규 예약 2건</b>과 <b>승인 대기 1건</b>이 있어요.</p>
+</header>
+
+<!-- 2. 지금 매장 (고객 화면의 '지금 내 차' 자리) -->
+<section class="now" aria-label="지금 매장">
+  <div class="now-body">
+    <div class="now-tags">
+      <button type="button" class="branch">프로모터스 안산점 <span aria-hidden="true">▾</span></button>
+      <span class="state">영업중</span>
+    </div>
+
+    <div class="now-head">
+      <strong>오늘 예약 5건</strong>
+      <span>입고 3 · 출고 2 · 취소 0</span>
+    </div>
+
+    <div class="now-rate">
+      <strong>60<i>%</i></strong>
+      <span>확정 3 / 5건</span>
+    </div>
+
+    <div class="bar" role="img" aria-label="오늘 예약 확정률 60%"><i style="width: 60%;"></i></div>
+
+    <div class="counts">
+      <button type="button" class="alert"><b>2</b><em>신규</em></button>
+      <button type="button"><b>3</b><em>확정</em></button>
+      <button type="button"><b>3</b><em>작업중</em></button>
+      <button type="button" class="alert"><b>1</b><em>승인대기</em></button>
+      <button type="button"><b>2</b><em>출고</em></button>
+    </div>
+  </div>
+
+  <button type="button" class="next-book">
+    <span class="ico" aria-hidden="true">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/></svg>
+    </span>
+    <em>다음 입고</em>
+    <b>오늘 14:00 · 141오 7116</b>
+    <span class="chevron" aria-hidden="true">›</span>
+  </button>
+</section>
+
+<!-- 3. 메뉴 4묶음 -->
+<section class="group">
+  <h2>오늘 할 일</h2>
+  <div class="list">
+    <button type="button" class="row">
+      <span class="ico" aria-hidden="true">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M8 3v4M16 3v4M3 11h18"/></svg>
+      </span>
+      <strong>예약관리</strong>
+      <span class="meta count">신규 2</span>
+      <span class="chevron" aria-hidden="true">›</span>
+    </button>
+    <button type="button" class="row">
+      <span class="ico" aria-hidden="true">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m9 12 2 2 4-4"/><circle cx="12" cy="12" r="9"/></svg>
+      </span>
+      <strong>작업승인</strong>
+      <span class="only">메인</span>
+      <span class="meta count">대기 1</span>
+      <span class="chevron" aria-hidden="true">›</span>
+    </button>
+    <button type="button" class="row">
+      <span class="ico" aria-hidden="true">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 14v-2a8 8 0 0 1 16 0v2"/><path d="M4 14a2 2 0 0 1 2-2h1v6H6a2 2 0 0 1-2-2zM20 14a2 2 0 0 0-2-2h-1v6h1a2 2 0 0 0 2-2z"/></svg>
+      </span>
+      <strong>고객문의</strong>
+      <span class="meta count">답변 1</span>
+      <span class="chevron" aria-hidden="true">›</span>
+    </button>
+  </div>
+</section>
+
+<section class="group">
+  <h2>작업 · 고객</h2>
+  <div class="list">
+    <button type="button" class="row">
+      <span class="ico" aria-hidden="true">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a4 4 0 0 0 5 5l-9 9a2.8 2.8 0 1 1-4-4z"/></svg>
+      </span>
+      <strong>작업현황</strong>
+      <span class="meta">진행 3건</span>
+      <span class="chevron" aria-hidden="true">›</span>
+    </button>
+    <button type="button" class="row">
+      <span class="ico" aria-hidden="true">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+      </span>
+      <strong>고객관리</strong>
+      <span class="only">메인</span>
+      <span class="meta">128명</span>
+      <span class="chevron" aria-hidden="true">›</span>
+    </button>
+    <button type="button" class="row">
+      <span class="ico" aria-hidden="true">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M17 11h6M20 8v6"/></svg>
+      </span>
+      <strong>비회원관리</strong>
+      <span class="only">메인</span>
+      <span class="meta">12명</span>
+      <span class="chevron" aria-hidden="true">›</span>
+    </button>
+  </div>
+</section>
+
+<section class="group">
+  <h2>운영 설정</h2>
+  <div class="list">
+    <button type="button" class="row">
+      <span class="ico" aria-hidden="true">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H7a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7z"/><path d="M14 2v5h5M9 13h6M9 17h4"/></svg>
+      </span>
+      <strong>상품관리</strong>
+      <span class="only">메인</span>
+      <span class="meta">14개</span>
+      <span class="chevron" aria-hidden="true">›</span>
+    </button>
+    <button type="button" class="row">
+      <span class="ico" aria-hidden="true">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>
+      </span>
+      <strong>보안</strong>
+      <span class="only">메인</span>
+      <span class="meta ok">2단계 켜짐</span>
+      <span class="chevron" aria-hidden="true">›</span>
+    </button>
+    <button type="button" class="row">
+      <span class="ico" aria-hidden="true">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19V9M10 19V5M16 19v-7M22 19H2"/></svg>
+      </span>
+      <strong>분석</strong>
+      <span class="only">개발자</span>
+      <span class="meta">최근 30일</span>
+      <span class="chevron" aria-hidden="true">›</span>
+    </button>
+  </div>
+</section>
+
+<section class="group">
+  <h2>계정</h2>
+  <div class="list">
+    <button type="button" class="row">
+      <span class="ico" aria-hidden="true">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16h.01"/></svg>
+      </span>
+      <strong>관리자 모드</strong>
+      <span class="meta">메인관리자 · 3개 지점</span>
+      <span class="chevron" aria-hidden="true">›</span>
+    </button>
+    <button type="button" class="row">
+      <span class="ico" aria-hidden="true">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M15 17l5-5-5-5M20 12H9M11 21H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5"/></svg>
+      </span>
+      <strong>로그아웃</strong>
+      <span class="meta">관리자 모드 종료</span>
+      <span class="chevron" aria-hidden="true">›</span>
+    </button>
+  </div>
+</section>
+
+<nav class="tabbar" aria-label="주요 메뉴">
+  <button type="button">
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3 10 9-7 9 7v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+    소개
+  </button>
+  <button type="button">
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0"/><circle cx="12" cy="10" r="3"/></svg>
+    매장안내
+  </button>
+  <button type="button">
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.7 6.3a4 4 0 0 0 5 5l-9 9a2.8 2.8 0 1 1-4-4z"/></svg>
+    정비사례
+  </button>
+  <button type="button">
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 11v2a1 1 0 0 0 1 1h2l5 4V6L6 10H4a1 1 0 0 0-1 1"/><path d="M16 8a5 5 0 0 1 0 8"/></svg>
+    게시판
+  </button>
+  <button type="button" aria-current="page">
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-2.9 1.2V21a2 2 0 1 1-4 0v-.1A1.7 1.7 0 0 0 7 19.4a1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1A1.7 1.7 0 0 0 3 15a2 2 0 1 1 0-4 1.7 1.7 0 0 0 1.6-2.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1A1.7 1.7 0 0 0 9 3V3a2 2 0 1 1 4 0 1.7 1.7 0 0 0 2.9 1.2l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1A1.7 1.7 0 0 0 21 11a2 2 0 1 1 0 4"/></svg>
+    설정
+  </button>
+</nav>
+
+</body>
+</html>

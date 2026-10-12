@@ -17,6 +17,10 @@ const SUPABASE_PUBLIC_DATA_KEYS = new Set([
   'pm-branches', 'pm-notices', 'promotors-cases', 'pm-products', 'pm-blocked',
   'pm-blog-settings', 'pm-intro-slides', 'pm-home-view', 'pm-event-banners'
 ]);
+const SUPABASE_ID_MERGE_KEYS = new Set([
+  'pm-bookings', 'pm-service-runs', 'pm-messages',
+  'pm-branch-transfer-requests', 'pm-work-audit'
+]);
 const remoteState = Object.create(null);
 const isRemoteDataKey = key => SUPABASE_DATA_KEYS.includes(key);
 const locallyModifiedKeys = new Set();
@@ -370,6 +374,7 @@ async function uploadStorageAsset(key, blob) {
     method: 'POST',
     headers: {
       ...storageHeaders(supa, blob.type || 'application/octet-stream'),
+      ...window.PMPrivacyEpoch.headers(),
       'cache-control': bucket === SUPABASE_PUBLIC_ASSET_BUCKET ? '31536000' : '3600',
       'x-upsert': 'false'
     },
@@ -377,7 +382,15 @@ async function uploadStorageAsset(key, blob) {
   });
   const data = await response.json().catch(() => null);
   const alreadyExists = response.status === 409 || /already exists/i.test(String(data?.message || ''));
-  if (!response.ok && !alreadyExists) throw new Error(data?.message || `Storage ${response.status}`);
+  if (!response.ok && !alreadyExists) {
+    const cause = String(data?.message || data?.error || '');
+    if (/PRIVACY_EPOCH_CHANGED|ASSET_PENDING_ERASURE/.test(cause)) {
+      const error = new Error('데이터가 변경되어 사진을 저장할 수 없습니다. 화면을 새로고침한 후 다시 시도해 주세요.');
+      error.code = /ASSET_PENDING_ERASURE/.test(cause) ? 'ASSET_PENDING_ERASURE' : 'PRIVACY_EPOCH_CHANGED';
+      privacyReload(); throw error;
+    }
+    throw new Error(data?.message || `Storage ${response.status}`);
+  }
   return response.ok;
 }
 
@@ -567,16 +580,72 @@ function supabaseHeaders(supa, prefer = 'return=minimal') {
     apikey: supa.anon,
     Authorization: `Bearer ${supa.anon}`,
     'Content-Type': 'application/json',
+    'x-promotors-token': authToken || '',
     Prefer: prefer
   };
 }
 
+
+const PM_PRIVATE_MUTATORS = new Set([
+  'pm_sync_write','pm_sync_merge_by_id','pm_sync_delete_by_id','pm_promo_write',
+  'pm_member_booking_create','pm_change_password','pm_coupon_use','pm_event_enter',
+  'pm_admin_account_create','pm_admin_account_branches','pm_admin_account_delete',
+  'pm_branch_hours_write','pm_register','pm_guest_booking_create',
+  'pm_guest_booking_create_v2','pm_guest_booking_cancel'
+]);
+let privacyReloading = false;
+function privacyStopError(error) {
+  return /PRIVACY_EPOCH|ASSET_PENDING_ERASURE|ACCOUNT_DELETION_PENDING|AUTH_REQUIRED|SESSION_CHANGED/.test(String(error?.code || '') + ' ' + String(error?.message || ''));
+}
+function privacyClearMemory() {
+  locallyModifiedKeys.clear();
+  SUPABASE_DATA_KEYS.filter(key => !SUPABASE_PUBLIC_DATA_KEYS.has(key)).forEach(key => {
+    delete remoteState[key]; localStorage.removeItem(key);
+  });
+  ['pm-member','pm-auto-member','pm-signup-draft','pm-current-customer'].forEach(key => localStorage.removeItem(key));
+  canonicalMembers = []; canonicalMembersRefreshedAt = 0; canonicalMembersRefresh = null;
+  promoState = { coupons: [], assignments: [], couponUsage: [], events: [], entries: [] }; promoLoaded = false;
+  for (const url of objectUrls.values()) URL.revokeObjectURL(url);
+  objectUrls.clear();
+  Object.keys(remoteAssets).forEach(key => delete remoteAssets[key]);
+}
+async function privacyClearAssets() {
+  if (!window.indexedDB) return;
+  const db = await assetDb.open();
+  await new Promise((resolve, reject) => {
+    const tx = db.transaction('files','readwrite'); tx.objectStore('files').clear();
+    tx.oncomplete = () => { db.close(); resolve(); };
+    tx.onerror = () => { db.close(); reject(tx.error); };
+  });
+}
+function privacyReload() {
+  if (privacyReloading) return;
+  privacyReloading = true;
+  privacyClearMemory();
+  window.PMPrivacyEpoch.reset();
+  privacyClearAssets().finally(() => location.reload());
+}
+window.addEventListener('pm-privacy-epoch-change', event => {
+  const {epoch,previousEpoch,source} = event.detail;
+  if (source === 'reset') return;
+  if ((previousEpoch !== null && epoch !== previousEpoch) || source === 'broadcast' || source === 'storage') privacyReload();
+});
+
 async function supabaseRpc(name, params = {}, options = {}) {
   const supa = getSupabaseConfig();
   if (!supa) throw new Error('SUPABASE_NOT_CONFIGURED');
+  const capturedToken = params.p_token || '';
+  const privateWrite = PM_PRIVATE_MUTATORS.has(name);
+  const writeHeaders = privateWrite ? (options.headers || window.PMPrivacyEpoch.headers()) : {};
+  if (privateWrite && writeHeaders['x-promotors-data-epoch'] !== window.PMPrivacyEpoch.headers()['x-promotors-data-epoch']) {
+    const error = new Error('정보가 갱신되어 화면을 새로고침합니다. 새 화면에서 다시 시도해 주세요.');
+    error.code = 'PRIVACY_EPOCH_CHANGED';
+    privacyReload(); throw error;
+  }
+  if (capturedToken && name !== 'pm_logout' && capturedToken !== authToken) throw new Error('SESSION_CHANGED');
   const res = await fetch(`${supa.url}/rest/v1/rpc/${name}`, {
     method: 'POST',
-    headers: supabaseHeaders(supa, 'return=representation'),
+    headers: { ...supabaseHeaders(supa, 'return=representation'), ...writeHeaders },
     body: JSON.stringify(params),
     keepalive: !!options.keepalive
   });
@@ -587,30 +656,99 @@ async function supabaseRpc(name, params = {}, options = {}) {
     const error = new Error(data?.message || data?.hint || `Supabase ${res.status}`);
     error.status = res.status;
     error.details = data;
+    if (/PRIVACY_EPOCH_CHANGED/.test(error.message)) {
+      error.code = 'PRIVACY_EPOCH_CHANGED';
+      error.message = '정보가 갱신되어 화면을 새로고침합니다. 새 화면에서 다시 시도해 주세요.';
+      privacyReload();
+    }
+    if (/ACCOUNT_DELETION_PENDING/.test(error.message)) {
+      error.code = 'ACCOUNT_DELETION_PENDING';
+      error.message = '탈퇴 신청 처리 중에는 정보를 변경할 수 없습니다. 탈퇴 신청을 취소한 후 이용해 주세요.';
+    }
     throw error;
   }
+  if (capturedToken && name !== 'pm_logout' && capturedToken !== authToken) throw new Error('SESSION_CHANGED');
   return data;
 }
 
 let canonicalMembersRefresh = null;
 let canonicalMembersRefreshedAt = 0;
+let canonicalMembers = [];
+
+function sameCustomer(a, b) {
+  if (!a || !b) return false;
+  if (a.id && b.id && String(a.id) === String(b.id)) return true;
+  const aCar = String(a.car || '').toLowerCase().replace(/[^0-9a-z가-힣]/g, '');
+  const bCar = String(b.car || '').toLowerCase().replace(/[^0-9a-z가-힣]/g, '');
+  if (aCar && bCar && aCar === bCar) return true;
+  const aPhone = normPhone(a.phone);
+  const bPhone = normPhone(b.phone);
+  return !!aPhone && !!bPhone && aPhone === bPhone;
+}
+
+function mergeCustomerDirectory(accountMembers = []) {
+  const directory = [];
+  const banned = store.get('pm-banned-members', [])
+    .filter(entry => ['blocked', 'deleted'].includes(entry?.type))
+    .map(entry => entry.member)
+    .filter(Boolean);
+  const add = (candidate, accountWins = false) => {
+    if (!candidate || banned.some(blocked => sameCustomer(candidate, blocked))) return;
+    const safe = { ...candidate };
+    delete safe.password;
+    const index = directory.findIndex(current => sameCustomer(current, safe));
+    if (index < 0) directory.push(safe);
+    else directory[index] = accountWins
+      ? { ...directory[index], ...safe }
+      : { ...safe, ...directory[index] };
+  };
+  store.get('pm-bookings', [])
+    .filter(booking => booking?.guest !== true)
+    .slice()
+    .sort((a, b) => bookingTimestamp(b) - bookingTimestamp(a))
+    .forEach(booking => add({
+      id: booking.memberId || '',
+      name: booking.name || '',
+      car: booking.car || '',
+      model: booking.model || '',
+      phone: booking.phone || '',
+      role: booking.guest ? 'guest' : 'customer'
+    }));
+  store.get('pm-members', []).forEach(memberRow => add(memberRow, true));
+  accountMembers.forEach(memberRow => add(memberRow, true));
+  return directory;
+}
+
 async function refreshCanonicalMembers(force = false) {
-  if (!authToken || !isAdmin) return store.get('pm-members', []);
-  if (!force && Date.now() - canonicalMembersRefreshedAt < 15000) return store.get('pm-members', []);
-  if (canonicalMembersRefresh) return canonicalMembersRefresh;
+  if (!authToken || !isAdmin) {
+    canonicalMembers = [];
+    return canonicalMembers;
+  }
+  if (!force && Date.now() - canonicalMembersRefreshedAt < 15000) {
+    canonicalMembers = mergeCustomerDirectory(canonicalMembers);
+    return canonicalMembers;
+  }
+  if (canonicalMembersRefresh) {
+    const pendingMembers = await canonicalMembersRefresh;
+    canonicalMembers = mergeCustomerDirectory(pendingMembers);
+    return canonicalMembers;
+  }
   canonicalMembersRefresh = supabaseRpc('pm_customer_accounts', { p_token: authToken })
     .then(rows => {
       if (!Array.isArray(rows)) throw new Error('INVALID_CUSTOMER_ACCOUNTS');
-      store.setLocal('pm-members', rows);
+      canonicalMembers = mergeCustomerDirectory(rows);
       canonicalMembersRefreshedAt = Date.now();
-      return rows;
+      return canonicalMembers;
     })
     .finally(() => { canonicalMembersRefresh = null; });
   return canonicalMembersRefresh;
 }
 
 function saveAuthSession(result, { remember = false, admin = false } = {}) {
+  if (authToken && authToken !== result?.token) window.PMPush?.disconnect();
   authToken = result?.token || '';
+  window.PMPrivacyEpoch.reset();
+  setTimeout(() => { window.PMPush?.sessionChanged(); window.PMDeletionBridge?.sessionChanged(); }, 0);
   if (!authToken) return;
   sessionStorage.setItem('pm-auth-token', authToken);
   if (remember) localStorage.setItem('pm-auth-token', authToken);
@@ -627,6 +765,8 @@ function saveAuthSession(result, { remember = false, admin = false } = {}) {
 }
 
 function clearAuthSession() {
+  window.PMPrivacyEpoch.reset();
+  window.PMPush?.disconnect();
   const token = authToken;
   authToken = '';
   sessionStorage.removeItem('pm-auth-token');
@@ -640,30 +780,31 @@ function clearAuthSession() {
   store.del('pm-auto-login');
   store.del('pm-auto-member');
   if (token) supabaseRpc('pm_logout', { p_token: token }).catch(() => {});
+  setTimeout(() => { if (!authToken) hydrateSupabaseData(); }, 0);
 }
 
 async function syncSupabaseData(key, value) {
   if (isHydratingSupabase || !SUPABASE_DATA_KEYS.includes(key) || !authToken) return true;
-  let lastError = null;
+  const token = authToken;
+  let headers;
+  try { headers = window.PMPrivacyEpoch.headers(); } catch { return false; }
+  let lastError;
   for (let attempt = 0; attempt < 3; attempt += 1) {
     try {
-      await supabaseRpc('pm_sync_write', {
-        p_token: authToken,
-        p_key: key,
-        p_payload: value,
-        p_page_url: location.href
-      });
+      if (token !== authToken || privacyReloading) return false;
+      if (headers['x-promotors-data-epoch'] !== window.PMPrivacyEpoch.headers()['x-promotors-data-epoch']) return false;
+      await supabaseRpc(SUPABASE_ID_MERGE_KEYS.has(key) ? 'pm_sync_merge_by_id' : 'pm_sync_write', {
+        p_token: token, p_key: key, p_payload: value, p_page_url: location.href
+      }, { headers });
       locallyModifiedKeys.delete(key);
       return true;
-    } catch (err) {
-      lastError = err;
+    } catch (error) {
+      lastError = error;
+      if (privacyStopError(error)) { locallyModifiedKeys.delete(key); return false; }
       if (attempt < 2) await new Promise(resolve => setTimeout(resolve, 500 * (attempt + 1)));
     }
   }
-  console.warn('Supabase save failed', key, lastError);
-  setTimeout(() => {
-    if (locallyModifiedKeys.has(key)) syncSupabaseData(key, store.get(key, value));
-  }, 5000);
+  console.warn('Supabase save failed; manual retry required', key, lastError);
   return false;
 }
 
@@ -671,15 +812,24 @@ async function hydrateSupabaseData() {
   const supa = getSupabaseConfig();
   if (!supa) return { ok: false, reason: 'not-configured' };
   try {
-    const rows = await supabaseRpc('pm_sync_read', { p_token: authToken || null });
+    const hydrateToken = authToken;
+    const rows = await supabaseRpc('pm_sync_read', { p_token: hydrateToken || null });
     if (!Array.isArray(rows)) throw new Error('INVALID_SYNC_RESPONSE');
     const publicRows = authToken
       ? await supabaseRpc('pm_sync_read', { p_token: null }).catch(() => [])
       : rows;
+    if (hydrateToken !== authToken) throw new Error('SESSION_CHANGED');
     isHydratingSupabase = true;
+    await window.PMPrivacyEpoch.accept(rows, { resetPrivateCache: async ({rows: fresh}) => {
+      privacyClearMemory();
+      await privacyClearAssets();
+      if (hydrateToken !== authToken || privacyReloading) throw new Error('SESSION_CHANGED');
+      fresh.forEach(row => { if (row.data_key !== 'pm-auth-context') store.setLocal(row.data_key, row.payload); });
+    }});
+    if (hydrateToken !== authToken || privacyReloading) throw new Error('SESSION_CHANGED');
     const context = rows.find(row => row.data_key === 'pm-auth-context')?.payload || { authenticated: false };
     rows.forEach(row => {
-      if (row.data_key !== 'pm-auth-context' && !locallyModifiedKeys.has(row.data_key)) store.setLocal(row.data_key, row.payload);
+      if (row.data_key !== 'pm-auth-context' && row.data_key !== 'pm-privacy-epoch' && !locallyModifiedKeys.has(row.data_key)) store.setLocal(row.data_key, row.payload);
     });
     /* 자동로그인 세션의 사설 데이터 복원과 무관하게 공개 이미지/콘텐츠는 서버 값을 확정 적용한다. */
     if (Array.isArray(publicRows)) {
@@ -828,6 +978,23 @@ function branchHours(branch) {
     closedDates: Array.isArray(saved.closedDates) ? saved.closedDates : [],
     days
   };
+}
+
+async function persistBookings(bookings) {
+  if (!getSupabaseConfig()) {
+    store.set('pm-bookings', bookings);
+    return bookings;
+  }
+  if (!authToken) throw new Error('AUTH_REQUIRED');
+  await supabaseRpc('pm_sync_merge_by_id', {
+    p_token: authToken,
+    p_key: 'pm-bookings',
+    p_payload: bookings,
+    p_page_url: location.href
+  });
+  store.setLocal('pm-bookings', bookings);
+  clearBookingAvailability();
+  return bookings;
 }
 function branchDateInfo(branch, date) {
   const settings = branchHours(branch);
@@ -1011,146 +1178,25 @@ function activityElementLabel(element) {
   const label = element.getAttribute('aria-label') || element.dataset?.view || element.textContent || element.id || element.tagName;
   return String(label).replace(/\s+/g, ' ').trim().slice(0, 80) || '이름 없는 요소';
 }
-/* 검색어는 검색엔진에서 온 방문에서만 가져온다.
-   아무 사이트의 ?q= 를 검색어로 쓰면 엉뚱한 값이 키워드 목록에 섞인다. */
-const SEARCH_ENGINE_HOST = /(^|\.)(search\.naver\.com|search\.daum\.net|bing\.com|zum\.com|duckduckgo\.com)$|(^|\.)google\.|(^|\.)yahoo\./;
-function activitySearchTermFromReferrer(referrerValue) {
-  try {
-    const previous = new URL(String(referrerValue || ''));
-    if (!SEARCH_ENGINE_HOST.test(previous.hostname.toLowerCase())) return '';
-    return previous.searchParams.get('query') || previous.searchParams.get('q') || previous.searchParams.get('keyword') || '';
-  } catch {
-    return '';
-  }
-}
-/* 보이는 표기는 그대로 두고 앞뒤·중복 공백만 정리한다. */
-function activityCleanKeyword(value) {
-  return String(value || '').trim().replace(/\s+/g, ' ').slice(0, 80);
-}
-/* 묶는 기준. 공백과 대소문자만 다른 같은 검색어가 여러 줄로 쪼개지지 않게 한다. */
-function activityKeywordKey(value) {
-  return activityCleanKeyword(value).replace(/\s+/g, '').toLowerCase();
-}
-/* 예약에는 매출이 없고 정산 기록은 차량번호로 저장된다.
-   그래서 같은 차량 · 같은 날짜의 정산 완료 기록만 그 예약의 매출로 본다. 추정값이다. */
-function activityBookingRevenue(booking, customers) {
-  const records = customers?.[booking?.car]?.records;
-  if (!Array.isArray(records)) return 0;
-  const bookingDay = String(booking.date || booking.createdAt || '').slice(0, 10).replaceAll('.', '-');
-  if (!bookingDay) return 0;
-  return records
-    .filter(record => record.paid && String(record.date || record.createdAt || '').slice(0, 10).replaceAll('.', '-') === bookingDay)
-    .reduce((sum, record) => sum + Number(String(record.amount ?? '').replace(/[^\d]/g, '') || 0), 0);
-}
-/* 검색어를 어디까지 확인할 수 있는지는 들어온 곳마다 다르다.
-   광고만 실제 검색어가 확실히 넘어오고, 플레이스·블로그는 원리적으로 넘어오지 않는다. */
-function activityKeywordAvailability(channel) {
-  const name = String(channel || '');
-  if (/검색광고/.test(name)) return { label:'가능', tone:'gold', note:'실제 검색어와 등록 키워드가 함께 저장됩니다.' };
-  if (/구글/.test(name)) return { label:'불가', tone:'cold', note:'구글은 검색어를 보내지 않습니다. 구글 서치 콘솔에서 확인합니다.' };
-  if (/플레이스/.test(name)) return { label:'불가', tone:'cold', note:'어떤 검색으로 플레이스를 찾았는지는 네이버 스마트플레이스 통계에서 확인합니다.' };
-  if (/블로그|카페/.test(name)) return { label:'불가', tone:'cold', note:'검색어는 블로그·카페 통계에서 확인합니다. 링크에 utm_campaign을 넣으면 어느 글에서 왔는지는 구분됩니다.' };
-  if (/자연검색|검색엔진/.test(name)) return { label:'일부만', tone:'warm', note:'네이버·다음은 일부 경로에서만 검색어를 보냅니다.' };
-  return { label:'해당 없음', tone:'plain', note:'검색을 거치지 않은 유입입니다.' };
-}
-function activityPlatform(channel) {
-  const name = String(channel || '');
-  if (name.includes('네이버')) return '네이버';
-  if (name.includes('구글')) return '구글';
-  if (name.includes('다음')) return '다음';
-  return '기타';
-}
-/* 황금 키워드 판정. 방문 수가 아니라 전화·예약이 붙었는지로 나눈다. */
-function activityKeywordGrade(row) {
-  if (row.bookings) return { label: '황금', tone: 'gold' };
-  const callRate = row.visitors ? row.calls / row.visitors : 0;
-  /* 방문이 충분히 쌓였는데 전화까지 이어지는 비율이 낮으면 예산을 빼는 쪽이다. */
-  if (row.visitors >= 20 && callRate < 0.05) return { label: '낭비', tone: 'cold' };
-  if (row.calls) return { label: '유망', tone: 'warm' };
-  if (row.visitors >= 10) return { label: '낭비', tone: 'cold' };
-  return { label: '관찰', tone: 'plain' };
-}
-/* 방문자 한 명이 무엇을 하려다 멈췄는지 한 줄로 정리한다.
-   화면 녹화가 아니라 저장된 행동 기록만으로 판단하므로, 확실한 신호부터 차례로 본다. */
-function activityVisitorVerdict(items) {
-  const ordered = [...items].sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
-  const has = type => ordered.some(item => item.event_type === type);
-  const dwell = ordered
-    .filter(item => item.event_type === 'view_dwell')
-    .reduce((sum, item) => sum + Number(item.payload?.seconds || 0), 0);
-  const views = ordered.filter(item => item.event_type === 'view_open');
-  const clicks = ordered.filter(item => item.event_type === 'element_click');
-  const paidVisit = /광고/.test(activityChannel(ordered[0]) || '');
-
-  const viewCounts = new Map();
-  views.forEach(item => {
-    const name = activityViewName(item.payload?.view);
-    viewCounts.set(name, (viewCounts.get(name) || 0) + 1);
-  });
-  const repeated = [...viewCounts.entries()].sort((a, b) => b[1] - a[1])[0];
-
-  const dwellByView = new Map();
-  ordered.filter(item => item.event_type === 'view_dwell').forEach(item => {
-    const name = activityViewName(item.payload?.view);
-    dwellByView.set(name, (dwellByView.get(name) || 0) + Number(item.payload?.seconds || 0));
-  });
-  const longest = [...dwellByView.entries()].sort((a, b) => b[1] - a[1])[0];
-
-  /* 같은 곳을 짧은 시간에 세 번 이상 누른 흔적 */
-  const rage = clicks.some((item, index) => {
-    const same = clicks.slice(index, index + 3);
-    if (same.length < 3) return false;
-    const sameTarget = same.every(click => (click.payload?.target || '') === (item.payload?.target || ''));
-    return sameTarget && new Date(same[2].created_at) - new Date(item.created_at) <= 5000;
-  });
-
-  if (has('booking_complete')) return '예약까지 마쳤습니다.';
-  if (has('phone_call')) return '전화번호를 눌렀습니다. 통화로 이어졌는지는 확인이 필요합니다.';
-  if (rage) return '같은 곳을 여러 번 눌렀습니다. 반응이 없다고 느꼈을 수 있습니다.';
-  if (has('reservation_hesitation')) return '예약을 시작했다가 망설이고 나갔습니다.';
-  if (has('branch_select')) return '지점까지 골랐지만 예약을 끝내지 않았습니다.';
-  if (has('reservation_click')) return '예약 화면까지 갔다가 멈췄습니다.';
-  if (repeated && repeated[1] >= 3) return `${repeated[0]} 화면을 ${repeated[1]}번 다시 봤습니다. 찾는 정보가 없었던 것 같습니다.`;
-  if (dwell >= 180 && longest) return `${longest[0]} 화면을 ${activityDuration(longest[1])} 봤지만 연락은 없었습니다.`;
-  if (clicks.length >= 5) return '여기저기 눌러봤지만 예약·전화로 이어지지 않았습니다.';
-  if (dwell > 0 && dwell < 10 && views.length <= 1) {
-    return paidVisit
-      ? '광고로 들어와 곧바로 나갔습니다. 광고 문구와 첫 화면이 다를 수 있습니다.'
-      : '들어오자마자 나갔습니다.';
-  }
-  if (longest) return `${longest[0]} 화면을 주로 봤습니다.`;
-  return '둘러보기만 했습니다.';
-}
-function activityPhoneDigits(value) {
-  return String(value || '').replace(/\D/g, '');
-}
-/* 사이트 어디서든 전화번호 링크를 누르면 지점·번호를 찾아 전환으로 남긴다. */
-function phoneClickContext(element, href) {
-  const digits = activityPhoneDigits(String(href || '').replace(/^tel:/i, ''));
-  const tagged = element?.dataset?.phoneBranch || element?.closest?.('[data-phone-branch]')?.dataset?.phoneBranch || '';
-  if (tagged) return { branch: tagged, phone: element?.dataset?.phone || digits };
-  const candidates = [
-    ...PHONE_BOOKING_BRANCHES.map(branch => ({ name: branch.name, tel: branch.phone })),
-    ...getBranches().flatMap(branch => [{ name: branch.name, tel: branch.tel }, { name: branch.name, tel: branch.mobile }])
-  ];
-  const matched = candidates.find(candidate => {
-    const candidateDigits = activityPhoneDigits(candidate.tel);
-    return candidateDigits && candidateDigits === digits;
-  });
-  return { branch: matched?.name || '', phone: digits };
-}
 function activityAcquisitionContext(referrerValue = document.referrer || '', urlValue = location.href) {
   let params = new URLSearchParams();
+  let referrerParams = new URLSearchParams();
+  let referrerHost = '';
   try { params = new URL(urlValue, location.origin).searchParams; } catch {}
+  try {
+    const referrerUrl = new URL(referrerValue);
+    referrerParams = referrerUrl.searchParams;
+    referrerHost = referrerUrl.hostname.toLowerCase().replace(/^www\./, '');
+  } catch {}
   const source = String(params.get('utm_source') || '').toLowerCase();
   const medium = String(params.get('utm_medium') || '').toLowerCase();
   const naverMedia = params.get('n_media') || '';
-  const naverQuery = params.get('n_query') || '';
+  const naverQuery = params.get('n_query') || referrerParams.get('query') || '';
   const naverKeyword = params.get('n_keyword') || '';
   const campaign = params.get('utm_campaign') || params.get('n_campaign') || params.get('n_campaign_type') || '';
   const content = params.get('utm_content') || '';
-  const searchQuery = activityCleanKeyword(naverQuery || params.get('query') || params.get('q') || activitySearchTermFromReferrer(referrerValue));
-  const purchasedKeyword = activityCleanKeyword(naverKeyword || params.get('utm_term') || '');
+  const searchQuery = naverQuery || params.get('query') || params.get('q') || referrerParams.get('q') || '';
+  const purchasedKeyword = naverKeyword || params.get('utm_term') || '';
   const keyword = searchQuery || purchasedKeyword;
   const clickId = params.get('gclid') || params.get('wbraid') || params.get('gbraid') || params.get('fbclid') || params.get('n_click_id') || '';
   const adGroup = params.get('n_ad_group') || params.get('utm_adgroup') || '';
@@ -1158,27 +1204,23 @@ function activityAcquisitionContext(referrerValue = document.referrer || '', url
   const rank = params.get('n_rank') || '';
   const referrer = String(referrerValue || '').toLowerCase();
   const combined = `${source} ${medium} ${naverMedia} ${referrer}`;
-  /* utm_campaign은 블로그·문자 같은 무료 링크에도 쓰므로 광고 판정 근거로 쓰지 않는다. */
-  const paid = !!(clickId || naverMedia || naverKeyword || /cpc|ppc|paid|display|cpm/.test(medium));
+  const paid = !!(campaign || clickId || naverMedia || naverKeyword || /cpc|ppc|paid|display/.test(medium));
   let channel = '직접 접속';
   if (paid && (naverMedia || combined.includes('naver'))) channel = '네이버 검색광고';
   else if (paid && combined.includes('google')) channel = '구글 검색광고';
   else if (paid && (combined.includes('instagram') || combined.includes('facebook') || source === 'ig')) channel = '메타 광고';
   else if (paid) channel = '기타 광고';
-  else if (/blog\.naver|blog\.me|post\.naver/.test(combined) || source.includes('naver_blog')) channel = '네이버 블로그';
-  else if (/cafe\.naver/.test(combined)) channel = '네이버 카페';
-  else if (/place\.naver|map\.naver/.test(combined) || source.includes('naver_place')) channel = '네이버 플레이스';
+  else if (referrerHost === 'blog.naver.com' || referrerHost === 'm.blog.naver.com' || source.includes('naver_blog')) channel = '네이버 블로그';
+  else if (medium === 'blog' || source.includes('blog') || referrerHost.includes('blog')) channel = '블로그';
+  else if (/place\.naver|m\.place\.naver|map\.naver/.test(combined) || source.includes('naver_place')) channel = '네이버 플레이스';
   else if (combined.includes('naver')) channel = '네이버 자연검색';
   else if (combined.includes('google')) channel = '구글 자연검색';
-  else if (/daum\.net/.test(combined)) channel = '다음 자연검색';
-  else if (/bing\.com|duckduckgo|zum\.com/.test(combined)) channel = '기타 검색엔진';
   else if (combined.includes('instagram') || source === 'ig') channel = '인스타그램';
   else if (combined.includes('kakao')) channel = '카카오톡';
-  else if (medium === 'blog' || source.includes('blog')) channel = '블로그 링크';
   else if (medium === 'sms' || source === 'sms' || source.includes('message')) channel = '문자 링크';
   else if (medium.includes('push') || source.includes('push')) channel = '앱 푸시';
   else if (medium.includes('affiliate') || source.includes('partner')) channel = '제휴 사이트';
-  else if (referrer) channel = '기타 사이트';
+  else if (referrer) channel = '제휴 사이트';
   return {
     channel,
     source: source || (naverMedia || combined.includes('naver') ? 'naver' : combined.includes('google') ? 'google' : ''),
@@ -1192,7 +1234,16 @@ function activityAcquisitionContext(referrerValue = document.referrer || '', url
     adId,
     clickId,
     rank,
+    referrerHost,
     paid
+  };
+}
+function activityPhonePayload(element, href) {
+  const rawPhone = element.dataset?.phone || String(href || '').replace(/^tel:/i, '');
+  const phone = decodeURIComponent(rawPhone).replace(/[^\d+]/g, '');
+  return {
+    branch: element.dataset?.phoneBranch || element.closest('[data-phone-branch]')?.dataset?.phoneBranch || '지점 미확인',
+    phone
   };
 }
 function initActivityTracking() {
@@ -1220,8 +1271,7 @@ function initActivityTracking() {
     const element = event.target.closest('button, a, [role="button"], input[type="submit"]');
     if (!element) return;
     const href = element.getAttribute('href') || '';
-    /* 전화 링크는 곧바로 전화 앱으로 넘어가므로 keepalive 로 보내야 기록이 살아남는다. */
-    if (/^tel:/i.test(href)) logEvent('phone_call', phoneClickContext(element, href), { keepalive: true });
+    if (/^tel:/i.test(href)) logEvent('phone_call', activityPhonePayload(element, href));
     logEvent('element_click', {
       label: activityElementLabel(element),
       target: element.id || element.dataset?.view || element.dataset?.mtab || href.slice(0, 120) || element.tagName.toLowerCase()
@@ -1384,12 +1434,15 @@ $$('.case-branch-tab').forEach(button => {
 /* ============================================================
    모달 공용
    ============================================================ */
+document.documentElement.classList.toggle('native-app', !!window.Capacitor?.isNativePlatform?.());
 const modal = $('#modal');
 const modalCard = $('#modal-card');
 let modalBackHandler = null;
 
 function openModal(html, wide, full, backHandler = null) {
   modalBackHandler = backHandler;
+  modalCard.classList.remove('mypage-card', 'mobile-full', 'brand-mypage');
+  modalCard.scrollTop = 0;
   modalCard.classList.toggle('wide', !!wide);
   modalCard.classList.toggle('full', !!full);
   modalCard.innerHTML = `<button type="button" class="modal-x" id="modal-x" aria-label="닫기">×</button>${html}`;
@@ -1403,10 +1456,10 @@ function openModal(html, wide, full, backHandler = null) {
       closeModal();
     }
   });
-  const first = modalCard.querySelector('input, textarea, [contenteditable="true"]');
-  if (first) first.focus();
+  const first = modalCard.querySelector('input:not([disabled]):not([readonly]), textarea, [contenteditable="true"]');
+  if (first && !matchMedia('(max-width: 900px), (pointer: coarse)').matches) first.focus({ preventScroll: true });
 }
-function closeModal() { modalBackHandler = null; clearModalScreen(); modal.hidden = true; modalCard.classList.remove('full', 'mypage-card', 'mobile-full'); modalCard.innerHTML = ''; syncMobileTabbar(); }
+function closeModal() { modalBackHandler = null; clearModalScreen(); modal.hidden = true; modalCard.classList.remove('full', 'mypage-card', 'mobile-full', 'brand-mypage'); modalCard.innerHTML = ''; syncMobileTabbar(); }
 modal.addEventListener('click', e => { if (e.target === modal) e.preventDefault(); });
 
 /* ---------- 푸터 법적 고지 ---------- */
@@ -1422,11 +1475,11 @@ const LEGAL_MODAL_CONTENT = {
       <section><h4>제6조 문의 및 분쟁</h4><p>서비스 관련 문의는 아래 연락처로 접수할 수 있습니다. 본 약관에 정하지 않은 사항은 관계 법령 및 상관례에 따릅니다.</p></section>`
   },
   privacy: {
-    title: '개인정보 처리방침', updated: '시행일: 2026년 7월 16일',
+    title: '개인정보 처리방침 개정안', updated: '공지일: 2026년 9월 28일 · 시행 예정일: 2026년 10월 5일',
     body: `
       <section><h4>1. 개인정보 처리자 및 문의처</h4><p>상호: 프로모터스 안산점 / 대표자: 이승현 / 주소: 경기도 안산시 단원구 이삭로 6, 1층(고잔동)<br>개인정보 관련 문의: <a href="tel:0318319738">031-831-9738</a>, <a href="mailto:promotors3986@naver.com">promotors3986@naver.com</a></p></section>
       <section><h4>2. 수집 항목과 처리 목적</h4><ul><li>회원가입: 아이디, 비밀번호, 이름, 생년월일, 차량명, 차량번호, 휴대전화번호, 이메일·주소(선택) — 회원 식별, 생일 쿠폰·회원 혜택 및 정비 서비스 제공</li><li>정비예약: 예약 일시·지점·선택 서비스·요청 메모·쿠폰 및 회원·차량 정보 — 예약 확인, 혜택 적용, 정비 상담 및 진행 안내</li><li>정비 진행현황: 정비기록, 작업사진, 고객문의 내용 — 정비 이력 관리 및 고객 응대</li><li>서비스 이용기록: 접속 IP 주소, 브라우저 정보, 유입 경로, 익명 세션 식별값, 화면 이동·체류시간, 버튼 클릭·전화 연결·사이트 이탈 기록 — 중복 방문 구분, 서비스 이용성 분석 및 보안 점검</li></ul></section>
-      <section><h4>3. 보유 및 이용 기간</h4><p>회원정보는 회원 탈퇴 또는 처리 목적 달성 시까지 보유합니다. 예약·정비기록 및 고객문의는 분쟁 대응과 서비스 이력 확인을 위해 최종 이용일로부터 5년간 보관합니다. 접속 IP를 포함한 서비스 이용기록은 이용성 분석 및 보안 점검에 필요한 기간 동안 보관 후 삭제하며, 관계 법령상 별도 보존이 필요한 경우에는 해당 기간 동안 보관합니다.</p></section>
+      <p>아래는 개인정보 보관을 최소화하는 개정 방침으로, 2026년 10월 5일부터 시행됩니다. 시행 전에는 <a href="/privacy/current-policy.html">현재 적용 중인 개인정보처리방침</a>을 확인해 주세요. 현재 방침에 따른 개인정보 삭제·회원 탈퇴 요청은 계속할 수 있습니다.</p><section><h4>3. 보유 및 이용 기간</h4><p>이 서비스는 정비 상담·예약을 제공하며 온라인 결제·판매를 하지 않습니다. 탈퇴 신청 72시간 후 계정, 연락처 등 회원 프로필, 예약, 일반 고객문의, 개인 작업사진과 계정에 연결된 이용로그 등 불필요한 개인정보를 삭제합니다. 실제 삭제가 시작되기 전에는 언제든 신청을 취소할 수 있습니다.</p><p>정비 이력은 개인 식별정보를 제거해 남깁니다. 별도로 법정 보관이 필요한 완료 정비기록은 자동차등록번호, 정비의뢰일, 정비완료일 및 정비작업내용만 최소한으로 분리 보관합니다. 자동차관리법 시행규칙 제134조제1항제1호에 따라 정비 완료일부터 1년간 보관한 뒤 파기합니다.</p><p>실제 진행 중인 정비, 소유권이 확인되지 않은 자료 또는 명시적인 분쟁이 있는 경우에는 해당 자료에 대해 추가 확인을 진행합니다. 삭제 처리가 끝나기 전에는 완료로 표시하지 않습니다.</p></section>
       <section><h4>4. 제3자 제공 및 처리위탁</h4><p>회사는 이용자의 개인정보를 판매하거나 광고 목적의 제3자에게 제공하지 않습니다. 서비스 데이터 저장·동기화를 위해 Supabase Inc.의 클라우드 서비스를 이용할 수 있으며, 이는 서비스 운영을 위한 처리위탁에 해당합니다. 해외 저장이 발생할 수 있으므로 개인정보 관련 문의 또는 열람·정정·삭제 요청은 위 연락처로 할 수 있습니다.</p></section>
       <section><h4>5. 정보주체의 권리</h4><p>이용자는 자신의 개인정보에 대해 열람, 정정·삭제, 처리정지 및 동의철회를 요구할 수 있습니다. 회원 탈퇴 또는 위 연락처를 통해 요청할 수 있으며, 법령상 제한 사유가 없으면 지체 없이 처리합니다.</p></section>
       <section><h4>6. 파기 절차 및 방법</h4><p>보유기간이 경과하거나 처리 목적이 달성된 개인정보는 복구할 수 없는 방법으로 삭제합니다. 전자파일은 기술적으로 복구가 불가능한 방식으로 삭제하고, 종이 문서는 분쇄 또는 소각합니다.</p></section>
@@ -1654,13 +1707,14 @@ function openMemberModal(tab) {
       <p class="form-error" id="m-error"></p>
       <div class="modal-actions">
         <button type="submit" class="modal-submit">${tab === 'login' ? '로그인' : '가입하기'}</button>
-        <button type="button" class="modal-cancel" onclick="document.getElementById('modal').hidden=true">취소</button>
+        <button type="button" class="modal-cancel" id="member-cancel">취소</button>
       </div>
     </form>
   `);
 
   /* 모바일에서는 로그인/회원가입을 전체화면 페이지로 표시 */
   modalCard.classList.add('mobile-full');
+  $('#member-cancel').addEventListener('click', closeModal);
   modalCard.querySelectorAll('.mtab').forEach(b =>
     b.addEventListener('click', () => openMemberModal(b.dataset.t)));
   $('#m-id').value = tab === 'signup' ? (draft.id || '') : rememberedId;
@@ -1771,6 +1825,30 @@ const WORK_STAGES = [
   { label: '검수중', icon: 'search' },
   { label: '완료', icon: 'flag' }
 ];
+const BRAND_MYPAGE_STAGES = [
+  { label: '접수', icon: 'calendar' },
+  { label: '진단', icon: 'search' },
+  { label: '작업', icon: 'wrench' },
+  { label: '검수', icon: 'check' },
+  { label: '출고', icon: 'car' }
+];
+
+function shortBookingDate(booking) {
+  if (!booking?.date) return '예약 일정 없음';
+  const date = new Date(`${String(booking.date).replace(/\./g, '-')}T${booking.time || '00:00'}`);
+  if (Number.isNaN(date.getTime())) return `${booking.date} ${booking.time || ''}`.trim();
+  const dateLabel = date.toLocaleDateString('ko-KR', { month: 'long', day: 'numeric', weekday: 'short' });
+  const timeLabel = date.toLocaleTimeString('ko-KR', { hour: 'numeric', minute: '2-digit' });
+  return `${dateLabel} ${timeLabel}`;
+}
+
+function brandStatusSteps(stageIndex) {
+  return BRAND_MYPAGE_STAGES.map((stage, index) => `
+    <span class="${index < stageIndex ? 'done' : ''} ${index === stageIndex ? 'current' : ''}">
+      <i aria-hidden="true">${MYPAGE_ICONS[stage.icon]}</i>
+      <em>${stage.label}</em>
+    </span>`).join('');
+}
 
 async function openMyPageModal() {
   if (!member) return openMemberModal('login');
@@ -1778,16 +1856,29 @@ async function openMyPageModal() {
   const bookings = getBookings().filter(b => b.car === member.car || b.memberId === member.id);
   const serviceRuns = store.get('pm-service-runs', []).filter(r => r.car === member.car || r.memberId === member.id);
   const notices = getMessagesFor(member).filter(m => m.serviceContext?.runId);
-  const latestBooking = bookings.filter(isActiveBooking).sort((a, b) => bookingTimestamp(b) - bookingTimestamp(a))[0];
+  const latestBookingRecord = bookings.slice().sort((a, b) => bookingTimestamp(b) - bookingTimestamp(a))[0];
+  const latestBooking = bookings
+    .filter(booking => {
+      const linkedRun = runForBooking(booking);
+      return isActiveBooking(booking)
+        && (String(booking.date || '') >= todayKey() || (linkedRun && !isRunCompleted(linkedRun)));
+    })
+    .sort((a, b) => bookingTimestamp(b) - bookingTimestamp(a))[0];
   const latestRun = serviceRuns.slice().sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0))[0];
+  const activeRun = serviceRuns
+    .filter(run => !isRunCompleted(run))
+    .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0))[0];
+  const displayRun = activeRun || (!latestBooking ? latestRun : null);
 
   /* 진행 단계: 0 접수완료 → 1 작업중 → 2 검수중 → 3 완료 (-1: 예약 없음) */
   let stageIndex = -1;
   let statusText = '진행 중인 예약이 없어요';
-  if (latestRun) {
-    const current = (latestRun.steps || [])[latestRun.currentStep] || {};
-    const serviceName = latestRun.serviceName || latestRun.service || (latestBooking?.services || [])[0] || '정비';
-    if (latestRun.completedAt || /완료/.test(latestRun.status || '')) {
+  if (!latestBooking && latestBookingRecord?.status === '취소') {
+    statusText = '예약취소';
+  } else if (displayRun) {
+    const current = (displayRun.steps || [])[displayRun.currentStep] || {};
+    const serviceName = displayRun.serviceName || displayRun.service || (latestBooking?.services || [])[0] || '정비';
+    if (displayRun.completedAt || /완료/.test(displayRun.status || '')) {
       stageIndex = 3;
       statusText = progressServiceText(serviceName, true);
     } else if (current.submitted && !current.approved) {
@@ -1801,64 +1892,106 @@ async function openMyPageModal() {
     stageIndex = 0;
     statusText = `${latestBooking.branch} ${latestBooking.date} ${latestBooking.time} 예약이 접수되었어요`;
   }
-  const stepsHtml = WORK_STAGES.map((stage, i) => `
-    <div class="ws ${stageIndex >= i ? 'done' : ''} ${stageIndex === i ? 'now' : ''}">
-      <span class="ws-icon">${MYPAGE_ICONS[stage.icon]}</span>
-      <em>${stage.label}</em>
-    </div>${i < WORK_STAGES.length - 1 ? `<i class="${stageIndex > i ? 'done' : ''}"></i>` : ''}`).join('');
-  const hasRunPhotos = latestRun && (latestRun.steps || []).some(s => s.approved && (s.photoKeys || []).length);
-  const carMeta = [member.year, member.car].filter(Boolean).join(' · ');
-  const banner = await eventBannerHtml();
+  let brandStageIndex = -1;
+  if (latestBooking) brandStageIndex = 0;
+  if (displayRun) {
+    const current = (displayRun.steps || [])[displayRun.currentStep] || {};
+    brandStageIndex = current.submitted && !current.approved ? 3 : 2;
+  }
+  if (displayRun && (displayRun.completedAt || /완료/.test(displayRun.status || ''))) brandStageIndex = 4;
+
+  const progress = brandStageIndex < 0 ? 0 : Math.round(((brandStageIndex + 1) / BRAND_MYPAGE_STAGES.length) * 100);
+  const currentStageLabel = brandStageIndex < 0 ? '예약 전' : BRAND_MYPAGE_STAGES[brandStageIndex].label;
+  const serviceName = displayRun?.serviceName || displayRun?.service || (latestBooking?.services || [])[0] || '정비 내역 없음';
+  const branchName = displayRun?.branch || latestBooking?.branch || '예약 지점을 선택해주세요';
+  const nextBooking = bookings
+    .filter(b => isActiveBooking(b) && String(b.date || '') >= todayKey())
+    .sort((a, b) => bookingTimestamp(a) - bookingTimestamp(b))[0] || null;
+  const customerMessages = getMessagesFor(member).filter(message => message.from === 'admin');
+  const historyCount = bookings.filter(b => b.status !== '취소').length;
 
   openModal(`
-    <h3>내예약</h3>
-    <section class="mypage-account-card">
-      <button type="button" class="mypage-profile" id="mypage-info">
-        <span class="profile-avatar" aria-hidden="true">${MYPAGE_ICONS.user}</span>
-        <span class="profile-text"><strong>${esc(member.name || '고객')}님</strong><span>안녕하세요!</span></span>
-        <b>›</b>
-      </button>
-      <div class="mypage-account-divider"></div>
-      <div class="mypage-car-text">
-        <span class="mypage-car-label">내 차량</span>
-        <strong>${esc(member.model || '차량 정보를 등록해주세요')}</strong>
-        <span>${esc(carMeta || '-')}</span>
-      </div>
-    </section>
-    <nav class="mypage-quick" aria-label="내예약 바로가기">
-      <button type="button" id="quick-work"><span class="quick-icon">${MYPAGE_ICONS.wrench}</span><strong>작업현황</strong></button>
-      <button type="button" id="mypage-alerts"><span class="quick-icon">${MYPAGE_ICONS.bell}</span><strong>알림</strong>${notices.length ? `<em>${notices.length}</em>` : ''}</button>
-      <button type="button" id="mypage-bookings"><span class="quick-icon">${MYPAGE_ICONS.calendar}</span><strong>예약 내역</strong></button>
-      <button type="button" id="customer-detail-page"><span class="quick-icon">${MYPAGE_ICONS.doc}</span><strong>이용 내역</strong></button>
-      <button type="button" id="mypage-coupons"><span class="quick-icon">${MYPAGE_ICONS.check}</span><strong>내 쿠폰</strong></button>
-      <button type="button" id="mypage-events"><span class="quick-icon">${MYPAGE_ICONS.flag}</span><strong>이벤트</strong></button>
-    </nav>
-    <h4 class="mypage-sec-title">작업 현황</h4>
-    <article class="mypage-progress-card" id="work-status-card">
-      <p class="work-status-text">${esc(statusText)}</p>
-      <div class="work-steps">${stepsHtml}</div>
-      ${hasRunPhotos ? `<button type="button" class="mini-btn view-run-photos" data-run="${esc(latestRun.id)}">작업사진 보기</button>` : ''}
-    </article>
-    ${banner}
-    <button type="button" class="mypage-cs-btn" id="mypage-center">
-      <span class="cs-icon" aria-hidden="true">${MYPAGE_ICONS.headset}</span>
-      <span class="cs-text"><strong>고객센터</strong><span>실시간 채팅으로 문의하세요</span></span>
-      <b>›</b>
-    </button>
+    <div class="brand-mypage-shell">
+      <header class="brand-greeting">
+        <h2>${esc(member.name || '고객')}님, 안녕하세요</h2>
+        <p>${brandStageIndex >= 0 ? '내 차 정비 진행상황을 확인해보세요.' : '정비가 필요할 때 간편하게 예약해보세요.'}</p>
+      </header>
+
+      <section class="brand-now" aria-label="지금 내 차">
+        <div class="brand-now-body">
+          <div class="brand-now-tags">
+            <span>${esc(member.car || '차량번호 미등록')}</span>
+            <strong>${esc(currentStageLabel)}</strong>
+          </div>
+          <div class="brand-now-head">
+            <h3>${esc(member.model || '차량 정보를 등록해주세요')}</h3>
+            <p>${esc(serviceName)} · ${esc(branchName)}</p>
+          </div>
+          <div class="brand-rate">
+            <strong>${progress}<i>%</i></strong>
+            <span>${esc(statusText)}</span>
+          </div>
+          <div class="brand-progress" role="img" aria-label="정비 진행률 ${progress}%"><i style="width:${progress}%"></i></div>
+          <div class="brand-stages">${brandStatusSteps(brandStageIndex)}</div>
+        </div>
+        <button type="button" class="brand-next" id="mypage-next-booking">
+          <span aria-hidden="true">${MYPAGE_ICONS.calendar}</span>
+          <em>${nextBooking ? '다음 예약' : '정비 예약'}</em>
+          <b>${esc(nextBooking ? shortBookingDate(nextBooking) : '예약하기')}</b>
+          <i aria-hidden="true">›</i>
+        </button>
+      </section>
+
+      <section class="brand-menu-group" aria-labelledby="brand-my-car-title">
+        <h3 id="brand-my-car-title">내 차</h3>
+        <div class="brand-menu-list">
+          <button type="button" id="mypage-info"><span aria-hidden="true">${MYPAGE_ICONS.car}</span><strong>내 차 관리</strong><em>${member.model ? esc(member.model) : '차량정보 입력'}</em><i>›</i></button>
+          <button type="button" id="customer-detail-page"><span aria-hidden="true">${MYPAGE_ICONS.doc}</span><strong>정비 이력</strong><em>${historyCount ? `${historyCount}건` : '내역 없음'}</em><i>›</i></button>
+          <button type="button" id="mypage-center"><span aria-hidden="true">${MYPAGE_ICONS.headset}</span><strong>공업사의 TIP</strong><em>${customerMessages.length ? `메시지 ${customerMessages.length}` : '문의하기'}</em><i>›</i></button>
+        </div>
+      </section>
+
+      <section class="brand-menu-group" aria-labelledby="brand-booking-title">
+        <h3 id="brand-booking-title">예약</h3>
+        <div class="brand-menu-list">
+          <button type="button" id="mypage-bookings"><span aria-hidden="true">${MYPAGE_ICONS.calendar}</span><strong>예약 내역</strong><em>${bookings.length ? `${bookings.length}건` : '내역 없음'}</em><i>›</i></button>
+          <button type="button" class="brand-primary-row" id="mypage-reserve"><span aria-hidden="true">${MYPAGE_ICONS.wrench}</span><strong>정비 예약하기</strong><em>예약</em><i>›</i></button>
+          <button type="button" id="quick-work"><span aria-hidden="true">${MYPAGE_ICONS.check}</span><strong>작업사진·현황</strong><em>${notices.length ? `알림 ${notices.length}` : '확인하기'}</em><i>›</i></button>
+        </div>
+      </section>
+
+      <section class="brand-menu-group" aria-labelledby="brand-benefit-title">
+        <h3 id="brand-benefit-title">혜택</h3>
+        <div class="brand-menu-list">
+          <button type="button" id="mypage-coupons"><span aria-hidden="true">${MYPAGE_ICONS.check}</span><strong>내 쿠폰</strong><em>확인하기</em><i>›</i></button>
+          <button type="button" id="mypage-events"><span aria-hidden="true">${MYPAGE_ICONS.flag}</span><strong>이벤트</strong><em>진행 중</em><i>›</i></button>
+        </div>
+      </section>
+
+      <section class="brand-menu-group" aria-labelledby="brand-account-title">
+        <h3 id="brand-account-title">내 정보</h3>
+        <div class="brand-menu-list">
+          <button type="button" id="mypage-account"><span aria-hidden="true">${MYPAGE_ICONS.user}</span><strong>회원정보 수정</strong><em>${esc(member.name || '')}</em><i>›</i></button>
+          <button type="button" id="mypage-alerts"><span aria-hidden="true">${MYPAGE_ICONS.bell}</span><strong>알림</strong><em>${notices.length ? `${notices.length}건` : '새 알림 없음'}</em><i>›</i></button>
+        </div>
+      </section>
+    </div>
   `, true);
-  modalCard.classList.add('mypage-card');
-  wireEventBanner();
+  modalCard.classList.add('mypage-card', 'brand-mypage');
+  syncMobileTabbar(true);
   $('#customer-detail-page').addEventListener('click', openCustomerHistoryModal);
   $('#mypage-alerts').addEventListener('click', openMyAlertsPage);
   $('#mypage-info').addEventListener('click', openMyInfoPage);
+  $('#mypage-account').addEventListener('click', openMyInfoPage);
   $('#mypage-bookings').addEventListener('click', openMyBookingsPage);
   $('#mypage-coupons').addEventListener('click', openMyCouponsPage);
   $('#mypage-events').addEventListener('click', openMyEventsPage);
   $('#mypage-center').addEventListener('click', () => openCustomerCenterModal(member));
   $('#quick-work').addEventListener('click', openWorkStatusPage);
-  modalCard.querySelectorAll('.view-run-photos').forEach(btn => {
-    btn.addEventListener('click', () => openRunPhotosModal(btn.dataset.run));
-  });
+  $('#mypage-reserve').addEventListener('click', () => { closeModal(); openReserveFlow(); });
+  $('#mypage-next-booking').addEventListener('click', nextBooking
+    ? openMyBookingsPage
+    : () => { closeModal(); openReserveFlow(); });
 }
 
 async function openMyCouponsPage() {
@@ -1922,7 +2055,14 @@ async function cancelMemberBooking(booking) {
   const idx = arr.findIndex(b => bookingKey(b) === key);
   if (idx === -1) return false;
   arr[idx] = { ...arr[idx], status: '취소', cancelledAt: new Date().toISOString(), cancelledBy: '고객' };
-  store.set('pm-bookings', arr);
+  try {
+    await persistBookings(arr);
+  } catch (error) {
+    console.warn('Booking cancellation save failed', error);
+    await pmAlert('예약 취소를 서버에 저장하지 못했습니다. 잠시 후 다시 시도해주세요.', '예약 취소');
+    return false;
+  }
+  clearBookingAvailability();
   pushAdminNotification(`${booking.name || booking.car || '고객'}님이 ${booking.date} ${booking.time} ${booking.branch} 예약을 취소했습니다.`, { type: 'booking-cancel', car: booking.car || '' });
   logWorkAudit('예약 취소', { name: booking.name, car: booking.car, phone: booking.phone, model: booking.model, branch: booking.branch, service: (booking.services || []).join(', '), bookingDate: booking.date, bookingTime: booking.time }, '', '고객이 예약을 취소함', '고객');
   logEvent('booking_cancel', { branch: booking.branch, date: booking.date, time: booking.time });
@@ -2125,39 +2265,54 @@ function openMyInfoPage() {
       <p class="form-ok" id="pw-ok"></p>
       <button type="submit" class="modal-submit">비밀번호 변경</button>
     </form>
+    <p><button type="button" class="mini-btn danger" id="pm-account-delete">회원 탈퇴</button></p>
     <div class="modal-actions"><button type="button" class="modal-submit" id="back-my-page">내예약</button></div>
   `, true, false, openMyPageModal);
   modalCard.classList.add('mypage-card');
   myPageBackActions();
   $('#mi-address-find').addEventListener('click', () => openAddressSearch($('#mi-address')));
 
-  const saveMemberEverywhere = () => {
-    const members = store.get('pm-members', []);
-    const idx = members.findIndex(m => m.id === member.id);
-    if (idx > -1) {
-      members[idx] = { ...members[idx], ...member };
-      store.set('pm-members', members);
-    }
-    store.set('pm-member', member);
-    if (store.get('pm-auto-login', false)) store.setLocal('pm-auto-member', member);
-  };
-
-  $('#my-info-form').addEventListener('submit', e => {
+  $('#my-info-form').addEventListener('submit', async e => {
     e.preventDefault();
-    const err = $('#mi-error'), ok = $('#mi-ok');
+    const form = e.currentTarget;
+    const submit = form.querySelector('[type="submit"]');
+    if (submit.disabled) return;
+    const err = form.querySelector('#mi-error'), ok = form.querySelector('#mi-ok');
     err.textContent = ''; ok.textContent = '';
-    const name = $('#mi-name').value.trim();
-    const model = $('#mi-model').value.trim();
-    const car = $('#mi-car').value.trim();
-    const phone = $('#mi-phone').value.trim();
-    const email = $('#mi-email').value.trim();
-    const address = $('#mi-address').value.trim();
+    const name = form.querySelector('#mi-name').value.trim();
+    const model = form.querySelector('#mi-model').value.trim();
+    const car = form.querySelector('#mi-car').value.trim();
+    const phone = form.querySelector('#mi-phone').value.trim();
+    const email = form.querySelector('#mi-email').value.trim();
+    const address = form.querySelector('#mi-address').value.trim();
     if (!name || !car) { err.textContent = '이름과 차량번호는 필수입니다.'; return; }
     const members = store.get('pm-members', []);
     if (members.some(m => m.car === car && m.id !== member.id)) { err.textContent = '이미 등록된 차량번호입니다.'; return; }
-    member = { ...member, name, model, car, phone, email, address };
-    saveMemberEverywhere();
-    ok.textContent = '저장되었습니다.';
+    const index = members.findIndex(m => m.id === member.id);
+    if (index < 0 || !authToken || isHydratingSupabase) {
+      err.textContent = '회원 정보를 불러온 뒤 다시 저장해주세요.'; return;
+    }
+    const token = authToken;
+    const updated = { ...member, name, model, car, phone, email, address };
+    const nextMembers = members.map((item, i) => i === index ? { ...item, ...updated } : item);
+    submit.disabled = true;
+    submit.textContent = '저장 중';
+    try {
+      const saved = await syncSupabaseData('pm-members', nextMembers);
+      if (!saved || token !== authToken) throw new Error('PROFILE_SAVE_FAILED');
+      store.setLocal('pm-members', nextMembers);
+      member = updated;
+      store.setLocal('pm-member', member);
+      if (store.get('pm-auto-login', false)) store.setLocal('pm-auto-member', member);
+      ok.textContent = '저장되었습니다.';
+    } catch {
+      err.textContent = '정보를 저장하지 못했습니다. 입력한 내용은 유지됩니다. 연결 상태를 확인하고 다시 시도해주세요.';
+    } finally {
+      if (form.isConnected) {
+        submit.disabled = false;
+        submit.textContent = '정보 저장';
+      }
+    }
   });
 
   $('#my-pw-form').addEventListener('submit', async e => {
@@ -2167,7 +2322,7 @@ function openMyInfoPage() {
     const current = $('#pw-current').value;
     const next = $('#pw-new').value;
     const next2 = $('#pw-new2').value;
-    if (!validMemberPassword(next)) { err.textContent = '비밀번호는 영어 또는 한글과 숫자를 포함해 8자 이상이어야 합니다.'; return; }
+    if (!validMemberPassword(next)) { err.textContent = '비밀번호는 영어 또는 한글과 숫자를 포함해 10자 이상이어야 합니다.'; return; }
     if (next !== next2) { err.textContent = '새 비밀번호 확인이 일치하지 않습니다.'; return; }
     if (next === current) { err.textContent = '현재 비밀번호와 다른 비밀번호를 입력해주세요.'; return; }
     try {
@@ -2175,9 +2330,13 @@ function openMyInfoPage() {
       $('#pw-current').value = $('#pw-new').value = $('#pw-new2').value = '';
       ok.textContent = '비밀번호가 안전하게 변경되었습니다.';
     } catch (error) {
-      err.textContent = error.message === 'INVALID_PASSWORD'
-        ? '현재 비밀번호가 일치하지 않습니다.'
-        : '비밀번호는 영문과 숫자를 포함해 10자 이상이어야 합니다.';
+      const code = String(error.code || '') + ' ' + String(error.message || '');
+      err.textContent = /INVALID_PASSWORD/.test(code) ? '현재 비밀번호가 일치하지 않습니다.'
+        : /WEAK_PASSWORD/.test(code) ? '비밀번호는 문자와 숫자를 포함해 10자 이상이어야 합니다.'
+        : /ACCOUNT_DELETION_PENDING/.test(code) ? '탈퇴 신청 중에는 비밀번호를 변경할 수 없습니다.'
+        : /AUTH_REQUIRED|INVALID_SESSION|SESSION_CHANGED/.test(code) ? '다시 로그인한 후 시도해 주세요.'
+        : /PRIVACY_EPOCH/.test(code) ? '정보가 갱신되었습니다. 새로고침 후 다시 시도해 주세요.'
+        : '비밀번호를 변경하지 못했습니다. 연결 상태를 확인하고 다시 시도해 주세요.';
     }
   });
 }
@@ -2353,25 +2512,43 @@ function openCustomerCenterModal(customer = member) {
     else openWorkStatusPage();
   });
   const textarea = $('#message-body');
-  const send = () => {
+  let sending = false, pendingMessage;
+  const send = async () => {
     const text = textarea.value.trim();
-    if (!text) return;
-    const all = store.get('pm-messages', []);
-    all.push({
+    if (!text || sending) return;
+    const token = authToken;
+    const form = textarea.closest('form');
+    const submit = form?.querySelector('[type="submit"]');
+    if (!pendingMessage || pendingMessage.message !== text) pendingMessage = {
       id: `msg-${Date.now()}-${Math.random().toString(36).slice(2)}`,
-      memberId: target.id || target.car || '',
-      car: target.car || '',
-      from: isAdmin ? 'admin' : 'customer',
-      message: text,
-      serviceContext: null,
-      customer: target,
-      createdAt: new Date().toISOString()
-    });
-    store.set('pm-messages', all);
-    if (!isAdmin) pushAdminNotification(`${target.name || target.car || '고객'}님의 새 채팅 문의가 도착했습니다.`, { type: 'inquiry', car: target.car || '' });
-    textarea.value = '';
-    updateChatList(true);
-    textarea.focus();
+      memberId: target.id || target.car || '', car: target.car || '',
+      from: isAdmin ? 'admin' : 'customer', message: text,
+      serviceContext: null, customer: target, createdAt: new Date().toISOString()
+    };
+    const message = pendingMessage;
+    sending = true;
+    if (submit) submit.disabled = true;
+    try {
+      if (!token) throw new Error('AUTH_REQUIRED');
+      await supabaseRpc('pm_sync_merge_by_id', {
+        p_token: token, p_key: 'pm-messages', p_payload: [message], p_page_url: location.href
+      });
+      if (token !== authToken) return;
+      const all = store.get('pm-messages', []);
+      if (!all.some(item => item.id === message.id)) store.setLocal('pm-messages', [...all, message]);
+      pendingMessage = undefined;
+      if (textarea.isConnected && textarea.value.trim() === text) textarea.value = '';
+      if (textarea.isConnected) { updateChatList(true); textarea.focus(); }
+    } catch (error) {
+      if (textarea.isConnected) await pmAlert(
+        /ACCOUNT_DELETION_PENDING/.test(String(error.code || '') + ' ' + String(error.message || ''))
+          ? '탈퇴 신청 중에는 문의를 보낼 수 없습니다. 신청을 취소한 후 이용해 주세요.'
+          : '문의를 보내지 못했습니다. 입력 내용은 유지됩니다. 다시 시도해 주세요.'
+      );
+    } finally {
+      sending = false;
+      if (submit?.isConnected) submit.disabled = false;
+    }
   };
   $('#message-form').addEventListener('submit', e => { e.preventDefault(); send(); });
   textarea.addEventListener('keydown', e => {
@@ -2550,6 +2727,8 @@ async function renderBranches() {
       const a = document.createElement('a');
       a.href = 'tel:' + b.tel.replace(/[^\d]/g, '');
       a.textContent = b.tel;
+      a.dataset.phoneBranch = b.name || '';
+      a.dataset.phone = b.tel || '';
       tel.append(a);
     } else tel.textContent = b.tel;
 
@@ -2678,8 +2857,8 @@ function openBranchPhotoModal(branch, url) {
       <h3>${esc(branch.name || '')}</h3>
       <p>${esc(branch.addr || '')}</p>
       <div class="branch-photo-actions">
-        ${tel ? `<a class="mini-btn add" href="${tel}">전화연결</a>` : ''}
-        ${mobile ? `<a class="mini-btn" href="${mobile}">휴대폰 연결</a>` : ''}
+        ${tel ? `<a class="mini-btn add" href="${tel}" data-phone-branch="${esc(branch.name || '')}" data-phone="${esc(branch.tel || '')}">전화연결</a>` : ''}
+        ${mobile ? `<a class="mini-btn" href="${mobile}" data-phone-branch="${esc(branch.name || '')}" data-phone="${esc(branch.mobile || '')}">휴대폰 연결</a>` : ''}
         <a class="mini-btn" href="${esc(place)}" target="_blank" rel="noopener">플레이스 연결</a>
       </div>
     </div>
@@ -3588,12 +3767,54 @@ async function initShopImage() {
    ============================================================ */
 const getBookings = () => store.get('pm-bookings', []);
 const isNewBooking = booking => ['신규', '승인대기'].includes(String(booking?.status || '').trim());
-const isActiveBooking = booking => String(booking?.status || '').trim() !== '취소';
-const bookingStatusLabel = booking => !isActiveBooking(booking) ? '취소' : isNewBooking(booking) ? '신규' : '예약';
+const bookingState = booking => String(booking?.status || '').trim();
+const isCancelledBooking = booking => bookingState(booking) === '취소';
+const isCompletedBooking = booking => ['완료', '출고 완료'].includes(bookingState(booking));
+const isActiveBooking = booking => !isCancelledBooking(booking) && !isCompletedBooking(booking);
+const bookingStatusLabel = booking => isCancelledBooking(booking)
+  ? '취소'
+  : isCompletedBooking(booking)
+    ? '완료'
+    : isNewBooking(booking) ? '신규' : '예약';
 const SLOT_TIMES = ['09:00','10:00','11:00','12:00','13:00','14:00','15:00','16:00','17:00','18:00'];
 let cal = null; /* { branch, y, m, selDate, selTime } */
-let guestBooking = null; /* 비회원 예약자 정보 { name, model, car, phone } */
+let guestBooking = null; /* 비회원 예약자 정보 { name, model, car, phone, bookingPin } */
+const bookingAvailabilityCache = new Map();
+let calendarRenderSequence = 0;
 const bookingActor = () => member || guestBooking || {};
+
+function bookingAvailabilityRange(y, m) {
+  return {
+    from: dateKey(y, m, 1),
+    to: dateKey(y, m, new Date(y, m + 1, 0).getDate())
+  };
+}
+
+async function loadBookingAvailability(branch, y, m, force = false) {
+  const key = `${branch}|${y}|${m}`;
+  const cached = bookingAvailabilityCache.get(key);
+  if (!force && cached && Date.now() - cached.loadedAt < 5000) return cached.slots;
+  if (!getSupabaseConfig()) {
+    return new Set(getBookings()
+      .filter(booking => booking.branch === branch && isActiveBooking(booking))
+      .map(booking => `${booking.date}|${booking.time}`));
+  }
+  const range = bookingAvailabilityRange(y, m);
+  const rows = await supabaseRpc('pm_booking_availability', {
+    p_branch: branch,
+    p_from_date: range.from,
+    p_to_date: range.to
+  });
+  const slots = new Set((Array.isArray(rows) ? rows : [])
+    .filter(row => row?.date && row?.time)
+    .map(row => `${row.date}|${row.time}`));
+  bookingAvailabilityCache.set(key, { loadedAt: Date.now(), slots });
+  return slots;
+}
+
+function clearBookingAvailability() {
+  bookingAvailabilityCache.clear();
+}
 
 function openReserveFlow() {
   if (isAdmin) {
@@ -3655,33 +3876,178 @@ function openReserveFlow() {
   openBranchSelect();
 }
 
-/* 비회원 예약: 이름·차량명·차량번호·연락처 입력 후 지점 선택으로 진행 (관리자 승인 시 확정) */
+/* 비회원 예약: 예약조회 또는 지점을 먼저 선택한 뒤 예약자 정보를 입력한다. */
 function openGuestBookingModal() {
+  guestBooking = null;
   openModal(`
     <h3>비회원 예약</h3>
-    <p class="cal-msg">이름과 차량 정보를 입력하시면 예약을 신청할 수 있습니다.<br>관리자 승인 후 예약이 확정됩니다.</p>
+    <div class="guest-booking-start">
+      <button type="button" class="guest-booking-lookup-action" id="guest-booking-start-lookup">예약 확인하기</button>
+      <div class="branch-select guest-booking-branches" id="guest-booking-branches"></div>
+    </div>
+  `);
+  $('#guest-booking-start-lookup').addEventListener('click', openGuestBookingLookupModal);
+  const wrap = $('#guest-booking-branches');
+  getBranches().forEach(branch => {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.textContent = branch.name;
+    button.addEventListener('click', () => openGuestBookingDetailsModal(branch.name));
+    wrap.append(button);
+  });
+}
+
+function openGuestBookingDetailsModal(branchName) {
+  const now = new Date();
+  cal = { branch: branchName, y: now.getFullYear(), m: now.getMonth(), selDate: null, selTime: null };
+  openModal(`
+    <h3>${esc(branchName)} 비회원 예약</h3>
+    <p class="cal-msg">예약자 정보와 예약 조회에 사용할 숫자 4자리 확인번호를 입력하세요.</p>
     <form id="guest-book-form">
       <input type="text" id="g-name" placeholder="이름" required>
       <input type="text" id="g-model" placeholder="차량명 (예: BMW X4)" required>
       <input type="text" id="g-car" placeholder="차량번호 (예: 12가3456)" required>
       <input type="tel" id="g-phone" placeholder="연락처 (예: 01012345678)" required>
+      <label class="field-label" for="g-pin">예약 확인번호</label>
+      <input type="text" id="g-pin" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" autocomplete="off" placeholder="숫자 4자리 입력" required>
+      <p class="field-help">예약 조회에 사용할 숫자 4자리를 설정하세요. 예약 변경·취소는 지점으로 문의해야 합니다.</p>
       <p class="form-error" id="g-error"></p>
       <div class="modal-actions">
-        <button type="submit" class="modal-submit">다음</button>
-        <button type="button" class="modal-cancel" onclick="closeModal()">취소</button>
+        <button type="submit" class="modal-submit">날짜 선택</button>
+        <button type="button" class="modal-cancel" id="guest-booking-branch-back">지점 다시 선택</button>
       </div>
     </form>
   `);
+  $('#guest-booking-branch-back').addEventListener('click', openGuestBookingModal);
   $('#guest-book-form').addEventListener('submit', e => {
     e.preventDefault();
     const name = $('#g-name').value.trim();
     const model = $('#g-model').value.trim();
     const car = $('#g-car').value.trim().replace(/\s/g, '');
     const phone = $('#g-phone').value.trim().replace(/\D/g, '');
+    const bookingPin = $('#g-pin').value.trim();
     if (!name || !model || !car) { $('#g-error').textContent = '이름·차량명·차량번호를 모두 입력해주세요.'; return; }
     if (phone.length < 9) { $('#g-error').textContent = '연락처를 정확히 입력해주세요.'; return; }
-    guestBooking = { name, model, car, phone };
-    openBranchSelect();
+    if (!/^\d{4}$/.test(bookingPin)) { $('#g-error').textContent = '예약 확인번호는 숫자 4자리로 입력해주세요.'; return; }
+    guestBooking = { name, model, car, phone, bookingPin };
+    renderCalendar();
+  });
+}
+
+function guestBookingCanCancel(booking) {
+  return bookingState(booking) !== '취소'
+    && String(booking?.date || '') >= todayKey();
+}
+
+function guestBookingResultMarkup(booking) {
+  const status = bookingStatusLabel(booking);
+  const canCancel = guestBookingCanCancel(booking);
+  const guidance = bookingState(booking) === '취소'
+    ? '취소된 예약입니다.'
+    : String(booking?.date || '') < todayKey()
+      ? '방문일이 지난 예약은 해당 지점으로 문의해주세요.'
+      : '예약을 직접 취소할 수 있습니다. 변경은 해당 지점으로 문의해주세요.';
+  return `
+    <section class="guest-booking-result" aria-live="polite">
+      <div class="guest-booking-result-head">
+        <strong>${esc(status)}</strong>
+        <span>비회원 예약</span>
+      </div>
+      <dl>
+        <div><dt>예약 지점</dt><dd>${esc(booking.branch || '-')}</dd></div>
+        <div><dt>방문 일시</dt><dd>${esc(booking.date || '-')} ${esc(booking.time || '')}</dd></div>
+        <div><dt>차량</dt><dd>${esc(booking.model || '-')} · ${esc(booking.car || '-')}</dd></div>
+        <div><dt>정비 항목</dt><dd>${esc((booking.services || []).join(', ') || '요청사항 확인')}</dd></div>
+        ${booking.memo ? `<div><dt>요청사항</dt><dd>${esc(booking.memo)}</dd></div>` : ''}
+      </dl>
+      <p>${esc(guidance)}</p>
+      ${canCancel ? `
+        <div class="guest-booking-result-actions">
+          <button type="button" class="modal-submit danger" id="guest-booking-cancel">예약 취소</button>
+        </div>` : ''}
+    </section>`;
+}
+
+function guestBookingCancelErrorMessage(error) {
+  const code = String(error?.message || '');
+  if (code.includes('GUEST_BOOKING_ALREADY_CANCELLED')) return '이미 취소된 예약입니다.';
+  if (code.includes('GUEST_BOOKING_PAST')) return '방문일이 지난 예약은 취소할 수 없습니다.';
+  if (code.includes('GUEST_BOOKING_WORK_STARTED')) return '이미 작업이 시작되어 취소할 수 없습니다. 해당 지점으로 문의해주세요.';
+  if (code.includes('GUEST_LOOKUP_RATE_LIMIT')) return '입력 횟수가 많습니다. 15분 후 다시 시도해주세요.';
+  if (code.includes('GUEST_BOOKING_NOT_FOUND')) return '예약 정보를 다시 확인해주세요.';
+  return '예약을 취소하지 못했습니다. 잠시 후 다시 시도해주세요.';
+}
+
+function bindGuestBookingCancel(booking, phone, pin) {
+  const cancelButton = $('#guest-booking-cancel');
+  if (!cancelButton) return;
+  cancelButton.addEventListener('click', async () => {
+    const confirmed = await pmConfirm(
+      `${booking.date} ${booking.time} ${booking.branch} 예약을 취소할까요?`,
+      { title: '예약 취소', okText: '예약취소', danger: true }
+    );
+    if (!confirmed) return;
+    cancelButton.disabled = true;
+    try {
+      const cancelledBooking = await supabaseRpc('pm_guest_booking_cancel', {
+        p_phone: phone,
+        p_pin: pin,
+        p_booking_id: booking.id
+      });
+      $('#guest-booking-lookup-result').innerHTML = guestBookingResultMarkup(cancelledBooking || {
+        ...booking,
+        status: '취소'
+      });
+      clearBookingAvailability();
+      logEvent('booking_cancel', { branch: booking.branch, date: booking.date, time: booking.time, guest: true });
+      await pmAlert('예약이 취소되었습니다.', '예약 취소');
+    } catch (error) {
+      await pmAlert(guestBookingCancelErrorMessage(error), '예약 취소');
+      cancelButton.disabled = false;
+    }
+  });
+}
+
+function openGuestBookingLookupModal() {
+  openModal(`
+    <h3>비회원 예약조회</h3>
+    <p class="cal-msg">예약할 때 입력한 전화번호와 예약 확인번호 4자리를 입력하세요.</p>
+    <form id="guest-booking-lookup-form">
+      <input type="tel" id="guest-lookup-phone" inputmode="tel" autocomplete="tel" placeholder="전화번호" required>
+      <input type="password" id="guest-lookup-pin" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" autocomplete="current-password" placeholder="예약 확인번호 4자리" required>
+      <p class="form-error" id="guest-lookup-error" aria-live="polite"></p>
+      <div class="modal-actions">
+        <button type="submit" class="modal-submit">예약 확인</button>
+        <button type="button" class="modal-cancel" onclick="closeModal()">닫기</button>
+      </div>
+    </form>
+    <div id="guest-booking-lookup-result"></div>
+  `);
+  $('#guest-booking-lookup-form').addEventListener('submit', async e => {
+    e.preventDefault();
+    const phone = $('#guest-lookup-phone').value.replace(/\D/g, '');
+    const pin = $('#guest-lookup-pin').value.trim();
+    const errorBox = $('#guest-lookup-error');
+    const submit = $('#guest-booking-lookup-form .modal-submit');
+    errorBox.textContent = '';
+    $('#guest-booking-lookup-result').innerHTML = '';
+    if (phone.length < 9 || !/^\d{4}$/.test(pin)) {
+      errorBox.textContent = '전화번호와 숫자 4자리 확인번호를 정확히 입력해주세요.';
+      return;
+    }
+    submit.disabled = true;
+    try {
+      const booking = await supabaseRpc('pm_guest_booking_lookup', { p_phone: phone, p_pin: pin });
+      $('#guest-booking-lookup-result').innerHTML = guestBookingResultMarkup(booking || {});
+      bindGuestBookingCancel(booking || {}, phone, pin);
+    } catch (error) {
+      const code = String(error?.message || '');
+      errorBox.textContent = code.includes('GUEST_LOOKUP_RATE_LIMIT')
+        ? '입력 횟수가 많습니다. 15분 후 다시 시도해주세요.'
+        : '일치하는 비회원 예약이 없습니다. 입력 내용을 확인해주세요.';
+    } finally {
+      submit.disabled = false;
+    }
   });
 }
 
@@ -3707,13 +4073,28 @@ function openBranchSelect() {
 
 function dateKey(y, m, d) { return `${y}.${String(m + 1).padStart(2, '0')}.${String(d).padStart(2, '0')}`; }
 
-function renderCalendar(message) {
+async function renderCalendar(message) {
+  const renderSequence = ++calendarRenderSequence;
   const { branch, y, m } = cal;
   const bookings = getBookings().filter(b => b.branch === branch && isActiveBooking(b));
+  let occupiedSlots;
+  try {
+    occupiedSlots = await loadBookingAvailability(branch, y, m);
+  } catch (error) {
+    console.warn('Booking availability load failed', error);
+    occupiedSlots = new Set(bookings.map(booking => `${booking.date}|${booking.time}`));
+  }
+  if (renderSequence !== calendarRenderSequence || !cal || cal.branch !== branch || cal.y !== y || cal.m !== m) return;
   const first = new Date(y, m, 1).getDay();
   const days = new Date(y, m + 1, 0).getDate();
   const now = new Date();
   const todayKey = dateKey(now.getFullYear(), now.getMonth(), now.getDate());
+  const occupiedByDate = new Map();
+  occupiedSlots.forEach(slot => {
+    const separator = slot.lastIndexOf('|');
+    const date = separator > -1 ? slot.slice(0, separator) : '';
+    if (date) occupiedByDate.set(date, (occupiedByDate.get(date) || 0) + 1);
+  });
 
   openModal(`
     <h3>${branch} 정비예약</h3>
@@ -3749,10 +4130,11 @@ function renderCalendar(message) {
     el.className = 'cal-day';
     el.textContent = d;
     const dayBookings = bookings.filter(b => b.date === key);
-    if (dayBookings.length) {
+    const reservationCount = Math.max(dayBookings.length, occupiedByDate.get(key) || 0);
+    if (reservationCount) {
       const cnt = document.createElement('span');
       cnt.className = 'cnt';
-      cnt.textContent = '예약 ' + dayBookings.length;
+      cnt.textContent = '예약 ' + reservationCount;
       el.append(cnt);
     }
     if (dayBookings.some(b => b.car === bookingActor().car)) el.classList.add('mine');
@@ -3782,10 +4164,10 @@ function renderCalendar(message) {
     cal.selDate = null; cal.selTime = null; renderCalendar();
   });
 
-  if (cal.selDate) renderSlots(bookings);
+  if (cal.selDate) renderSlots(bookings, occupiedSlots);
 }
 
-function renderSlots(branchBookings) {
+function renderSlots(branchBookings, occupiedSlots = new Set()) {
   const wrap = $('#cal-slots');
   const dayBookings = branchBookings.filter(b => b.date === cal.selDate);
   const blockedTimes = getBlocked()
@@ -3805,6 +4187,7 @@ function renderSlots(branchBookings) {
     el.className = 'slot';
     el.textContent = t;
     const taken = dayBookings.find(b => b.time === t);
+    const occupied = occupiedSlots.has(`${cal.selDate}|${t}`);
     const unavailableReason = branchSlotReason(cal.branch, cal.selDate, t);
 
     if (unavailableReason) {
@@ -3813,9 +4196,9 @@ function renderSlots(branchBookings) {
       el.classList.add('blocked', 'business-closed');
       el.title = unavailableReason === '점심' ? '점심시간에는 예약할 수 없습니다.' : '영업시간 외에는 예약할 수 없습니다.';
     } else if (blockedTimes.includes(t)) {
-      el.textContent = 'X';
+      el.innerHTML = `<strong>${t}</strong><small>예약마감</small>`;
       el.disabled = true;
-      el.classList.add('blocked');
+      el.classList.add('blocked', 'reserved-slot');
       el.title = '이 시간에는 예약이 있습니다. 전화로 문의해주세요.';
     } else if (taken && taken.car === bookingActor().car) {
       el.classList.add('mine');
@@ -3823,11 +4206,14 @@ function renderSlots(branchBookings) {
       el.addEventListener('click', async () => {
         if (await cancelMemberBooking(taken)) renderCalendar('예약이 취소되었습니다.');
       });
-    } else if (taken) {
+    } else if (occupied || taken) {
+      el.innerHTML = `<strong>${t}</strong><small>예약마감</small>`;
       el.disabled = true; /* 해당 시간만 차단 - 다른 시간은 예약 가능 */
+      el.classList.add('blocked', 'reserved-slot');
+      el.title = '이미 예약된 시간입니다.';
     } else {
       if (cal.selTime === t) el.classList.add('sel');
-      el.addEventListener('click', () => { cal.selTime = t; renderSlots(branchBookings); });
+      el.addEventListener('click', () => { cal.selTime = t; renderSlots(branchBookings, occupiedSlots); });
     }
     slots.append(el);
   });
@@ -3890,7 +4276,18 @@ function renderServiceStep() {
   }
 
   $('#svc-back').addEventListener('click', () => renderCalendar());
-  $('#svc-confirm').addEventListener('click', async () => {
+  let bookingSubmitting = false;
+  $('#svc-confirm').addEventListener('click', async event => {
+    if (bookingSubmitting) return;
+    const submit = event.currentTarget;
+    const selection = { ...cal };
+    const token = authToken;
+    const customer = member;
+    const selectionCurrent = () => submit.isConnected && token === authToken && customer === member
+      && ['branch', 'y', 'm', 'selDate', 'selTime'].every(key => selection[key] === cal[key]);
+    bookingSubmitting = true;
+    submit.disabled = true;
+    try {
     const services = [...list.querySelectorAll('input:checked')].map(c => c.value);
     const memo = $('#svc-memo').value.trim();
     if (!services.length && !memo) { pmAlert('서비스를 선택하거나 기타 메모를 입력해주세요.'); return; }
@@ -3904,7 +4301,18 @@ function renderServiceStep() {
       return;
     }
     const arr = getBookings();
-    if (arr.some(b => isActiveBooking(b) && b.branch === cal.branch && b.date === cal.selDate && b.time === cal.selTime)) {
+    let latestAvailability;
+    try {
+      latestAvailability = await loadBookingAvailability(selection.branch, selection.y, selection.m, true);
+      if (!selectionCurrent()) return;
+    } catch (error) {
+      if (!selectionCurrent()) return;
+      console.warn('Booking availability recheck failed', error);
+      await pmAlert('예약 가능 시간을 확인하지 못했습니다. 잠시 후 다시 시도해주세요.');
+      return;
+    }
+    if (latestAvailability.has(`${cal.selDate}|${cal.selTime}`)
+        || arr.some(b => isActiveBooking(b) && b.branch === cal.branch && b.date === cal.selDate && b.time === cal.selTime)) {
       renderCalendar('죄송합니다. 방금 다른 고객이 해당 시간을 예약했습니다.'); return;
     }
     const couponSelect = $('#booking-coupon');
@@ -3914,6 +4322,7 @@ function renderServiceStep() {
       branch: cal.branch, date: cal.selDate, time: cal.selTime,
       memberId: actor.id || '', guest: !member,
       car: actor.car, name: actor.name, phone: actor.phone, model: actor.model || '',
+      ...(!member ? { bookingPin: actor.bookingPin || '' } : {}),
       services, memo,
       couponAssignmentId: couponSelect?.value || '',
       couponName: couponSelect?.value ? (couponOption?.dataset.couponName || couponOption?.textContent || '') : '',
@@ -3924,20 +4333,35 @@ function renderServiceStep() {
         try { return JSON.parse(sessionStorage.getItem('pm-activity-acquisition') || '{}'); } catch { return {}; }
       })()
     };
-    const submit = $('#svc-confirm');
-    submit.disabled = true;
+    if (!selectionCurrent()) return;
     try {
       let savedBooking = booking;
       if (!member && getSupabaseConfig()) {
-        const saved = await supabaseRpc('pm_guest_booking_create', {
+        const saved = await supabaseRpc('pm_guest_booking_create_v2', {
           p_booking: booking,
           p_page_url: location.href
         });
+        if (token !== authToken) return;
         savedBooking = saved || booking;
         arr.push(savedBooking);
         store.setLocal('pm-bookings', arr);
+      } else if (member && getSupabaseConfig()) {
+        const saved = await supabaseRpc('pm_member_booking_create', {
+          p_token: authToken,
+          p_booking: booking,
+          p_page_url: location.href
+        });
+        if (token !== authToken) return;
+        savedBooking = saved || booking;
+        arr.push(savedBooking);
+        store.setLocal('pm-bookings', arr);
+        pushAdminNotification(`${actor.name} ${actor.car} ${cal.branch} ${cal.selDate} ${cal.selTime} 예약 확인 요청`, { bookingId: booking.id });
+        logWorkAudit('고객 예약', { name: actor.name, car: actor.car, phone: actor.phone, model: actor.model, branch: cal.branch, service: services.join(', ') || '서비스 미선택', bookingDate: cal.selDate, bookingTime: cal.selTime }, '', memo ? `요청메모: ${memo}` : '', '고객');
       } else {
-        arr.push(booking);
+        const safeBooking = { ...booking };
+        delete safeBooking.bookingPin;
+        savedBooking = safeBooking;
+        arr.push(safeBooking);
         store.set('pm-bookings', arr);
         pushAdminNotification(`${actor.name} ${actor.car} ${cal.branch} ${cal.selDate} ${cal.selTime} 예약 확인 요청`, { bookingId: booking.id });
         logWorkAudit('고객 예약', { name: actor.name, car: actor.car, phone: actor.phone, model: actor.model, branch: cal.branch, service: services.join(', ') || '서비스 미선택', bookingDate: cal.selDate, bookingTime: cal.selTime }, '', memo ? `요청메모: ${memo}` : '', member ? '고객' : '비회원');
@@ -3948,42 +4372,54 @@ function renderServiceStep() {
         guest: savedBooking.guest,
         services: savedBooking.services
       });
+      clearBookingAvailability();
     } catch (error) {
+      if (!selectionCurrent()) return;
       submit.disabled = false;
       const code = String(error?.message || '');
-      if (code.includes('GUEST_BOOKING_SLOT_TAKEN')) {
+      if (code.includes('BOOKING_SLOT_TAKEN')) {
         renderCalendar('죄송합니다. 방금 다른 고객이 해당 시간을 예약했습니다.');
-      } else if (code.includes('GUEST_ACTIVE_BOOKING_EXISTS')) {
+      } else if (code.includes('ACTIVE_BOOKING_EXISTS')) {
         await pmAlert('해당 차량번호로 접수된 예약이 이미 있습니다. 지점으로 문의해주세요.');
       } else if (code.includes('GUEST_BOOKING_LUNCH_TIME')) {
         renderCalendar('선택한 시간은 해당 지점의 점심시간입니다. 다른 시간을 선택해주세요.');
       } else if (code.includes('GUEST_BOOKING_BUSINESS_CLOSED')) {
         renderCalendar('선택한 날짜 또는 시간은 해당 지점의 휴무·영업시간 외입니다.');
       } else {
-        await pmAlert('비회원 예약을 서버에 저장하지 못했습니다. SQL 적용 여부와 네트워크를 확인해주세요.');
+        await pmAlert('예약을 서버에 저장하지 못했습니다. SQL 적용 여부와 네트워크를 확인해주세요.');
       }
       return;
     }
+    if (!selectionCurrent()) return;
+    const guestPin = !customer ? actor.bookingPin : '';
     const done = `${cal.branch} ${cal.selTime} 예약 신청이 접수되었습니다. 관리자가 확인하면 예약으로 변경됩니다.`;
     cal.selTime = null;
     guestBooking = null;
-    openBookingDoneModal(done);
+    openBookingDoneModal(done, guestPin);
+    } finally {
+      bookingSubmitting = false;
+      if (submit.isConnected) submit.disabled = false;
+    }
   });
 }
 
-function openBookingDoneModal(message) {
+function openBookingDoneModal(message, guestPin = '') {
   openModal(`
     <div class="booking-done">
       <div class="check-mark">✓</div>
       <h3>${esc(message)}</h3>
+      ${guestPin ? `<p class="guest-pin-reminder">예약 확인번호 <strong>${esc(guestPin)}</strong><br><span>전화번호와 함께 비회원 예약조회에 사용하세요.</span></p>` : ''}
     </div>
     <div class="modal-actions">
-      <button type="button" class="modal-submit" id="booking-done-ok">확인</button>
+      <button type="button" class="modal-submit" id="booking-done-ok">${guestPin ? '예약 조회' : '확인'}</button>
     </div>
   `);
   $('#booking-done-ok').addEventListener('click', () => {
-    closeModal();
-    openMyPageModal();
+    if (guestPin) openGuestBookingLookupModal();
+    else {
+      closeModal();
+      openMyPageModal();
+    }
   });
 }
 
@@ -4069,26 +4505,26 @@ function renderAdmBook() {
     const el = document.createElement('button');
     el.type = 'button'; el.className = 'cal-day'; el.textContent = d;
     const dayBookings = bookings.filter(b => b.date === key && isActiveBooking(b));
+    const completedCount = bookings.filter(b => b.date === key && isCompletedBooking(b)).length;
     const newCount = dayBookings.filter(isNewBooking).length;
     const reservedCount = dayBookings.length - newCount;
-    const cancelledCount = bookings.filter(b => b.date === key && !isActiveBooking(b)).length;
     const dayBlocks = blocked.filter(b => b.date === key);
     const blk = dayBlocks.length;
     const bookingCloseCount = dayBlocks.filter(block => block.reason === '예약마감').length;
     const isClosedDay = branchDateInfo(adm.branch, key).closed;
-    if (newCount || reservedCount || cancelledCount || blk) {
+    if (newCount || reservedCount || completedCount || blk) {
       const c = document.createElement('span');
       c.className = 'cnt';
       const counts = [];
       if (newCount) counts.push(`신규 ${newCount}`);
       if (reservedCount) counts.push(`예약 ${reservedCount}`);
-      if (cancelledCount) counts.push(`취소 ${cancelledCount}`);
+      if (completedCount) counts.push(`작업 ${completedCount}`);
       if (bookingCloseCount) counts.push('예약마감');
       else if (blk) counts.push(`완료 ${blk}`);
       c.textContent = counts.join(' · ');
       el.append(c);
     }
-    if (isClosedDay && !newCount && !reservedCount && !cancelledCount) {
+    if (isClosedDay && !newCount && !reservedCount) {
       const closed = document.createElement('span');
       closed.className = 'cnt';
       closed.textContent = '휴무';
@@ -4140,7 +4576,6 @@ function openPhoneBookingBranches() {
     </div>
     <button type="button" class="modal-cancel phone-branch-close" onclick="closeModal()">닫기</button>
   `);
-  /* 전화 클릭은 사이트 전체 tel: 링크를 감시하는 공통 추적에서 남는다. */
 }
 
 async function closeAdminBookingDate(date) {
@@ -4228,7 +4663,8 @@ function renderAdmDay() {
     const row = document.createElement('div');
     row.className = 'slot-row';
     const bIdx = bookings.findIndex(b => isActiveBooking(b) && b.branch === adm.branch && b.date === adm.selDate && b.time === t);
-    const cancelledIdx = bookings.findLastIndex(b => !isActiveBooking(b) && b.branch === adm.branch && b.date === adm.selDate && b.time === t);
+    const cancelledIdx = bookings.findLastIndex(b => isCancelledBooking(b) && b.branch === adm.branch && b.date === adm.selDate && b.time === t);
+    const completedIdx = bookings.findLastIndex(b => isCompletedBooking(b) && b.branch === adm.branch && b.date === adm.selDate && b.time === t);
     const blkIdx = blocked.findIndex(b => b.branch === adm.branch && b.date === adm.selDate && b.time === t);
 
     const time = document.createElement('strong');
@@ -4255,7 +4691,13 @@ function renderAdmDay() {
                    const currentIndex = arr.findIndex(item => item.id === b.id);
                    if (currentIndex < 0) return;
                    arr[currentIndex] = { ...arr[currentIndex], status: '취소', cancelledAt: new Date().toISOString(), cancelledBy: adminActorLabel() };
-                   store.set('pm-bookings', arr);
+                   try {
+                     await persistBookings(arr);
+                   } catch (error) {
+                     console.warn('Admin booking cancellation save failed', error);
+                     await pmAlert('예약 취소를 서버에 저장하지 못했습니다. 다시 시도해주세요.', '예약 취소');
+                     return;
+                   }
                    logWorkAudit('예약 취소', { name: b.name, car: b.car, phone: b.phone, model: b.model, branch: b.branch, service: (b.services || []).join(', '), bookingDate: b.date, bookingTime: b.time }, '', '관리자가 예약을 취소함');
                    renderAdmBook();
                  }, true));
@@ -4269,7 +4711,11 @@ function renderAdmDay() {
       info.textContent = branchSlotReason(adm.branch, adm.selDate, t);
       info.classList.add('business-closed-text');
     } else {
-      if (cancelledIdx > -1) {
+      if (completedIdx > -1) {
+        const completed = bookings[completedIdx];
+        info.innerHTML = `<b>${esc(completed.car || '-')}</b> · ${esc(completed.name || '-')} · 작업 완료 이력`;
+        row.classList.add('completed-booking-row');
+      } else if (cancelledIdx > -1) {
         const cancelled = bookings[cancelledIdx];
         info.innerHTML = `<b>${esc(cancelled.car || '-')}</b> · ${esc(cancelled.name || '-')} · 취소된 예약`;
         row.classList.add('cancelled-booking-row');
@@ -4294,16 +4740,9 @@ function miniBtn(text, fn, danger) {
   return b;
 }
 
-function approveBooking(bookingId) {
-  const arr = getBookings();
-  const booking = arr.find(b => b.id === bookingId);
-  if (!booking || !canAccessBranch(booking.branch)) return;
-  booking.status = '예약';
-  booking.checkedAt = new Date().toISOString();
-  booking.checkedBy = adminActorLabel();
-  store.set('pm-bookings', arr);
-  pushCustomerMessage(booking, `${booking.branch} ${booking.date} ${booking.time} 예약이 확정되었습니다.`, { bookingId: booking.id, type: 'booking-approved' });
-  renderAdmBook();
+async function approveBooking(bookingId) {
+  if (!window.PMBookingActions) return pmAlert('예약 처리 화면을 준비 중입니다. 잠시 후 다시 눌러 주세요.');
+  return window.PMBookingActions.open(bookingId).catch(() => pmAlert('예약을 열 수 없습니다. 로그인과 지점 권한을 확인해 주세요.'));
 }
 
 function openMoveBooking(idx) {
@@ -4330,7 +4769,7 @@ function openMoveBooking(idx) {
   $('#mv-branch').value = b.branch;
   $('#mv-date').value = b.date.replaceAll('.', '-');
   $('#mv-time').value = b.time;
-  $('#move-form').addEventListener('submit', e => {
+  $('#move-form').addEventListener('submit', async e => {
     e.preventDefault();
     const nb = $('#mv-branch').value;
     const nd = $('#mv-date').value.replaceAll('-', '.');
@@ -4346,7 +4785,13 @@ function openMoveBooking(idx) {
       $('#mv-error').textContent = '해당 시간은 예약완료 상태입니다.'; return;
     }
     all[idx] = { ...b, branch: nb, date: nd, time: nt };
-    store.set('pm-bookings', all);
+    try {
+      await persistBookings(all);
+    } catch (error) {
+      console.warn('Booking move save failed', error);
+      $('#mv-error').textContent = '예약 변경을 서버에 저장하지 못했습니다. 다시 시도해주세요.';
+      return;
+    }
     closeModal();
     renderAdmBook();
   });
@@ -4439,7 +4884,7 @@ function openAdminBookingModal(time) {
     $('#ab-phone').value = selected.phone || '';
   });
 
-  $('#admin-book-form').addEventListener('submit', e => {
+  $('#admin-book-form').addEventListener('submit', async e => {
     e.preventDefault();
     const all = getBookings();
     if (branchSlotReason(adm.branch, adm.selDate, time)) {
@@ -4477,7 +4922,13 @@ function openAdminBookingModal(time) {
       status: '예약',
       createdBy: 'admin'
     });
-    store.set('pm-bookings', all);
+    try {
+      await persistBookings(all);
+    } catch (error) {
+      console.warn('Admin booking save failed', error);
+      $('#ab-error').textContent = '예약을 서버에 저장하지 못했습니다. 다시 시도해주세요.';
+      return;
+    }
     const added = all[all.length - 1];
     logWorkAudit('예약 등록(직접)', { name: added.name, car: added.car, phone: added.phone, model: added.model, branch: added.branch, service: services.join(', ') || '서비스 미선택', bookingDate: added.date, bookingTime: added.time }, '', memo ? `메모: ${memo}` : '');
     closeModal();
@@ -4561,14 +5012,15 @@ function custRunRowHtml(run) {
 async function renderAdmCust() {
   const body = $('#adm-cust-body');
   if (!isTopAdmin()) { body.innerHTML = ''; return; }
-  body.innerHTML = '<p class="hint">실제 고객 계정을 확인하는 중...</p>';
-  try { await refreshCanonicalMembers(); }
+  body.innerHTML = '<p class="hint">고객 목록을 확인하는 중...</p>';
+  let directoryMembers;
+  try { directoryMembers = await refreshCanonicalMembers(); }
   catch (error) {
-    body.innerHTML = `<p class="form-error">고객 계정 원본을 불러오지 못했습니다. 잘못된 목록을 표시하지 않습니다.</p><small>${esc(error.message || '')}</small>`;
+    body.innerHTML = `<p class="form-error">고객 목록을 불러오지 못했습니다. 잘못된 목록을 표시하지 않습니다.</p><small>${esc(error.message || '')}</small>`;
     return;
   }
   const bookings = getBookings();
-  const members = store.get('pm-members', [])
+  const members = directoryMembers
     .map(m => ({ ...m, latestBooking: latestBookingForMember(m, bookings) }))
     .sort((a, b) => bookingTimestamp(b.latestBooking) - bookingTimestamp(a.latestBooking));
   const customers = getCustomers();
@@ -4585,7 +5037,9 @@ async function renderAdmCust() {
     const memberRuns = getServiceRuns()
       .filter(r => r.car === m.car || (m.id && r.memberId === m.id))
       .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
-    const latestText = m.latestBooking ? `${m.latestBooking.date} ${m.latestBooking.time}` : '예약 없음';
+    const latestText = m.latestBooking
+      ? `${m.latestBooking.date} ${m.latestBooking.time || ''} · ${m.latestBooking.branch || '지점 미입력'}`.trim()
+      : '예약 없음';
     const isOpen = openCustCards.has(m.car);
     const memoFilter = custMemoFilters.get(m.car) || { date: '', text: '', open: false };
     custMemoFilters.set(m.car, memoFilter);
@@ -4851,38 +5305,27 @@ async function renderAdmCust() {
 }
 
 function guestCustomerDirectory() {
-  const guests = new Map();
+  const guests = [];
   getBookings()
     .filter(booking => booking?.guest === true)
     .slice()
     .sort((a, b) => bookingTimestamp(b) - bookingTimestamp(a))
     .forEach(booking => {
-      const car = String(booking.car || '').toLowerCase().replace(/[^0-9a-z가-힣]/g, '');
-      const phone = normPhone(booking.phone);
-      const key = car
-        ? `car:${car}`
-        : phone
-          ? `phone:${phone}`
-          : `guest:${booking.name || ''}:${booking.model || ''}`;
-      const current = guests.get(key);
-      if (current) {
-        current.bookings.push(booking);
-        return;
-      }
-      guests.set(key, {
+      const profile = {
         name: booking.name || '',
         car: booking.car || '',
         model: booking.model || '',
-        phone: booking.phone || '',
-        bookings: [booking]
-      });
+        phone: booking.phone || ''
+      };
+      const current = guests.find(entry => sameCustomer(entry, profile));
+      if (current) current.bookings.push(booking);
+      else guests.push({ ...profile, bookings: [booking] });
     });
-  return [...guests.values()];
+  return guests;
 }
 
 function renderAdmGuest() {
   const body = $('#adm-guest-body');
-  if (!body) return;
   if (!isTopAdmin()) { body.innerHTML = ''; return; }
   const guests = guestCustomerDirectory();
   body.innerHTML = `<div id="guest-list">${guests.length ? '' : '<p class="hint">비회원 예약 고객이 없습니다.</p>'}</div>`;
@@ -4944,10 +5387,10 @@ async function banMember(m, type) {
     at: new Date().toISOString(),
     member: snapshot
   });
-  store.set('pm-banned-members', banned);
-  store.set('pm-members', store.get('pm-members', []).filter(x => x.id !== m.id));
+  await store.set('pm-banned-members', banned);
+  canonicalMembersRefreshedAt = 0;
   openCustCards.delete(m.car);
-  renderAdmCust();
+  await renderAdmCust();
   pmAlert(`${label} 처리되었습니다. 보안 화면에서 확인할 수 있습니다.`);
 }
 
@@ -5080,8 +5523,19 @@ function renderServiceRunAdmin(body) {
     card.querySelector('.delete-run').addEventListener('click', async () => {
       if (!await pmConfirm('실시간 서비스 기록을 삭제할까요?', { title: '기록 삭제', okText: '삭제', danger: true })) return;
       const arr = store.get('pm-service-runs', []);
-      arr.splice(i, 1);
-      store.set('pm-service-runs', arr);
+      const removed = arr.splice(i, 1)[0];
+      try {
+        await supabaseRpc('pm_sync_delete_by_id', {
+          p_token: authToken,
+          p_key: 'pm-service-runs',
+          p_id: removed?.id || '',
+          p_page_url: location.href
+        });
+        store.setLocal('pm-service-runs', arr);
+      } catch (error) {
+        await pmAlert('작업 기록을 서버에서 삭제하지 못했습니다. 다시 시도해주세요.', '삭제 실패');
+        return;
+      }
       renderAdmProd();
     });
     list.append(card);
@@ -5206,6 +5660,7 @@ function selectedProductForBooking(booking) {
 }
 
 function pushAdminNotification(message, payload = {}) {
+  if (!isAdmin) return;
   const list = store.get('pm-admin-notifications', []);
   list.unshift({ id: `note-${Date.now()}-${Math.random().toString(36).slice(2)}`, message, payload, read: false, createdAt: new Date().toISOString() });
   store.set('pm-admin-notifications', list.slice(0, 200));
@@ -5219,9 +5674,10 @@ function adminActorLabel() {
 }
 
 function logWorkAudit(action, run, stepName = '', detail = '', actor = '') {
+  if (!isAdmin) return;
   const list = store.get('pm-work-audit', []);
   const step = stepName ? (run?.steps || []).find(s => s.name === stepName) : null;
-  list.unshift({
+  const entry = {
     id: `audit-${Date.now()}-${Math.random().toString(36).slice(2)}`,
     at: new Date().toISOString(),
     by: actor || adminActorLabel(),
@@ -5239,8 +5695,11 @@ function logWorkAudit(action, run, stepName = '', detail = '', actor = '') {
     memo: step?.memo || '',
     photos: (step?.photoKeys || []).length,
     detail
-  });
-  store.set('pm-work-audit', list); // 작업기록 영구보관 — 개수 제한 없이 모두 저장
+  };
+  list.unshift(entry);
+  store.setLocal('pm-work-audit', list); // 작업기록 영구보관 — 개수 제한 없이 모두 저장
+  locallyModifiedKeys.add('pm-work-audit');
+  syncSupabaseData('pm-work-audit', [entry]);
 }
 
 /* run의 모든 단계 사진 목록 (단계명 포함) */
@@ -5249,22 +5708,97 @@ function runAllPhotos(run) {
 }
 
 /* 앨범형 커버: 첫 장 바로 노출 + 장수, 클릭 시 전체 앨범 */
-/* 이미지 확대(라이트박스): 앨범·작업현황 썸네일 클릭 시 화면 전체로 크게 표시 (모바일·PC 공통) */
-function openImageLightbox(src, alt = '작업 사진') {
+/* 이미지 확대 갤러리: 좌우 버튼·키보드·모바일 스와이프로 같은 작업의 사진을 연속 탐색 */
+function openImageLightbox(photos, startIndex = 0) {
   document.querySelector('.image-lightbox')?.remove();
+  const items = (Array.isArray(photos) ? photos : [{ src: photos, alt: '작업 사진' }])
+    .filter(item => item?.src);
+  if (!items.length) return;
+  let currentIndex = Math.min(Math.max(Number(startIndex) || 0, 0), items.length - 1);
+  let touchStartX = null;
   const box = document.createElement('div');
   box.className = 'image-lightbox';
   box.innerHTML = `
     <button type="button" class="lightbox-x" aria-label="닫기">×</button>
-    <img src="${esc(src)}" alt="${esc(alt)}">`;
+    <button type="button" class="lightbox-nav lightbox-prev" aria-label="이전 사진">‹</button>
+    <figure class="lightbox-figure">
+      <img alt="">
+      <figcaption>
+        <span class="lightbox-caption"></span>
+        <span class="lightbox-count" aria-live="polite"></span>
+      </figcaption>
+    </figure>
+    <button type="button" class="lightbox-nav lightbox-next" aria-label="다음 사진">›</button>`;
   document.body.append(box);
-  box.addEventListener('click', e => { if (e.target.tagName !== 'IMG') box.remove(); });
+
+  const image = box.querySelector('img');
+  const caption = box.querySelector('.lightbox-caption');
+  const counter = box.querySelector('.lightbox-count');
+  const prevButton = box.querySelector('.lightbox-prev');
+  const nextButton = box.querySelector('.lightbox-next');
+  const show = nextIndex => {
+    currentIndex = (nextIndex + items.length) % items.length;
+    const current = items[currentIndex];
+    image.src = current.src;
+    image.alt = current.alt || '작업 사진';
+    caption.textContent = current.alt || '작업 사진';
+    counter.textContent = `${currentIndex + 1} / ${items.length}`;
+  };
+  const close = () => {
+    document.removeEventListener('keydown', onKeydown);
+    box.remove();
+  };
+  const onKeydown = event => {
+    if (event.key === 'Escape') close();
+    if (event.key === 'ArrowLeft' && items.length > 1) show(currentIndex - 1);
+    if (event.key === 'ArrowRight' && items.length > 1) show(currentIndex + 1);
+  };
+
+  prevButton.hidden = items.length < 2;
+  nextButton.hidden = items.length < 2;
+  box.querySelector('.lightbox-x').addEventListener('click', close);
+  prevButton.addEventListener('click', () => show(currentIndex - 1));
+  nextButton.addEventListener('click', () => show(currentIndex + 1));
+  box.addEventListener('click', event => { if (event.target === box) close(); });
+  box.addEventListener('touchstart', event => {
+    touchStartX = event.changedTouches[0]?.clientX ?? null;
+  }, { passive: true });
+  box.addEventListener('touchend', event => {
+    if (touchStartX === null || items.length < 2) return;
+    const distance = (event.changedTouches[0]?.clientX ?? touchStartX) - touchStartX;
+    touchStartX = null;
+    if (Math.abs(distance) < 48) return;
+    show(currentIndex + (distance < 0 ? 1 : -1));
+  }, { passive: true });
+  document.addEventListener('keydown', onKeydown);
+  show(currentIndex);
+}
+
+function lightboxPhotoGroup(clickedImage) {
+  const gallery = clickedImage.closest('.album-wrap')
+    || clickedImage.closest('.work-detail')
+    || clickedImage.closest('.stage-photos')
+    || clickedImage.closest('.run-photo-grid')
+    || clickedImage.parentElement;
+  const images = [...gallery.querySelectorAll('.album-item img, .wd-photos img, .stage-photos img, .run-photo-grid img')]
+    .filter(img => img.offsetParent !== null && (img.currentSrc || img.src));
+  const items = images.map(img => ({
+    src: img.currentSrc || img.src,
+    alt: img.alt || '작업 사진'
+  }));
+  return {
+    items: items.length ? items : [{ src: clickedImage.currentSrc || clickedImage.src, alt: clickedImage.alt || '작업 사진' }],
+    index: Math.max(0, images.indexOf(clickedImage))
+  };
 }
 /* 앨범/작업현황/단계 미리보기의 모든 썸네일에 확대 적용 */
 document.addEventListener('click', e => {
   if (e.target.closest('button')) return;
   const img = e.target.closest('.album-item img, .wd-photos img, .stage-photos img, .run-photo-grid img');
-  if (img) openImageLightbox(img.currentSrc || img.src, img.alt);
+  if (img) {
+    const gallery = lightboxPhotoGroup(img);
+    openImageLightbox(gallery.items, gallery.index);
+  }
 });
 
 async function renderRunAlbumCover(run) {
@@ -5881,6 +6415,7 @@ function renderAdmWork() {
     list.append(card);
   });
   renderAdmWorkHistory(workHistory, allowedBranches);
+  window.PMRepairHistory.render();
 }
 
 /* 단계 칩 클릭: 해당 단계 사진 최대 3장 미리보기, 4장 이상이면 전체보기 버튼 노출 */
@@ -6330,7 +6865,10 @@ function groupWorkAudit() {
     if (!map.has(k)) map.set(k, { key: k, entries: [] });
     map.get(k).entries.push(a);
   });
-  return [...map.values()];
+  return [...map.values()].map(group => ({
+    ...group,
+    entries: group.entries.sort((a, b) => new Date(b.at || 0) - new Date(a.at || 0))
+  }));
 }
 
 /* 예약관리와 작업기록은 같은 예약 키를 기준으로 합친다.
@@ -6347,6 +6885,7 @@ function auditGroupBooking(group) {
   if (!head) return null;
   const latest = entries[0] || head;
   const cancelled = String(latest.action || '').includes('예약 취소');
+  const futureReservation = String(head.bookingDate || '') >= todayKey();
   return {
     id: `history-${encodeURIComponent(linkedBookingKey(head))}`,
     branch: head.branch,
@@ -6360,7 +6899,7 @@ function auditGroupBooking(group) {
     model: head.model || '',
     services: head.service ? [head.service] : [],
     memo: head.memo || head.detail || '',
-    status: cancelled ? '취소' : '완료',
+    status: cancelled ? '취소' : futureReservation ? '예약' : '완료',
     createdAt: head.at || '',
     historyOnly: true
   };
@@ -7054,7 +7593,12 @@ const PUBLIC_ACTIVITY_VIEWS = Object.freeze(['intro', 'location', 'cases', 'guid
 let activityDateRange = null;
 let activitySelectedBranch = '전체';
 let activitySection = 'dashboard';
-let activityKeywordPlatform = '전체';
+const ACTIVITY_PRESETS = Object.freeze([
+  { days: 1, label: '오늘' },
+  { days: 7, label: '7일' },
+  { days: 30, label: '30일' },
+  { days: 90, label: '90일' }
+]);
 function activityDateValue(date) {
   const shifted = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
   return shifted.toISOString().slice(0, 10);
@@ -7102,6 +7646,12 @@ function activityChannel(item) {
   if (item?.payload?.channel) return item.payload.channel;
   return activityAcquisitionContext(item?.payload?.referrer || item?.referrer || '', item?.page_url || location.href).channel;
 }
+function activityReferrerLabel(payload = {}) {
+  if (payload.referrerHost) return payload.referrerHost;
+  try { return new URL(payload.referrer || '').hostname.toLowerCase().replace(/^www\./, ''); } catch {}
+  if (payload.source) return payload.source;
+  return '직접 접속';
+}
 function activityMaskedIp(value) {
   const text = String(value || '');
   if (!text) return '식별번호 없음';
@@ -7128,142 +7678,6 @@ function activityRatio(numerator, denominator) {
   if (!bottom) return '—';
   if (bottom < 30) return `${top}/${bottom} · 표본 부족`;
   return `${(top / bottom * 100).toFixed(1)}% (${top}/${bottom})`;
-}
-/* 검색어가 많은 채널은 한 칸에 다 늘어놓지 않고 앞 몇 개만 보여준다. */
-function activityKeywordPreview(values, limit = 3) {
-  const list = [...(values || [])].filter(Boolean);
-  if (!list.length) return '확인 불가';
-  const shown = list.slice(0, limit).join(' · ');
-  return list.length > limit ? `${shown} 외 ${list.length - limit}개` : shown;
-}
-/* ---------- 분석 화면 그래프 ----------
-   외부 라이브러리 없이 SVG로 그린다. 색은 한 계열(파란색) 기준이고,
-   퍼널은 단계 순서가 보이도록 밝은색에서 진한색으로 내려가는 5단계를 쓴다. */
-const ACTIVITY_INK = Object.freeze({ visit:'#3176d5', call:'#3176d5', booking:'#eb6834', grid:'#e8ebef' });
-const ACTIVITY_FUNNEL_INK = Object.freeze(['#8ab5ea', '#6a9ce2', '#4b87d8', '#2f66bd', '#1c3f8f']);
-function activityKstDayKey(value) {
-  const time = new Date(value).getTime();
-  if (!Number.isFinite(time)) return '';
-  return new Date(time + 9 * 3600000).toISOString().slice(0, 10);
-}
-function activityDayLabel(key) {
-  const [, month, day] = String(key).split('-');
-  return `${Number(month)}.${Number(day)}`;
-}
-/* 기간 안의 날짜를 하루도 빠뜨리지 않고 만들어 둔다. 방문이 없는 날도 0으로 보여야 흐름이 보인다. */
-function activityDaySeries(rangeStart, endExclusive) {
-  const series = [];
-  for (let time = rangeStart.getTime(); time < endExclusive.getTime(); time += 86400000) {
-    const key = activityKstDayKey(new Date(time).toISOString());
-    series.push({ key, label: activityDayLabel(key), visitors: new Set(), calls: 0, bookings: 0 });
-  }
-  return series.slice(-90);
-}
-/* 건수·명수는 소수점이 없어야 읽힌다. 가운데 눈금이 정수가 되는 값만 고른다. */
-function activityNiceTicks(max) {
-  const target = Math.max(1, Math.ceil(max));
-  const steps = [2, 4, 6, 8, 10, 20, 40, 60, 80, 100, 200, 400, 600, 1000, 2000, 4000, 10000];
-  const top = steps.find(step => step >= target) || Math.ceil(target / 2) * 2;
-  return [0, top / 2, top];
-}
-function activityColumnPath(x, y, width, height, radius = 4) {
-  const r = Math.max(0, Math.min(radius, width / 2, height));
-  const bottom = y + height;
-  return `M${x} ${bottom} L${x} ${y + r} Q${x} ${y} ${x + r} ${y} L${x + width - r} ${y} Q${x + width} ${y} ${x + width} ${y + r} L${x + width} ${bottom} Z`;
-}
-/* 방문 추이: 한 계열이라 범례 없이 제목이 무엇인지 말해준다. 끝점만 직접 라벨을 붙인다. */
-function activityVisitTrendChart(series) {
-  if (!series.length) return '<p class="activity-chart-empty">선택한 기간에 방문 기록이 없습니다.</p>';
-  const width = 720;
-  const height = 190;
-  const padding = { top: 18, right: 46, bottom: 26, left: 38 };
-  const plotWidth = width - padding.left - padding.right;
-  const plotHeight = height - padding.top - padding.bottom;
-  const values = series.map(day => day.visitors.size);
-  const ticks = activityNiceTicks(Math.max(...values));
-  const top = ticks[2];
-  const stepX = series.length > 1 ? plotWidth / (series.length - 1) : 0;
-  const pointX = index => padding.left + (series.length > 1 ? index * stepX : plotWidth / 2);
-  const pointY = value => padding.top + plotHeight - (value / top) * plotHeight;
-  const line = values.map((value, index) => `${index ? 'L' : 'M'}${pointX(index).toFixed(1)} ${pointY(value).toFixed(1)}`).join(' ');
-  const area = `${line} L${pointX(values.length - 1).toFixed(1)} ${padding.top + plotHeight} L${pointX(0).toFixed(1)} ${padding.top + plotHeight} Z`;
-  const labelEvery = Math.ceil(series.length / 7);
-  const lastIndex = values.length - 1;
-  return `
-    <figure class="activity-chart">
-      <svg viewBox="0 0 ${width} ${height}" role="img" aria-label="날짜별 방문자 추이" preserveAspectRatio="xMidYMid meet">
-        ${ticks.map(tick => {
-          const y = pointY(tick).toFixed(1);
-          return `<line class="activity-grid" x1="${padding.left}" x2="${width - padding.right}" y1="${y}" y2="${y}"></line><text class="activity-axis" x="${padding.left - 8}" y="${y}" text-anchor="end" dominant-baseline="middle">${tick.toLocaleString()}</text>`;
-        }).join('')}
-        <path class="activity-area" d="${area}" fill="${ACTIVITY_INK.visit}"></path>
-        <path class="activity-line" d="${line}" pathLength="1" stroke="${ACTIVITY_INK.visit}"></path>
-        ${series.map((day, index) => {
-          const x = pointX(index).toFixed(1);
-          const y = pointY(values[index]).toFixed(1);
-          const band = Math.max(10, stepX);
-          return `<g class="activity-point">
-            <rect x="${(Number(x) - band / 2).toFixed(1)}" y="${padding.top}" width="${band.toFixed(1)}" height="${plotHeight}" fill="transparent"><title>${esc(day.label)} · 방문 ${values[index]}명 · 전화 ${day.calls}건 · 예약 ${day.bookings}건</title></rect>
-            <circle cx="${x}" cy="${y}" r="4.5" fill="${ACTIVITY_INK.visit}"></circle>
-          </g>`;
-        }).join('')}
-        <circle class="activity-end-dot" cx="${pointX(lastIndex).toFixed(1)}" cy="${pointY(values[lastIndex]).toFixed(1)}" r="4.5" fill="${ACTIVITY_INK.visit}"></circle>
-        <text class="activity-end-label" x="${(pointX(lastIndex) + 10).toFixed(1)}" y="${pointY(values[lastIndex]).toFixed(1)}" dominant-baseline="middle">${values[lastIndex]}명</text>
-        ${series.map((day, index) => (index % labelEvery === 0 || index === lastIndex)
-          ? `<text class="activity-axis" x="${pointX(index).toFixed(1)}" y="${height - 8}" text-anchor="middle">${esc(day.label)}</text>`
-          : '').join('')}
-      </svg>
-    </figure>`;
-}
-/* 전환 추이: 전화 클릭과 예약 생성은 단위가 같은 '건'이라 한 축에 나란히 둔다. */
-function activityConversionChart(series) {
-  const totals = series.reduce((sum, day) => sum + day.calls + day.bookings, 0);
-  if (!series.length || !totals) return '<p class="activity-chart-empty">선택한 기간에 전화 클릭과 예약 생성 기록이 없습니다.</p>';
-  const width = 720;
-  const height = 150;
-  const padding = { top: 16, right: 46, bottom: 26, left: 38 };
-  const plotWidth = width - padding.left - padding.right;
-  const plotHeight = height - padding.top - padding.bottom;
-  const ticks = activityNiceTicks(Math.max(...series.map(day => Math.max(day.calls, day.bookings))));
-  const top = ticks[2];
-  const band = plotWidth / series.length;
-  const barWidth = Math.max(2, Math.min(24, band / 2 - 2));
-  const labelEvery = Math.ceil(series.length / 7);
-  const columnY = value => padding.top + plotHeight - (value / top) * plotHeight;
-  return `
-    <figure class="activity-chart">
-      <svg viewBox="0 0 ${width} ${height}" role="img" aria-label="날짜별 전화 클릭과 예약 생성" preserveAspectRatio="xMidYMid meet">
-        ${ticks.map(tick => {
-          const y = columnY(tick).toFixed(1);
-          return `<line class="activity-grid" x1="${padding.left}" x2="${width - padding.right}" y1="${y}" y2="${y}"></line><text class="activity-axis" x="${padding.left - 8}" y="${y}" text-anchor="end" dominant-baseline="middle">${tick.toLocaleString()}</text>`;
-        }).join('')}
-        ${series.map((day, index) => {
-          const center = padding.left + band * index + band / 2;
-          const baseline = padding.top + plotHeight;
-          const callHeight = Math.max(0, baseline - columnY(day.calls));
-          const bookingHeight = Math.max(0, baseline - columnY(day.bookings));
-          const delay = (index % 12) * 0.03;
-          return `<g class="activity-column" style="--delay:${delay}s">
-            ${day.calls ? `<path d="${activityColumnPath(center - barWidth - 1, columnY(day.calls), barWidth, callHeight)}" fill="${ACTIVITY_INK.call}"><title>${esc(day.label)} 전화 클릭 ${day.calls}건</title></path>` : ''}
-            ${day.bookings ? `<path d="${activityColumnPath(center + 1, columnY(day.bookings), barWidth, bookingHeight)}" fill="${ACTIVITY_INK.booking}"><title>${esc(day.label)} 예약 생성 ${day.bookings}건</title></path>` : ''}
-          </g>`;
-        }).join('')}
-        ${series.map((day, index) => (index % labelEvery === 0 || index === series.length - 1)
-          ? `<text class="activity-axis" x="${(padding.left + band * index + band / 2).toFixed(1)}" y="${height - 8}" text-anchor="middle">${esc(day.label)}</text>`
-          : '').join('')}
-      </svg>
-    </figure>`;
-}
-/* 채널 비교: 이름에 순서가 없으니 한 가지 색으로만 칠하고, 길이로만 크기를 말한다. */
-function activityChannelBars(rows) {
-  if (!rows.length) return '<p class="activity-chart-empty">선택한 기간의 유입 기록이 없습니다.</p>';
-  const max = Math.max(1, ...rows.map(row => row.visitors));
-  return `<ul class="activity-bar-list">${rows.map((row, index) => `
-    <li style="--width:${(row.visitors / max * 100).toFixed(1)}%;--delay:${(index * 0.05).toFixed(2)}s">
-      <span class="activity-bar-name">${esc(row.name)}</span>
-      <span class="activity-bar-track"><i style="background:${ACTIVITY_INK.visit}"></i></span>
-      <span class="activity-bar-value"><strong>${row.visitors}명</strong><small>전화 ${row.calls} · 예약 ${row.bookings}</small></span>
-    </li>`).join('')}</ul>`;
 }
 function activityZeroClass(value) {
   return Number(value) === 0 ? ' is-zero' : '';
@@ -7339,6 +7753,7 @@ async function loadNaverAdPerformance(from, to) {
 async function renderAdmActivity() {
   const body = $('#adm-activity-body');
   if (!body || !isDeveloper()) { if (body) body.innerHTML = ''; return; }
+  body.classList.add('activity-wanted');
   activityDateRange ||= defaultActivityRange(30);
   body.innerHTML = '<section class="settings-card"><p class="hint">실제 활동 로그를 분석하는 중...</p></section>';
   try {
@@ -7488,20 +7903,22 @@ async function renderAdmActivity() {
       dwell:0,
       pageViews:0,
       intentVisitors:new Set(),
-      callVisitors:new Set(),
-      calls:0,
       bookingIds:new Set(),
       linkedBookingIds:new Set(),
       campaigns:new Set(),
       searchQueries:new Set(),
       purchasedKeywords:new Set(),
-      adGroups:new Set()
+      adGroups:new Set(),
+      referrers:new Set(),
+      callVisitors:new Set(),
+      calls:0
     });
     const addAcquisitionDetails = (channel, payload = {}) => {
       if (payload.campaign) channel.campaigns.add(payload.campaign);
       if (payload.searchQuery) channel.searchQueries.add(payload.searchQuery);
       if (payload.purchasedKeyword || payload.keyword) channel.purchasedKeywords.add(payload.purchasedKeyword || payload.keyword);
       if (payload.adGroup) channel.adGroups.add(payload.adGroup);
+      channel.referrers.add(activityReferrerLabel(payload));
     };
     sessionStarts.forEach(item => {
       const name = activityChannel(item);
@@ -7519,11 +7936,11 @@ async function renderAdmActivity() {
       if (item.event_type === 'view_dwell') channel.dwell += Number(item.payload?.seconds || 0);
       if (item.event_type === 'view_open') channel.pageViews += 1;
       if (item.event_type === 'reservation_click') channel.intentVisitors.add(item.visitor_key);
+      if (item.event_type === 'signup_complete') channel.signups += 1;
       if (item.event_type === 'phone_call') {
         channel.calls += 1;
         channel.callVisitors.add(item.visitor_key);
       }
-      if (item.event_type === 'signup_complete') channel.signups += 1;
       if (item.event_type === 'booking_complete') {
         const resolvedBookingId = resolvedBookingIdForLog(item);
         const bookingId = resolvedBookingId || activityBookingLogKey(item);
@@ -7575,7 +7992,7 @@ async function renderAdmActivity() {
       });
     visitorItems.forEach(item => {
       if (activitySelectedBranch !== '전체'
-        && ['booking_complete', 'phone_call'].includes(item.event_type)
+        && item.event_type === 'booking_complete'
         && !activitySameBranch(item.payload?.branch, activitySelectedBranch)) return;
       if (activitySelectedBranch !== '전체' && !selectedVisitorKeys.has(item.visitor_key)) return;
       const channel = selectedChannelMap.get(channelNameForItem(item));
@@ -7583,11 +8000,11 @@ async function renderAdmActivity() {
       if (item.event_type === 'view_dwell') channel.dwell += Number(item.payload?.seconds || 0);
       if (item.event_type === 'view_open') channel.pageViews += 1;
       if (item.event_type === 'reservation_click') channel.intentVisitors.add(item.visitor_key);
+      if (item.event_type === 'signup_complete') channel.signups += 1;
       if (item.event_type === 'phone_call') {
         channel.calls += 1;
         channel.callVisitors.add(item.visitor_key);
       }
-      if (item.event_type === 'signup_complete') channel.signups += 1;
       if (item.event_type === 'booking_complete') {
         const resolvedBookingId = resolvedBookingIdForLog(item);
         const bookingId = resolvedBookingId || activityBookingLogKey(item);
@@ -7616,109 +8033,10 @@ async function renderAdmActivity() {
     const selectedChannels = [...selectedChannelMap.values()].sort((a,b) => b.visitors.size - a.visitors.size);
     const selectedDonut = activityDonut(selectedChannels.map(channel => ({ count:channel.visitors.size })));
     const selectedChannelVisitors = new Set(selectedChannels.flatMap(channel => [...channel.visitors])).size;
-    /* 전화 클릭은 예약과 함께 보는 보조 전환이다. 지점을 선택하면 그 지점 번호를 누른 것만 센다. */
-    const callItems = visitorItems.filter(item => item.event_type === 'phone_call');
-    const selectedCallItems = callItems.filter(item => activitySelectedBranch === '전체' || activitySameBranch(item.payload?.branch, activitySelectedBranch));
-    const selectedCallVisitors = new Set(selectedCallItems.map(item => item.visitor_key).filter(Boolean)).size;
-    const unnamedCallCount = callItems.filter(item => !String(item.payload?.branch || '').trim()).length;
-    /* 유입 채널을 못 찾은 전화 클릭은 미분류에 넣어 채널 표 합계가 전화 클릭 총계와 맞도록 한다. */
-    selectedCallItems.forEach(item => {
-      if (!selectedChannelMap.get(channelNameForItem(item))) unknownChannel.calls += 1;
-    });
-    /* 비교 대상도 같은 지점 기준이어야 늘었는지 줄었는지가 맞다. */
-    const previousCallCount = previousItems.filter(item => item.visitor_key
-      && item.event_type === 'phone_call'
-      && (activitySelectedBranch === '전체' || activitySameBranch(item.payload?.branch, activitySelectedBranch))).length;
-    /* 검색어별 전환: 같은 검색어를 한 줄로 모아 방문·전화·예약을 함께 본다. */
-    const keywordRowMap = new Map();
-    const keywordKeyBySession = new Map();
-    sessionStarts
-      .filter(item => activitySelectedBranch === '전체' || selectedVisitorKeys.has(item.visitor_key))
-      .forEach(item => {
-        const payload = item.payload || {};
-        /* 실제 검색어와 광고에 등록한 키워드는 각각 한 줄로 남긴다. 둘 다 있으면 둘 다 본다. */
-        const entries = [
-          { text: String(payload.searchQuery || '').trim(), kind: '실제 검색어' },
-          { text: String(payload.purchasedKeyword || payload.keyword || '').trim(), kind: '광고 등록 키워드' }
-        ].filter(entry => entry.text);
-        const channelName = activityChannel(item);
-        entries.forEach(entry => {
-          /* 같은 검색어라도 네이버 광고에서 온 것과 다음에서 온 것은 따로 본다. */
-          const key = `${entry.kind}|${channelName}|${activityKeywordKey(entry.text)}`;
-          const row = keywordRowMap.get(key) || { text: entry.text, kind: entry.kind, channel: channelName, platform: activityPlatform(channelName), visitors:new Set(), sessions:new Set(), calls:0, bookingIds:new Set(), ranks:[] };
-          if (item.visitor_key) row.visitors.add(item.visitor_key);
-          const rank = Number(payload.rank || 0);
-          if (rank > 0) row.ranks.push(rank);
-          if (payload.sessionId) {
-            row.sessions.add(payload.sessionId);
-            keywordKeyBySession.set(payload.sessionId, [...(keywordKeyBySession.get(payload.sessionId) || []), key]);
-          }
-          keywordRowMap.set(key, row);
-        });
-      });
-    visitorItems.forEach(item => {
-      if (!['phone_call', 'booking_complete'].includes(item.event_type)) return;
-      if (activitySelectedBranch !== '전체' && !activitySameBranch(item.payload?.branch, activitySelectedBranch)) return;
-      (keywordKeyBySession.get(item.payload?.sessionId) || []).forEach(key => {
-        const row = keywordRowMap.get(key);
-        if (!row) return;
-        if (item.event_type === 'phone_call') row.calls += 1;
-        if (item.event_type === 'booking_complete') row.bookingIds.add(resolvedBookingIdForLog(item) || activityBookingLogKey(item));
-      });
-    });
-    /* 키워드마다 예약이 확정·입고·매출까지 갔는지 이어붙인다. */
-    const keywordBookingIndex = new Map(getBookings().map(booking => [String(booking.id || ''), booking]));
-    const keywordCustomers = getCustomers();
-    const keywordRows = [...keywordRowMap.values()]
-      .map(row => {
-        const bookings = [...row.bookingIds].map(id => keywordBookingIndex.get(String(id))).filter(Boolean);
-        const visitors = row.visitors.size;
-        const stats = {
-          ...row,
-          visitors,
-          bookings: row.bookingIds.size,
-          confirmed: bookings.filter(booking => !isNewBooking(booking) && isActiveBooking(booking)).length,
-          arrived: bookings.filter(booking => !!runForBooking(booking)).length,
-          revenue: bookings.reduce((sum, booking) => sum + activityBookingRevenue(booking, keywordCustomers), 0),
-          rank: row.ranks.length ? row.ranks.reduce((sum, value) => sum + value, 0) / row.ranks.length : 0
-        };
-        return { ...stats, grade: activityKeywordGrade(stats) };
-      })
-      .sort((a, b) => b.bookings - a.bookings || b.revenue - a.revenue || b.calls - a.calls || b.visitors - a.visitors);
-    const keywordPlatforms = ['전체', '네이버', '구글', '다음', '기타']
-      .map(name => ({ name, count: name === '전체' ? keywordRows.length : keywordRows.filter(row => row.platform === name).length }))
-      .filter(entry => entry.name === '전체' || entry.count);
-    if (!keywordPlatforms.some(entry => entry.name === activityKeywordPlatform)) activityKeywordPlatform = '전체';
-    const visibleKeywordRows = keywordRows
-      .filter(row => activityKeywordPlatform === '전체' || row.platform === activityKeywordPlatform)
-      .slice(0, 40);
-    const goldenKeywordCount = visibleKeywordRows.filter(row => row.grade.label === '황금').length;
-    const wastedKeywordCount = visibleKeywordRows.filter(row => row.grade.label === '낭비').length;
-    /* 검색으로 들어왔지만 검색어가 넘어오지 않은 방문을 센다. 자연검색어는 정책상 전달되지 않는 경우가 많다. */
-    const searchSessionStarts = sessionStarts
-      .filter(item => activitySelectedBranch === '전체' || selectedVisitorKeys.has(item.visitor_key))
-      .filter(item => /검색/.test(activityChannel(item)));
-    const searchWithoutKeyword = searchSessionStarts.filter(item => !String(item.payload?.searchQuery || '').trim() && !String(item.payload?.purchasedKeyword || item.payload?.keyword || '').trim()).length;
-    /* 그래프용 날짜별 묶음. 방문이 없는 날도 0으로 채워 흐름이 끊기지 않게 한다. */
-    const trendSeries = activityDaySeries(rangeStart, endExclusive);
-    const trendByKey = new Map(trendSeries.map(day => [day.key, day]));
-    visitorItems.forEach(item => {
-      if (activitySelectedBranch !== '전체' && !selectedVisitorKeys.has(item.visitor_key)) return;
-      const day = trendByKey.get(activityKstDayKey(item.created_at));
-      if (day) day.visitors.add(item.visitor_key);
-    });
-    selectedCallItems.forEach(item => {
-      const day = trendByKey.get(activityKstDayKey(item.created_at));
-      if (day) day.calls += 1;
-    });
-    selectedSubmittedBookings.forEach(booking => {
-      const day = trendByKey.get(String(activityBookingPeriodValue(booking) || '').slice(0, 10).replaceAll('.', '-'));
-      if (day) day.bookings += 1;
-    });
-    const channelBarRows = selectedChannels
-      .filter(channel => channel.visitors.size)
-      .slice(0, 7)
-      .map(channel => ({ name: channel.name, visitors: channel.visitors.size, calls: channel.calls, bookings: channel.bookingIds.size }));
+    const selectedPhoneItems = visitorItems
+      .filter(item => item.event_type === 'phone_call')
+      .filter(item => activitySelectedBranch === '전체' || activitySameBranch(item.payload?.branch, activitySelectedBranch));
+    const selectedPhoneVisitors = new Set(selectedPhoneItems.map(item => item.visitor_key).filter(Boolean));
     const selectedTrackedBookingIds = new Set(selectedChannels.flatMap(channel => [...channel.bookingIds]));
     const selectedLinkedBookingIds = new Set(
       selectedChannels
@@ -7775,22 +8093,70 @@ async function renderAdmActivity() {
       });
       const firstStart = ordered.find(item => item.event_type === 'session_start');
       const last = ordered.at(-1);
-      return { visitor, route, channel:activityChannel(firstStart), last, verdict:activityVisitorVerdict(ordered), dwell:visitor.dwell };
+      return { visitor, route, channel:activityChannel(firstStart), last };
     });
     const lastCollectedAt = items[0]?.created_at ? new Date(items[0].created_at).toLocaleString('ko-KR') : '수집 내역 없음';
     const unknownPerformance = selectedChannels.find(channel => channel.name === '미분류');
+    const selectedSessionStarts = sessionStarts.filter(item => activitySelectedBranch === '전체' || selectedVisitorKeys.has(item.visitor_key));
+    const phoneSessionIds = new Set(selectedPhoneItems.map(item => item.payload?.sessionId).filter(Boolean));
+    const bookingSessionIds = new Set(
+      visitorItems
+        .filter(item => item.event_type === 'booking_complete')
+        .filter(item => activitySelectedBranch === '전체' || activitySameBranch(item.payload?.branch, activitySelectedBranch))
+        .map(item => item.payload?.sessionId)
+        .filter(Boolean)
+    );
+    const keywordMap = new Map();
+    const addSavedKeyword = (value, type, start) => {
+      const keyword = String(value || '').trim();
+      if (!keyword) return;
+      const channel = activityChannel(start);
+      const key = `${type}:${channel}:${keyword.toLowerCase()}`;
+      const row = keywordMap.get(key) || {
+        keyword,
+        type,
+        channel,
+        visitors:new Set(),
+        sessions:new Set(),
+        phoneSessions:new Set(),
+        bookingSessions:new Set()
+      };
+      if (start.visitor_key) row.visitors.add(start.visitor_key);
+      const sessionId = start.payload?.sessionId;
+      if (sessionId) {
+        row.sessions.add(sessionId);
+        if (phoneSessionIds.has(sessionId)) row.phoneSessions.add(sessionId);
+        if (bookingSessionIds.has(sessionId)) row.bookingSessions.add(sessionId);
+      }
+      keywordMap.set(key, row);
+    };
+    selectedSessionStarts.forEach(start => {
+      addSavedKeyword(start.payload?.searchQuery, '실제 검색어', start);
+      addSavedKeyword(start.payload?.purchasedKeyword, '광고 등록 키워드', start);
+    });
+    const savedKeywords = [...keywordMap.values()].sort((a, b) => b.sessions.size - a.sessions.size || a.keyword.localeCompare(b.keyword, 'ko'));
+    const searchStarts = selectedSessionStarts.filter(item => /검색/.test(activityChannel(item)));
+    const searchableStarts = searchStarts.filter(item => item.payload?.searchQuery || item.payload?.purchasedKeyword);
+    const knownReferrerStarts = selectedSessionStarts.filter(item =>
+      item.payload?.referrerHost || item.payload?.referrer || item.payload?.source || activityChannel(item) !== '직접 접속'
+    );
+    const telElementClicks = visitorItems
+      .filter(item => item.event_type === 'element_click' && /^tel:/i.test(String(item.payload?.target || '')))
+      .filter(item => activitySelectedBranch === '전체' || selectedVisitorKeys.has(item.visitor_key));
     const qualityAlerts = [];
     if (adUnavailableCount) qualityAlerts.push('네이버 광고 숫자를 불러오지 못했습니다. 잠시 후 다시 확인해주세요.');
     if (!adUnavailableCount && selectedChannels.some(channel => channel.name === '네이버 검색광고' && channel.visitors.size) && Number(adTotals.clicks || 0) === 0) {
       qualityAlerts.push('광고 방문은 있는데 광고 클릭이 0회입니다. 7일 기준으로 다시 확인해주세요.');
     }
-    if (!selectedCallItems.length) qualityAlerts.push('선택한 기간에 저장된 전화 클릭이 없습니다. 전화번호를 눌러 저장되는지 먼저 확인해주세요.');
-    if (unnamedCallCount) qualityAlerts.push(`지점을 확인할 수 없는 전화 클릭이 ${unnamedCallCount}건 있습니다. 지점 전화번호가 등록된 번호와 다른지 확인해주세요.`);
-    if (searchWithoutKeyword) {
-      qualityAlerts.push(`검색 유입 ${searchSessionStarts.length}건 중 ${searchWithoutKeyword}건은 검색어가 넘어오지 않았습니다. 자연검색어는 네이버·구글 정책상 전달되지 않는 경우가 많아 광고 추적값이나 별도 검색 분석 도구가 필요합니다.`);
-    }
     if (unknownPerformance?.visitors.size) qualityAlerts.push(`들어온 곳을 확인할 수 없는 방문이 ${unknownPerformance.visitors.size}명 있습니다.`);
     if (selectedUntrackedBookings.length) qualityAlerts.push(`유입경로가 남지 않은 기존 예약이 ${selectedUntrackedBookings.length}건 있습니다.`);
+    if (searchStarts.length > searchableStarts.length) {
+      qualityAlerts.push(`검색 유입 ${searchStarts.length}건 중 ${searchStarts.length - searchableStarts.length}건은 검색어가 전달되지 않았습니다. 자연검색어는 네이버·구글 정책상 별도 검색 분석 도구 연결이 필요할 수 있습니다.`);
+    }
+    if (telElementClicks.length > selectedPhoneItems.length) {
+      qualityAlerts.push(`이전 전화 링크 클릭 ${telElementClicks.length - selectedPhoneItems.length}건은 일반 클릭으로만 남아 지점별 확인이 어렵습니다. 새 방문부터는 전화 클릭으로 별도 저장됩니다.`);
+    }
+    if (!selectedPhoneItems.length) qualityAlerts.push('선택한 기간에는 저장된 전화 클릭이 없습니다. 전화 클릭 추적은 실제 통화 연결·통화 완료 여부가 아니라 전화 앱을 연 시점까지 확인합니다.');
     if (selectedChannelVisitors < 30) qualityAlerts.push('방문자가 30명보다 적어 비율보다 실제 건수를 중심으로 봐주세요.');
 
     const simpleFunnel = [
@@ -7828,54 +8194,45 @@ async function renderAdmActivity() {
     const dashboardPanel = `
       ${qualityAlerts.length ? `<section class="activity-alerts"><strong>확인할 내용</strong><ul>${qualityAlerts.map(message => `<li>${esc(message)}</li>`).join('')}</ul></section>` : ''}
       <section class="activity-simple-kpis activity-owner-kpis">
-        <article class="${activityZeroClass(selectedCallItems.length)}"><span>전화 클릭</span><strong>${selectedCallItems.length}건</strong><small>${selectedCallVisitors}명 · 이전 기간 ${previousCallCount}건</small></article>
+        <article class="${activityZeroClass(selectedPhoneItems.length)}"><span>전화 클릭</span><strong>${selectedPhoneItems.length}건</strong><small>${selectedPhoneVisitors.size}명 · 전화 앱 열기 기준</small></article>
         <article class="${activityZeroClass(selectedBranchRow?.confirmed)}"><span>예약 확정</span><strong>${selectedBranchRow?.confirmed || 0}건</strong><small>예약 생성 ${selectedSubmittedBookings.length}건</small></article>
         <article class="${activityZeroClass(selectedBranchRow?.visits)}"><span>실제 입고</span><strong>${selectedBranchRow?.visits || 0}건</strong><small>예약일 기준</small></article>
         <article class="${activityZeroClass(revenue)}"><span>매출</span><strong>${revenue.toLocaleString()}원</strong><small>정산 완료 기준</small></article>
         <article class="${activityZeroClass(selectedSubmittedBookings.length)}"><span>예약 전환</span><strong>${activityRatio(selectedSubmittedBookings.length, selectedChannelVisitors)}</strong><small>예약 ${selectedSubmittedBookings.length} / 방문 ${selectedChannelVisitors}</small></article>
       </section>
-      <section class="settings-card activity-trend-card">
-        <div class="activity-section-head"><div><h3>방문과 전환 추이</h3><p>선 위에 마우스를 올리면 그 날의 방문·전화·예약을 함께 볼 수 있습니다.</p></div><strong>${selectedChannelVisitors.toLocaleString()}명</strong></div>
-        ${activityVisitTrendChart(trendSeries)}
-        <div class="activity-chart-legend">
-          <span><i style="background:${ACTIVITY_INK.call}"></i>전화 클릭</span>
-          <span><i style="background:${ACTIVITY_INK.booking}"></i>예약 생성</span>
-        </div>
-        ${activityConversionChart(trendSeries)}
-      </section>
       <section class="settings-card activity-simple-funnel">
-        <div class="activity-section-head"><div><h3>예약 흐름</h3><p>어디에서 손님이 줄어드는지 보여줍니다. 전화로만 문의한 ${selectedCallItems.length}건은 이 흐름에 포함되지 않습니다.</p></div></div>
+        <div class="activity-section-head"><div><h3>예약 흐름</h3><p>어디에서 손님이 줄어드는지 보여줍니다.</p></div></div>
         ${simpleFunnel.map((stage, index) => {
           const previous = simpleFunnel[index - 1];
           const loss = previous ? Math.max(0, previous.value - stage.value) : 0;
-          return `<article style="--delay:${(index * 0.07).toFixed(2)}s"><div><span>${stage.name}</span><strong>${stage.value.toLocaleString()}${stage.unit}</strong><small>${previous ? (previous.value ? `${activityRatio(stage.value, previous.value)} · ${loss}${stage.unit === '명' ? '명' : '건'} 이탈` : '진행 중') : '정제된 실제 방문'}</small></div><i><b style="width:${(stage.value / simpleFunnelMax * 100).toFixed(1)}%;background:${ACTIVITY_FUNNEL_INK[Math.min(index, ACTIVITY_FUNNEL_INK.length - 1)]}"></b></i></article>`;
+          return `<article><div><span>${stage.name}</span><strong>${stage.value.toLocaleString()}${stage.unit}</strong><small>${previous ? (previous.value ? `${activityRatio(stage.value, previous.value)} · ${loss}${stage.unit === '명' ? '명' : '건'} 이탈` : '진행 중') : '정제된 실제 방문'}</small></div><i><b style="width:${stage.value / simpleFunnelMax * 100}%"></b></i></article>`;
         }).join('')}
-      </section>
-      <section class="settings-card activity-channel-card">
-        <div class="activity-section-head"><div><h3>어디서 많이 들어오나</h3><p>막대는 방문자 수입니다. 방문이 많은 곳과 전화·예약을 만드는 곳을 비교해보세요.</p></div></div>
-        ${activityChannelBars(channelBarRows)}
       </section>
       <section class="settings-card">
         <div class="activity-section-head"><div><h3>어디서 와서 예약했나</h3><p>방문 합계와 예약 합계를 함께 확인할 수 있습니다.</p></div></div>
-        <div class="activity-table-wrap"><table class="activity-table activity-owner-table"><thead><tr><th>들어온 곳</th><th>방문</th><th>전화 클릭</th><th>예약 생성</th><th>확정</th><th>입고</th><th>예약 전환</th><th>광고비</th><th>예약당 광고비</th></tr></thead><tbody>${channelTableRows.map(row => `<tr><td><strong>${esc(row.channel.name)}</strong></td><td>${row.channel.visitors.size}명</td><td>${row.channel.calls}건</td><td>${row.created}건</td><td>${row.confirmed}건</td><td>${row.arrived}건</td><td>${activityRatio(row.created, row.channel.visitors.size)}</td><td>${row.adCost === null ? '—' : `${Math.round(row.adCost).toLocaleString()}원`}</td><td>${row.adCost === null || !row.created ? '—' : `${Math.round(row.adCost / row.created).toLocaleString()}원`}</td></tr>`).join('') || '<tr><td colspan="10">선택한 기간의 유입 내역이 없습니다.</td></tr>'}</tbody><tfoot><tr><th>합계</th><th>${channelVisitorTotal}명</th><th>${channelTableRows.reduce((sum, row) => sum + row.channel.calls, 0)}건</th><th>${channelBookingTotal}건</th><th>${selectedBranchRow?.confirmed || 0}건</th><th>${selectedBranchRow?.visits || 0}건</th><th>${activityRatio(channelBookingTotal, channelVisitorTotal)}</th><th>${Math.round(Number(adTotals.cost || 0)).toLocaleString()}원</th><th>${channelBookingTotal ? `${Math.round(Number(adTotals.cost || 0) / channelBookingTotal).toLocaleString()}원` : '—'}</th></tr></tfoot></table></div>
+        <div class="activity-table-wrap"><table class="activity-table activity-owner-table"><thead><tr><th>들어온 곳</th><th>방문</th><th>전화 클릭</th><th>예약 생성</th><th>확정</th><th>입고</th><th>예약 전환</th><th>광고비</th><th>예약당 광고비</th></tr></thead><tbody>${channelTableRows.map(row => `<tr><td><strong>${esc(row.channel.name)}</strong></td><td>${row.channel.visitors.size}명</td><td>${row.channel.calls}건</td><td>${row.created}건</td><td>${row.confirmed}건</td><td>${row.arrived}건</td><td>${activityRatio(row.created, row.channel.visitors.size)}</td><td>${row.adCost === null ? '—' : `${Math.round(row.adCost).toLocaleString()}원`}</td><td>${row.adCost === null || !row.created ? '—' : `${Math.round(row.adCost / row.created).toLocaleString()}원`}</td></tr>`).join('') || '<tr><td colspan="9">선택한 기간의 유입 내역이 없습니다.</td></tr>'}</tbody><tfoot><tr><th>합계</th><th>${channelVisitorTotal}명</th><th>${selectedPhoneItems.length}건</th><th>${channelBookingTotal}건</th><th>${selectedBranchRow?.confirmed || 0}건</th><th>${selectedBranchRow?.visits || 0}건</th><th>${activityRatio(channelBookingTotal, channelVisitorTotal)}</th><th>${Math.round(Number(adTotals.cost || 0)).toLocaleString()}원</th><th>${channelBookingTotal ? `${Math.round(Number(adTotals.cost || 0) / channelBookingTotal).toLocaleString()}원` : '—'}</th></tr></tfoot></table></div>
       </section>
       <section class="settings-card">
         <div class="activity-section-head"><div><h3>지점별 예약 진행</h3><p>예약부터 입고·완료까지 비교합니다.</p></div></div>
-        <div class="activity-table-wrap"><table class="activity-table"><thead><tr><th>지점</th><th>예약 생성</th><th>확정</th><th>입고</th><th>정비 완료</th><th>취소</th></tr></thead><tbody>${branchRows.map(row => `<tr><td><strong>${esc(row.name)}</strong></td><td>${row.bookings}건</td><td>${row.confirmed}건</td><td>${row.visits}건</td><td>${row.completed}건</td><td>${row.cancelled}건</td></tr>`).join('') || '<tr><td colspan="6">선택한 기간의 지점 내역이 없습니다.</td></tr>'}</tbody></table></div>
+        <div class="activity-table-wrap"><table class="activity-table"><thead><tr><th>지점</th><th>전화 클릭</th><th>예약 생성</th><th>확정</th><th>입고</th><th>정비 완료</th><th>취소</th></tr></thead><tbody>${branchRows.map(row => `<tr><td><strong>${esc(row.name)}</strong></td><td>${row.calls}건</td><td>${row.bookings}건</td><td>${row.confirmed}건</td><td>${row.visits}건</td><td>${row.completed}건</td><td>${row.cancelled}건</td></tr>`).join('') || '<tr><td colspan="7">선택한 기간의 지점 내역이 없습니다.</td></tr>'}</tbody></table></div>
       </section>`;
 
     const acquisitionPanel = `
+      ${qualityAlerts.length ? `<section class="activity-alerts"><strong>데이터에서 부족한 점</strong><ul>${qualityAlerts.map(message => `<li>${esc(message)}</li>`).join('')}</ul></section>` : ''}
+      <section class="activity-simple-kpis activity-data-kpis">
+        <article class="${activityZeroClass(savedKeywords.length)}"><span>저장된 키워드</span><strong>${savedKeywords.length}개</strong><small>실제 검색어와 광고 키워드 구분</small></article>
+        <article class="${activityZeroClass(searchableStarts.length)}"><span>검색어 확인</span><strong>${searchableStarts.length}/${searchStarts.length}건</strong><small>검색 유입 중 전달된 건수</small></article>
+        <article class="${activityZeroClass(knownReferrerStarts.length)}"><span>유입처 확인</span><strong>${knownReferrerStarts.length}/${selectedSessionStarts.length}건</strong><small>블로그·검색·외부 사이트 포함</small></article>
+        <article class="${activityZeroClass(selectedPhoneItems.length)}"><span>전화 클릭</span><strong>${selectedPhoneItems.length}건</strong><small>실제 통화 완료는 확인 불가</small></article>
+      </section>
       ${simpleAdPanel}
       <section class="settings-card">
         <div class="activity-section-head"><div><h3>유입·검색어 상세</h3><p>손님이 어디에서 어떤 검색어로 들어왔는지 봅니다.</p></div></div>
-        <div class="activity-table-wrap"><table class="activity-table activity-acquisition-table"><thead><tr><th>들어온 곳</th><th>검색어 확인</th><th>방문</th><th>평균 관심시간</th><th>예약 관심</th><th>전화 클릭</th><th>예약 생성</th><th>실제 검색어</th><th>광고에 등록한 검색어</th><th>광고 이름</th></tr></thead><tbody>${selectedChannels.map(channel => `<tr><td><strong>${esc(channel.name)}</strong></td><td><span class="activity-grade" data-tone="${activityKeywordAvailability(channel.name).tone}" title="${esc(activityKeywordAvailability(channel.name).note)}">${activityKeywordAvailability(channel.name).label}</span></td><td>${channel.visitors.size}명</td><td>${activityDuration(channel.dwell / Math.max(1, channel.sessions))}</td><td>${channel.intentVisitors.size}명</td><td>${channel.calls}건</td><td>${channel.bookingIds.size}건</td><td>${esc(activityKeywordPreview(channel.searchQueries))}</td><td>${esc(activityKeywordPreview(channel.purchasedKeywords))}</td><td>${esc(activityKeywordPreview([...channel.campaigns, ...channel.adGroups]))}</td></tr>`).join('') || '<tr><td colspan="9">선택한 기간의 유입 내역이 없습니다.</td></tr>'}</tbody></table></div>
+        <div class="activity-table-wrap"><table class="activity-table activity-acquisition-table"><thead><tr><th>들어온 곳</th><th>유입 사이트</th><th>방문</th><th>평균 관심시간</th><th>예약 관심</th><th>전화 클릭</th><th>예약 생성</th><th>실제 검색어</th><th>광고 등록 키워드</th><th>광고 이름</th></tr></thead><tbody>${selectedChannels.map(channel => `<tr><td><strong>${esc(channel.name)}</strong></td><td>${esc([...channel.referrers].join(' · ') || '직접 접속')}</td><td>${channel.visitors.size}명</td><td>${activityDuration(channel.dwell / Math.max(1, channel.sessions))}</td><td>${channel.intentVisitors.size}명</td><td>${channel.calls}건</td><td>${channel.bookingIds.size}건</td><td>${esc([...channel.searchQueries].join(' · ') || '확인 불가')}</td><td>${esc([...channel.purchasedKeywords].join(' · ') || '확인 불가')}</td><td>${esc([...channel.campaigns, ...channel.adGroups].join(' · ') || '확인 불가')}</td></tr>`).join('') || '<tr><td colspan="10">선택한 기간의 유입 내역이 없습니다.</td></tr>'}</tbody></table></div>
       </section>
-      <section class="settings-card activity-keyword-card">
-        <div class="activity-section-head"><div><h3>황금 키워드</h3><p>전화·예약이 붙은 검색어가 황금, 방문만 많고 아무 것도 없는 검색어가 낭비입니다. 같은 검색어라도 들어온 곳이 다르면 따로 셉니다.</p></div><strong>황금 ${goldenKeywordCount} · 낭비 ${wastedKeywordCount}</strong></div>
-        <div class="activity-presets activity-keyword-platforms">${keywordPlatforms.map(entry => `<button type="button" data-keyword-platform="${esc(entry.name)}" class="${activityKeywordPlatform === entry.name ? 'active' : ''}">${esc(entry.name)} ${entry.count}</button>`).join('')}</div>
-        <div class="activity-table-wrap"><table class="activity-table activity-keyword-table"><thead><tr><th>검색어</th><th>등급</th><th>들어온 곳</th><th>방문</th><th>전화</th><th>예약</th><th>매출</th><th>확정</th><th>입고</th><th>구분</th><th>광고 순위</th></tr></thead><tbody>${visibleKeywordRows.map(row => `<tr><td><strong>${esc(row.text)}</strong></td><td><span class="activity-grade" data-tone="${row.grade.tone}">${row.grade.label}</span></td><td>${esc(row.channel)}</td><td>${row.visitors}명 / ${row.sessions.size}회</td><td>${row.calls}건</td><td>${row.bookings}건</td><td>${row.revenue ? `${row.revenue.toLocaleString()}원` : '—'}</td><td>${row.confirmed}건</td><td>${row.arrived}건</td><td>${esc(row.kind)}</td><td>${row.rank ? `${row.rank.toFixed(1)}위` : '—'}</td></tr>`).join('') || '<tr><td colspan="11">선택한 기간에 저장된 검색어가 없습니다.</td></tr>'}</tbody></table></div>
-        <p class="activity-data-note">검색어가 남는 경우: 네이버 검색광고 유입(실제 검색어·등록 키워드·광고 순위 모두 저장), 검색어가 주소에 남는 다음·빙·줌 유입, utm_term을 넣은 링크.<br>
-        검색어가 남지 않는 경우: 구글 자연검색은 정책상 검색어를 보내지 않고, 네이버 자연검색도 대부분 보내지 않습니다. 이 방문은 채널만 남습니다. 자연검색어까지 보려면 구글 서치 콘솔과 네이버 서치어드바이저를 따로 연결해야 하고, 검색량·경쟁도는 네이버 검색광고 키워드도구 쪽 자료가 필요합니다. 매출은 같은 차량·같은 날짜의 정산 완료 기록으로 이어붙인 추정값입니다.</p>
+      <section class="settings-card">
+        <div class="activity-section-head"><div><h3>저장된 검색 키워드</h3><p>선택한 기간에 실제로 전달된 키워드를 중복 없이 모았습니다.</p></div><strong>${savedKeywords.length}개</strong></div>
+        <div class="activity-table-wrap"><table class="activity-table activity-keyword-table"><thead><tr><th>키워드</th><th>구분</th><th>들어온 곳</th><th>방문</th><th>전화 클릭</th><th>예약 생성</th></tr></thead><tbody>${savedKeywords.map(row => `<tr><td><strong>${esc(row.keyword)}</strong></td><td>${esc(row.type)}</td><td>${esc(row.channel)}</td><td>${row.visitors.size}명 / ${row.sessions.size}회</td><td>${row.phoneSessions.size}건</td><td>${row.bookingSessions.size}건</td></tr>`).join('') || '<tr><td colspan="6">전달되어 저장된 검색 키워드가 없습니다.</td></tr>'}</tbody></table></div>
       </section>
       <section class="settings-card">
         <div class="activity-section-head"><div><h3>관심이 높았던 페이지</h3><p>평균 관심시간은 세션 수 기준입니다.</p></div></div>
@@ -7884,8 +8241,8 @@ async function renderAdmActivity() {
 
     const logsPanel = `
       <section class="settings-card">
-        <div class="activity-section-head"><div><h3>방문자 이동 경로</h3><p>한 줄 평가는 저장된 행동 기록으로 판단한 것입니다. 화면 녹화가 아니라 눌린 것과 머문 시간을 근거로 합니다.</p></div><strong>${journeyRows.length}명</strong></div>
-        <div class="activity-table-wrap"><table class="activity-table journey-table"><thead><tr><th>방문자</th><th>들어온 곳</th><th>한 줄 평가</th><th>머문 시간</th><th>이동 경로</th><th>마지막 행동</th></tr></thead><tbody>${journeyRows.map(row => `<tr><td><code>${esc(activityMaskedIp(row.visitor.ip))}</code></td><td>${esc(row.channel)}</td><td><strong>${esc(row.verdict)}</strong></td><td>${esc(activityDuration(row.dwell))}</td><td>${esc(row.route.join(' → ') || '첫 화면만 확인')}</td><td>${esc(activityLabel(row.last?.event_type))}<small>${esc(new Date(row.last?.created_at).toLocaleString('ko-KR'))}</small></td></tr>`).join('') || '<tr><td colspan="6">선택한 기간의 이동 경로가 없습니다.</td></tr>'}</tbody></table></div>
+        <div class="activity-section-head"><div><h3>방문자 이동 경로</h3><p>개인정보 보호를 위해 식별번호 일부를 가렸습니다.</p></div><strong>${journeyRows.length}명</strong></div>
+        <div class="activity-table-wrap"><table class="activity-table journey-table"><thead><tr><th>방문자</th><th>들어온 곳</th><th>이동 경로</th><th>마지막 행동</th></tr></thead><tbody>${journeyRows.map(row => `<tr><td><code>${esc(activityMaskedIp(row.visitor.ip))}</code></td><td>${esc(row.channel)}</td><td>${esc(row.route.join(' → ') || '첫 화면만 확인')}</td><td>${esc(activityLabel(row.last?.event_type))}<small>${esc(new Date(row.last?.created_at).toLocaleString('ko-KR'))}</small></td></tr>`).join('') || '<tr><td colspan="4">선택한 기간의 이동 경로가 없습니다.</td></tr>'}</tbody></table></div>
       </section>
       <section class="settings-card">
         <div class="activity-section-head"><div><h3>상세 행동 기록</h3><p>문제 확인이 필요할 때만 사용하는 화면입니다.</p></div><strong>${items.length.toLocaleString()}건</strong></div>
@@ -7895,7 +8252,7 @@ async function renderAdmActivity() {
     body.innerHTML = `
       <section class="activity-filter settings-card">
         <div><h3>분석 기간</h3><p>마지막 수집 ${esc(lastCollectedAt)} · 봇과 내부 테스트 방문은 자동 제외</p></div>
-        <div class="activity-presets">${[1, 7, 30, 90].map(daysValue => `<button type="button" data-activity-days="${daysValue}" class="${activityDateRange.days === daysValue ? 'active' : ''}">${daysValue === 1 ? '오늘' : `${daysValue}일`}</button>`).join('')}</div>
+        <div class="activity-presets" aria-label="빠른 분석 기간">${ACTIVITY_PRESETS.map(preset => `<button type="button" data-activity-days="${preset.days}" class="${activityDateRange.days === preset.days ? 'active' : ''}">${preset.label}</button>`).join('')}</div>
         <form id="activity-date-form"><label>시작일<input type="date" id="activity-from" value="${esc(activityDateRange.from)}" required></label><span>~</span><label>종료일<input type="date" id="activity-to" value="${esc(activityDateRange.to)}" required></label><button type="submit" class="mini-btn">조회</button></form>
       </section>
       <nav class="activity-view-tabs" aria-label="분석 화면">
@@ -7912,10 +8269,6 @@ async function renderAdmActivity() {
       renderAdmActivity();
     }));
 
-    body.querySelectorAll('[data-keyword-platform]').forEach(button => button.addEventListener('click', () => {
-      activityKeywordPlatform = button.dataset.keywordPlatform || '전체';
-      renderAdmActivity();
-    }));
     body.querySelectorAll('[data-activity-branch]').forEach(button => button.addEventListener('click', () => {
       activitySelectedBranch = button.dataset.activityBranch || '전체';
       renderAdmActivity();
@@ -8201,17 +8554,18 @@ function renderAdmSettings() {
       const label = entry.type === 'blocked' ? '블랙리스트를 해제' : '계정을 복구';
       if (!await pmConfirm(`${entry.member?.name || entry.member?.car || '회원'}님의 ${label}할까요?\n다시 로그인과 가입이 가능해집니다.`, { title: '블랙리스트', okText: '확인' })) return;
       const members = store.get('pm-members', []);
-      if (entry.member?.id && members.some(x => x.id === entry.member.id)) {
-        pmAlert('같은 아이디로 가입된 회원이 이미 있어 복구할 수 없습니다. 기록삭제로 블랙리스트만 해제할 수 있습니다.');
-        return;
-      }
-      if (entry.member) {
+      if (entry.member && !members.some(x =>
+        (entry.member.id && x.id === entry.member.id)
+        || (entry.member.car && x.car === entry.member.car)
+        || (entry.member.phone && normPhone(x.phone) === normPhone(entry.member.phone))
+      )) {
         members.push(entry.member);
-        store.set('pm-members', members);
+        await store.set('pm-members', members);
       }
-      store.set('pm-banned-members', banned.filter(b => b.id !== entry.id));
+      await store.set('pm-banned-members', banned.filter(b => b.id !== entry.id));
+      canonicalMembersRefreshedAt = 0;
       renderAdmSettings();
-      renderAdmCust();
+      await renderAdmCust();
     });
   });
   $$('.ban-remove').forEach(btn => {
@@ -8480,17 +8834,95 @@ function renderAdmInquiry() {
    이벤트 배너 + 앱 설치 (PWA)
    ============================================================ */
 let deferredInstallPrompt = null;
+const APP_LAUNCH_PARAM = 'app_launch';
 window.addEventListener('beforeinstallprompt', e => {
   e.preventDefault();
   deferredInstallPrompt = e;
 });
 window.addEventListener('appinstalled', () => {
   deferredInstallPrompt = null;
-  pmAlert('프로모터스 앱이 홈 화면에 추가되었습니다.', '설치 완료');
+  showInstalledAppLaunchSheet();
 });
 
 const isStandaloneApp = () =>
   window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+
+function installedAppLaunchUrl() {
+  const url = new URL('/', location.origin);
+  url.searchParams.set(APP_LAUNCH_PARAM, 'installed');
+  return url;
+}
+
+function openInstalledApp() {
+  const url = installedAppLaunchUrl();
+  const isAndroid = /Android/i.test(navigator.userAgent);
+  if (isAndroid && location.protocol === 'https:') {
+    location.href = `intent://${url.host}${url.pathname}${url.search}#Intent;scheme=https;action=android.intent.action.VIEW;category=android.intent.category.BROWSABLE;end`;
+    return;
+  }
+  location.href = url.href;
+}
+
+function showInstalledAppLaunchSheet() {
+  document.querySelector('.install-sheet-backdrop')?.remove();
+  const isAndroid = /Android/i.test(navigator.userAgent);
+  let seconds = isAndroid ? 6 : 0;
+  const backdrop = document.createElement('div');
+  backdrop.className = 'install-sheet-backdrop';
+  backdrop.innerHTML = `
+    <div class="install-sheet" role="dialog" aria-modal="true" aria-label="설치 완료 및 앱 실행">
+      <span class="install-sheet-grip" aria-hidden="true"></span>
+      <img src="images/logo-icon.png" alt="" class="install-sheet-logo">
+      <strong class="install-sheet-title">설치 승인이 완료됐어요</strong>
+      <p class="install-sheet-sub">프로모터스 앱을 준비하고 있습니다</p>
+      <p class="install-sheet-note">
+        ${isAndroid
+          ? '휴대폰이 앱 등록을 마치면 <b><span data-install-count>6</span>초 후 자동으로 앱을 엽니다.</b>'
+          : '아래 버튼을 누르면 설치된 프로모터스 앱으로 이동합니다.'}
+      </p>
+      <button type="button" class="install-sheet-copy install-sheet-open-app">지금 앱으로 열기</button>
+      <button type="button" class="install-sheet-close">나중에 열기</button>
+    </div>`;
+  document.body.append(backdrop);
+
+  let timer = null;
+  let interval = null;
+  const cleanup = () => {
+    if (timer) clearTimeout(timer);
+    if (interval) clearInterval(interval);
+  };
+  const close = () => {
+    cleanup();
+    backdrop.remove();
+  };
+  backdrop.addEventListener('click', e => { if (e.target === backdrop) close(); });
+  backdrop.querySelector('.install-sheet-close').addEventListener('click', close);
+  backdrop.querySelector('.install-sheet-open-app').addEventListener('click', () => {
+    cleanup();
+    openInstalledApp();
+  });
+
+  if (isAndroid) {
+    const counter = backdrop.querySelector('[data-install-count]');
+    interval = setInterval(() => {
+      seconds -= 1;
+      if (counter) counter.textContent = String(Math.max(0, seconds));
+      if (seconds <= 0 && interval) {
+        clearInterval(interval);
+        interval = null;
+      }
+    }, 1000);
+    timer = setTimeout(openInstalledApp, 6000);
+  }
+}
+
+function consumeInstalledAppLaunch() {
+  const url = new URL(location.href);
+  if (url.searchParams.get(APP_LAUNCH_PARAM) !== 'installed') return false;
+  url.searchParams.delete(APP_LAUNCH_PARAM);
+  history.replaceState(history.state, '', `${url.pathname}${url.search}${url.hash}`);
+  return true;
+}
 
 async function requestAppInstall() {
   if (isStandaloneApp()) {
@@ -8498,22 +8930,31 @@ async function requestAppInstall() {
     return;
   }
 
+  const ua = navigator.userAgent;
+  const isIOS = /iPhone|iPad|iPod/i.test(ua) || (/Macintosh/i.test(ua) && navigator.maxTouchPoints > 1);
+  const isAndroid = /Android/i.test(ua);
+  const inAppBrowser = /NAVER|KAKAOTALK|Instagram|FBAN|FBAV|Line\/|DaumApps|; wv\)/i.test(ua);
+
   /* 1) 설치 프롬프트 지원 브라우저(안드로이드 크롬·삼성인터넷·엣지 등): 시스템 설치창 즉시 표시 */
   if (deferredInstallPrompt) {
     const promptEvent = deferredInstallPrompt;
     deferredInstallPrompt = null;
     promptEvent.prompt();
-    try { await promptEvent.userChoice; } catch {}
+    try {
+      const choice = await promptEvent.userChoice;
+      if (choice?.outcome === 'accepted') return;
+    } catch {}
+    showInstallGuide(isAndroid ? 'android' : 'desktop');
     return;
   }
 
-  const ua = navigator.userAgent;
-  const isIOS = /iPhone|iPad|iPod/i.test(ua) || (/Macintosh/i.test(ua) && navigator.maxTouchPoints > 1);
-  const isAndroid = /Android/i.test(ua);
-  const inAppBrowser = /NAVER|KAKAOTALK|Instagram|FBAN|FBAV|Line\/|DaumApps|; wv\)/i.test(ua);
   /* 안드로이드 인앱 브라우저(네이버·카카오 등)는 설치를 막으므로 Chrome으로 열어서 진행 */
   if (isAndroid && inAppBrowser && location.protocol === 'https:') {
-    location.href = `intent://${location.host}${location.pathname}#Intent;scheme=https;package=com.android.chrome;S.browser_fallback_url=${encodeURIComponent(location.href)};end`;
+    openCurrentPageInAndroidChrome();
+    return;
+  }
+  if (isAndroid && inAppBrowser) {
+    showInstallGuide('android-inapp');
     return;
   }
   if (isIOS) {
@@ -8529,6 +8970,16 @@ async function requestAppInstall() {
   }
   /* 프롬프트 미지원 데스크톱·기타 안드로이드 브라우저: 단계별 설치 안내 시트 표시 */
   showInstallGuide(isAndroid ? 'android' : 'desktop');
+}
+
+/* 안드로이드 인앱 브라우저에서 현재 주소를 Chrome으로 전달하고, 차단되면 복사 안내로 전환 */
+function openCurrentPageInAndroidChrome() {
+  const url = new URL(location.href);
+  const scheme = url.protocol.replace(':', '') || 'https';
+  location.href = `intent://${url.host}${url.pathname}${url.search}#Intent;scheme=${scheme};package=com.android.chrome;end`;
+  setTimeout(() => {
+    if (!document.hidden) showInstallGuide('android-inapp');
+  }, 1600);
 }
 
 /* iOS 인앱 브라우저·크롬 등에서 현재 페이지를 Safari로 열기 (앱별 스킴 → 공통 스킴 순) */
@@ -8570,10 +9021,20 @@ function showInstallGuide(platform) {
       ['safari', '<b>Safari</b>를 열고 주소창에 붙여넣어 접속해주세요'],
       ['share', '공유 버튼 → <b>홈 화면에 추가</b>를 선택해주세요']
     ],
+    'android-inapp': [
+      ['menu', '오른쪽 위 <b>메뉴(⋮)</b>에서 <b>다른 브라우저로 열기</b>를 눌러주세요'],
+      ['copy', '메뉴가 없다면 아래 버튼으로 <b>링크를 복사</b>해주세요'],
+      ['plus', '<b>Chrome</b> 주소창에 붙여넣고 메뉴 → <b>앱 설치</b>를 눌러주세요']
+    ],
     android: [
       ['menu', '브라우저 오른쪽 위 <b>메뉴(⋮)</b>를 눌러주세요'],
       ['plus', '<b>홈 화면에 추가</b> 또는 <b>앱 설치</b>를 선택해주세요'],
       ['check', '<b>설치</b>를 누르면 홈 화면에 앱이 생겨요!']
+    ],
+    desktop: [
+      ['menu', '브라우저 오른쪽 위 <b>메뉴(⋮)</b>를 눌러주세요'],
+      ['plus', '<b>프로모터스 설치</b> 또는 <b>앱 설치</b>를 선택해주세요'],
+      ['check', '<b>설치</b>를 누르면 바탕 화면에서 바로 열 수 있어요']
     ]
   };
   const steps = stepsByPlatform[platform] || stepsByPlatform.android;
@@ -8581,7 +9042,9 @@ function showInstallGuide(platform) {
   const notesByPlatform = {
     ios: '아이폰은 Apple 정책에 따라 모든 앱·웹 서비스가 Safari의 \'홈 화면에 추가\' 기능을 통해서만 설치할 수 있어요. 아래 순서대로 하면 10초면 충분해요!',
     'ios-inapp': '지금 보고 계신 앱 속 브라우저는 Apple 정책상 홈 화면 추가 기능이 제공되지 않아요. Safari로 열어주시면 바로 이어서 설치하실 수 있어요.',
-    android: '지금 사용 중인 브라우저는 자동 설치 기능을 제공하지 않아요. 아래 방법으로 간단히 추가하실 수 있고, Chrome으로 접속하시면 버튼 한 번에 설치돼요.'
+    'android-inapp': '카카오톡·네이버 같은 앱 안에서는 설치가 차단될 수 있어요. 아래 방법으로 Chrome에서 열면 정상적으로 설치할 수 있어요.',
+    android: '지금 사용 중인 브라우저는 자동 설치 기능을 제공하지 않아요. 아래 방법으로 간단히 추가하실 수 있고, Chrome으로 접속하시면 버튼 한 번에 설치돼요.',
+    desktop: '설치창이 자동으로 열리지 않았어요. 아래 순서대로 브라우저 메뉴에서 직접 설치할 수 있어요.'
   };
   const backdrop = document.createElement('div');
   backdrop.className = 'install-sheet-backdrop';
@@ -8600,7 +9063,7 @@ function showInstallGuide(platform) {
             <span class="install-step-text">${text}</span>
           </li>`).join('')}
       </ol>
-      ${platform === 'ios-inapp' ? '<button type="button" class="install-sheet-copy">링크 복사하기</button>' : ''}
+      ${platform === 'ios-inapp' || platform === 'android-inapp' ? '<button type="button" class="install-sheet-copy">링크 복사하기</button>' : ''}
       <button type="button" class="install-sheet-close">닫기</button>
     </div>`;
   document.body.append(backdrop);
@@ -8609,16 +9072,17 @@ function showInstallGuide(platform) {
   backdrop.querySelector('.install-sheet-close').addEventListener('click', close);
   backdrop.querySelector('.install-sheet-copy')?.addEventListener('click', async e => {
     const btn = e.currentTarget;
+    const browserName = platform === 'android-inapp' ? 'Chrome' : 'Safari';
     try {
       await navigator.clipboard.writeText(location.href);
-      btn.textContent = '복사 완료! Safari에 붙여넣어 주세요';
+      btn.textContent = `복사 완료! ${browserName}에 붙여넣어 주세요`;
     } catch {
       /* 클립보드 권한이 막힌 인앱 브라우저 대비 폴백 */
       const ta = document.createElement('textarea');
       ta.value = location.href;
       document.body.append(ta);
       ta.select();
-      try { document.execCommand('copy'); btn.textContent = '복사 완료! Safari에 붙여넣어 주세요'; } catch {}
+      try { document.execCommand('copy'); btn.textContent = `복사 완료! ${browserName}에 붙여넣어 주세요`; } catch {}
       ta.remove();
     }
   });
@@ -8677,48 +9141,124 @@ function showAdminViewFromMenu(view) {
 /* 관리자용 마이(설정): 고객 내예약 페이지와 같은 전체화면 구성 */
 async function openAdminSettingsPage() {
   rememberModalScreen('admin-settings');
-  const menus = [
-    { view: 'adm-book', label: '예약관리', icon: 'calendar' },
-    { view: 'adm-work', label: '작업현황', icon: 'wrench' },
-    { view: 'adm-inquiry', label: '고객문의', icon: 'headset' },
-    ...(isTopAdmin() ? [
-      { view: 'adm-approval', label: '작업승인', icon: 'check' },
-      { view: 'adm-cust', label: '고객관리', icon: 'user' },
-      { view: 'adm-guest', label: '비회원관리', icon: 'user' },
-      { view: 'adm-prod', label: '상품관리', icon: 'doc' },
-      { view: 'adm-settings', label: '보안', icon: 'lock' },
-      ...(isDeveloper() ? [{ view: 'adm-activity', label: '분석', icon: 'search' }] : [])
-    ] : [])
-  ];
-  const banner = await eventBannerHtml();
+  const todayValue = todayKey();
+  const allowedBranches = currentAdminBranches().map(branch => branch.name);
+  const inScope = item => !allowedBranches.length || allowedBranches.includes(item?.branch);
+  const allBookings = getBookings().filter(inScope);
+  const todayBookings = allBookings
+    .filter(booking => booking.date === todayValue && isActiveBooking(booking))
+    .sort((a, b) => String(a.time || '').localeCompare(String(b.time || '')));
+  const activeRuns = getServiceRuns().filter(inScope).filter(run => !isRunCompleted(run));
+  const approvalCount = activeRuns.filter(run => {
+    const step = (run.steps || [])[run.currentStep];
+    return step?.submitted && !step?.approved;
+  }).length;
+  const newCount = todayBookings.filter(booking => String(booking.status || '').trim() === '신규').length;
+  const confirmedCount = todayBookings.filter(booking => !isNewBooking(booking)).length;
+  const completedToday = getServiceRuns().filter(inScope).filter(run =>
+    isRunCompleted(run) && String(run.completedAt || run.updatedAt || '').slice(0, 10) === todayValue).length;
+  const confirmationRate = todayBookings.length ? Math.round((confirmedCount / todayBookings.length) * 100) : 0;
+  const nextBooking = allBookings
+    .filter(booking => isActiveBooking(booking) && String(booking.date || '') >= todayValue)
+    .sort((a, b) => bookingTimestamp(a) - bookingTimestamp(b))[0] || null;
+
+  const inquiryMessages = store.get('pm-messages', [])
+    .filter(message => !message.serviceContext?.runId)
+    .filter(inquiryVisibleToAdmin)
+    .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
+  const inquiryLatest = new Map();
+  inquiryMessages.forEach(message => {
+    const key = message.memberId || message.car || message.customer?.id || message.customer?.phone || message.id;
+    if (!inquiryLatest.has(key)) inquiryLatest.set(key, message);
+  });
+  const pendingInquiryCount = [...inquiryLatest.values()].filter(message => message.from !== 'admin').length;
+  const customerCount = mergeCustomerDirectory(canonicalMembers).length;
+  const guestCount = new Set(allBookings.filter(booking => booking.guest).map(booking => booking.phone || booking.car || booking.id)).size;
+  const productCount = store.get('pm-products', []).length;
+  const branchLabel = isGeneralAdmin() && adminBranches.length
+    ? adminBranches.join(' · ')
+    : allowedBranches.length === 1
+      ? allowedBranches[0]
+      : '전체 지점';
+  const roleLabel = isDeveloper() ? '개발자' : isTopAdmin() ? '메인관리자' : '지점관리자';
+
   openModal(`
-    <h3>설정</h3>
-    <section class="mypage-account-card">
-      <div class="mypage-profile admin-profile">
-        <span class="profile-avatar" aria-hidden="true">${MYPAGE_ICONS.user}</span>
-        <span class="profile-text">
-          <strong>관리자 모드</strong>
-          <span>프로모터스</span>
-        </span>
-      </div>
-    </section>
-    <h4 class="mypage-sec-title">관리 메뉴</h4>
-    <nav class="mypage-quick admin-settings-quick" aria-label="관리 메뉴">
-      ${menus.map(menu => `
-        <button type="button" data-adm-view="${menu.view}">
-          <span class="quick-icon">${MYPAGE_ICONS[menu.icon]}</span>
-          <strong>${menu.label}</strong>
-        </button>`).join('')}
-    </nav>
-    ${banner}
-    <button type="button" class="mypage-cs-btn" id="admin-settings-logout">
-      <span class="cs-icon" aria-hidden="true">${MYPAGE_ICONS.user}</span>
-      <span class="cs-text"><strong>로그아웃</strong><span>관리자 모드를 종료합니다</span></span>
-      <b>›</b>
-    </button>
+    <div class="brand-mypage-shell">
+      <header class="brand-greeting">
+        <h2>관리자님, 안녕하세요</h2>
+        <p>${newCount || approvalCount ? `확인이 필요한 신규 예약 ${newCount}건과 승인 대기 ${approvalCount}건이 있어요.` : '새로 확인할 예약과 승인 대기가 없습니다.'}</p>
+      </header>
+
+      <section class="brand-now admin-brand-now" aria-label="지금 매장">
+        <div class="brand-now-body">
+          <div class="brand-now-tags">
+            <span>${esc(branchLabel)}</span>
+            <strong>관리중</strong>
+          </div>
+          <div class="brand-now-head">
+            <h3>오늘 예약 ${todayBookings.length}건</h3>
+            <p>신규 ${newCount} · 확정 ${confirmedCount} · 출고 ${completedToday}</p>
+          </div>
+          <div class="brand-rate">
+            <strong>${confirmationRate}<i>%</i></strong>
+            <span>확정 ${confirmedCount} / ${todayBookings.length}건</span>
+          </div>
+          <div class="brand-progress" role="img" aria-label="오늘 예약 확정률 ${confirmationRate}%"><i style="width:${confirmationRate}%"></i></div>
+          <div class="admin-brand-counts">
+            <button type="button" class="${newCount ? 'alert' : ''}" data-adm-view="adm-book"><b>${newCount}</b><em>신규</em></button>
+            <button type="button" data-adm-view="adm-book"><b>${confirmedCount}</b><em>확정</em></button>
+            <button type="button" data-adm-view="adm-work"><b>${activeRuns.length}</b><em>작업중</em></button>
+            <button type="button" class="${approvalCount ? 'alert' : ''}" data-adm-view="${isTopAdmin() ? 'adm-approval' : 'adm-work'}"><b>${approvalCount}</b><em>승인대기</em></button>
+            <button type="button" data-adm-view="adm-work"><b>${completedToday}</b><em>출고</em></button>
+          </div>
+        </div>
+        <button type="button" class="brand-next" data-adm-view="adm-book">
+          <span aria-hidden="true">${MYPAGE_ICONS.calendar}</span>
+          <em>${nextBooking ? '다음 입고' : '다음 예약'}</em>
+          <b>${esc(nextBooking ? `${shortBookingDate(nextBooking)} · ${nextBooking.car || ''}` : '예약 일정 없음')}</b>
+          <i aria-hidden="true">›</i>
+        </button>
+      </section>
+
+      <section class="brand-menu-group" aria-labelledby="admin-today-title">
+        <h3 id="admin-today-title">오늘 할 일</h3>
+        <div class="brand-menu-list">
+          <button type="button" data-adm-view="adm-book"><span aria-hidden="true">${MYPAGE_ICONS.calendar}</span><strong>예약관리</strong><em>${newCount ? `신규 ${newCount}` : `${todayBookings.length}건`}</em><i>›</i></button>
+          ${isTopAdmin() ? `<button type="button" data-adm-view="adm-approval"><span aria-hidden="true">${MYPAGE_ICONS.check}</span><strong>작업승인</strong><small>메인</small><em>${approvalCount ? `대기 ${approvalCount}` : '대기 없음'}</em><i>›</i></button>` : ''}
+          <button type="button" data-adm-view="adm-inquiry"><span aria-hidden="true">${MYPAGE_ICONS.headset}</span><strong>고객문의</strong><em>${pendingInquiryCount ? `답변 ${pendingInquiryCount}` : '답변 완료'}</em><i>›</i></button>
+        </div>
+      </section>
+
+      <section class="brand-menu-group" aria-labelledby="admin-work-title">
+        <h3 id="admin-work-title">작업 · 고객</h3>
+        <div class="brand-menu-list">
+          <button type="button" data-adm-view="adm-work"><span aria-hidden="true">${MYPAGE_ICONS.wrench}</span><strong>작업현황</strong><em>진행 ${activeRuns.length}건</em><i>›</i></button>
+          ${isTopAdmin() ? `<button type="button" data-adm-view="adm-cust"><span aria-hidden="true">${MYPAGE_ICONS.user}</span><strong>고객관리</strong><small>메인</small><em>${customerCount}명</em><i>›</i></button>
+          <button type="button" data-adm-view="adm-guest"><span aria-hidden="true">${MYPAGE_ICONS.user}</span><strong>비회원관리</strong><small>메인</small><em>${guestCount}명</em><i>›</i></button>` : ''}
+        </div>
+      </section>
+
+      ${isTopAdmin() ? `
+      <section class="brand-menu-group" aria-labelledby="admin-operation-title">
+        <h3 id="admin-operation-title">운영 설정</h3>
+        <div class="brand-menu-list">
+          <button type="button" data-adm-view="adm-prod"><span aria-hidden="true">${MYPAGE_ICONS.doc}</span><strong>상품관리</strong><small>메인</small><em>${productCount}개</em><i>›</i></button>
+          <button type="button" data-adm-view="adm-settings"><span aria-hidden="true">${MYPAGE_ICONS.lock}</span><strong>보안</strong><small>메인</small><em>설정 확인</em><i>›</i></button>
+          ${isDeveloper() ? `<button type="button" data-adm-view="adm-activity"><span aria-hidden="true">${MYPAGE_ICONS.search}</span><strong>분석</strong><small>개발자</small><em>최근 활동</em><i>›</i></button>` : ''}
+        </div>
+      </section>` : ''}
+
+      <section class="brand-menu-group" aria-labelledby="admin-account-title">
+        <h3 id="admin-account-title">계정</h3>
+        <div class="brand-menu-list">
+          <button type="button" data-adm-view="adm-book"><span aria-hidden="true">${MYPAGE_ICONS.user}</span><strong>관리자 모드</strong><em>${esc(roleLabel)} · ${esc(branchLabel)}</em><i>›</i></button>
+          <button type="button" id="admin-settings-logout"><span aria-hidden="true">${MYPAGE_ICONS.lock}</span><strong>로그아웃</strong><em>관리자 모드 종료</em><i>›</i></button>
+        </div>
+      </section>
+    </div>
   `, true);
-  modalCard.classList.add('mypage-card');
-  wireEventBanner();
+  modalCard.classList.add('mypage-card', 'brand-mypage');
+  syncMobileTabbar(true);
   modalCard.querySelectorAll('[data-adm-view]').forEach(btn => {
     btn.addEventListener('click', () => {
       closeModal();
@@ -8778,8 +9318,9 @@ document.body.dataset.view = document.querySelector('.view.active')?.id.replace(
 async function startApp() {
   /* PWA: 홈 화면 추가(앱 설치)를 위해 서비스워커 등록 */
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('sw.js?v=20260725-photos').catch(() => {});
+    navigator.serviceWorker.register('sw.js?v=1790592719062').catch(() => {});
   }
+  const installedAppLaunch = consumeInstalledAppLaunch();
   /* 로컬 캐시로 즉시 화면을 그리고, 원격 데이터는 백그라운드에서 갱신한다.
      첫 진입 화면이 나왔다가 다른 화면으로 튀는 현상을 막는다. */
   wireNav();
@@ -8815,6 +9356,15 @@ async function startApp() {
   const savedView = getScreenState().view;
   const initialView = showView(savedView || getHomeView());
   renderViewContent(initialView);
+  if (installedAppLaunch) {
+    setTimeout(() => {
+      if (isStandaloneApp()) {
+        pmAlert('프로모터스 앱으로 정상 실행되었습니다.', '앱 실행 완료');
+      } else {
+        pmAlert('설치는 승인됐지만 브라우저로 열렸습니다.\n전체 앱 목록에서 프로모터스를 검색해 실행해주세요.', '앱 위치 확인');
+      }
+    }, 300);
+  }
 
   /* 원격 데이터 수신 후 화면 전환 없이 내용만 다시 그린다 */
   await hydrateSupabaseData();
@@ -8831,6 +9381,8 @@ async function startApp() {
   applyAuthUI();
   renderIntroSlides();
   restoreModalScreen();
+  window.PMPush?.sessionChanged();
+  window.PMDeletionBridge?.sessionChanged();
 }
 
 startApp();
@@ -8840,3 +9392,5 @@ window.addEventListener('pagehide', () => {
   activityPageExited = true;
   logEvent('page_exit', { view: activityCurrentView }, { keepalive: true });
 });
+
+import('./app-launch/popup.js?v=20261002i').catch(error => console.warn('앱 안내를 불러오지 못했습니다.', error));

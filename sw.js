@@ -6,3 +6,5 @@ self.addEventListener('fetch', event => {
     event.respondWith(fetch(event.request, { cache: 'no-store' }));
   }
 });
+
+importScripts('/notifications/service-worker.js?v=20261012-persistent');

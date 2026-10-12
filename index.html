@@ -42,11 +42,16 @@
 }
 </script>
 <link rel="icon" type="image/png" href="images/logo-icon.png">
-<link rel="manifest" href="manifest.webmanifest">
+<link rel="manifest" href="manifest.webmanifest?v=202609101350">
 <meta name="theme-color" content="#0f1f3d">
 <link rel="apple-touch-icon" href="images/logo-icon.png">
-<link rel="stylesheet" href="style.css?v=20260727-guest-management">
+<link rel="stylesheet" href="fonts/pretendard/pretendard.css?v=202609101350">
+<link rel="stylesheet" href="design-guidelines/wanted-tokens.css?v=202609101350">
+<link rel="stylesheet" href="style.css?v=202609101350">
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="notifications/notifications.css?v=1790446226281">
+<link rel="stylesheet" href="account-deletion/client.css?v=1790592719062">
+<link rel="stylesheet" href="app-launch/popup.css?v=20261002j">
 </head>
 <body>
 
@@ -118,6 +123,7 @@
             <button class="main-admin-only" data-view="adm-guest">비회원관리</button>
             <button class="main-admin-only" data-view="adm-prod">상품관리</button>
             <button data-view="adm-inquiry">고객문의</button>
+            <button type="button" id="admin-push-settings">알림 설정·발송</button>
             <button class="main-admin-only" data-view="adm-settings">보안</button>
             <button class="developer-only" data-view="adm-activity">분석</button>
           </div>
@@ -206,7 +212,7 @@
         <h2>예약관리</h2>
         <p class="intro-sub"><span class="line"></span>예약 현황 · 예약완료 · 변경/취소<span class="line"></span></p>
       </header>
-      <div class="adm-body" id="adm-book-body"></div>
+      <div class="adm-body wanted-admin-book" id="adm-book-body"></div>
     </div>
 
     <!-- ⑥ 관리자: 작업현황 -->
@@ -277,7 +283,7 @@
       <div class="adm-body" id="adm-prod-body"></div>
     </div>
 
-    <!-- ⑩ 관리자: 고객문의 -->
+    <!-- ⑪ 관리자: 고객문의 -->
     <div class="view" id="view-adm-inquiry">
       <div class="adm-mobile-bar">
         <button type="button" class="adm-back" aria-label="관리 메뉴로 돌아가기">‹</button>
@@ -290,7 +296,7 @@
       <div class="adm-body" id="adm-inquiry-body"></div>
     </div>
 
-    <!-- ⑪ 관리자: 보안 -->
+    <!-- ⑫ 관리자: 보안 -->
     <div class="view" id="view-adm-settings">
       <div class="adm-mobile-bar">
         <button type="button" class="adm-back" aria-label="관리 메뉴로 돌아가기">‹</button>
@@ -328,7 +334,7 @@
             <span>경기도 안산시 단원구 이삭로 6, 1층(고잔동)</span>
           </div>
           <div class="site-footer__line">
-            <a href="tel:0318319738">031-831-9738</a><a href="mailto:promotors3986@naver.com">promotors3986@naver.com</a>
+            <a href="tel:0318319738" data-phone-branch="안산" data-phone="031-831-9738">031-831-9738</a><a href="mailto:promotors3986@naver.com">promotors3986@naver.com</a>
             <div class="site-footer__legal" aria-label="약관 및 방침">
               <button type="button" data-legal-modal="terms">이용약관</button>
               <button type="button" data-legal-modal="privacy">개인정보 처리방침</button>
@@ -373,7 +379,13 @@
   <div class="modal-card" id="modal-card" role="dialog" aria-modal="true"></div>
 </div>
 
-<script src="config.js?v=20260713-2030"></script>
-<script src="app.js?v=20260727-guest-management"></script>
+<script src="config.js?v=202609101350"></script>
+<script src="notifications/notifications.js?v=20261012-persistent3"></script>
+<script src="account-deletion/repair-history.js?v=1790592719062"></script>
+<script src="account-deletion/epoch-client.js?v=1790592719062"></script>
+<script src="account-deletion/client.js?v=1790592719062"></script>
+<script src="app.js?v=1790592719062"></script>
+<script src="notifications/integration.js?v=20261012-persistent3"></script>
+<script src="account-deletion/integration.js?v=1790592719062"></script>
 </body>
 </html>
