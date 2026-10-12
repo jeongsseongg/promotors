@@ -12,7 +12,7 @@ public class BookingActivityPlugin: CAPPlugin, CAPBridgedPlugin {
     public let identifier = "BookingActivityPlugin"
     public let jsName = "BookingActivity"
     public let pluginMethods = [CAPPluginMethod(name: "sync", returnType: CAPPluginReturnPromise),
-                                CAPPluginMethod(name: "clear", returnType: CAPPluginReturnPromise)]
+                                CAPPluginMethod(name: "clear", returnType: CAPPluginReturnPromise)].compactMap { $0 }
     private static weak var instance: BookingActivityPlugin?
     private static var openedBooking: String?
     private var tokenTasks: [Task<Void, Never>] = []
@@ -77,6 +77,11 @@ public class BookingActivityPlugin: CAPPlugin, CAPBridgedPlugin {
     private func observeStart(binding: String) {
         guard !startObserved else { return }
         startObserved = true
+        tokenTasks.append(Task { @MainActor in
+            for await activity in Activity<BookingActivityAttributes>.activityUpdates where activity.attributes.binding == binding {
+                observe(activity, binding: binding)
+            }
+        })
         tokenTasks.append(Task { @MainActor in
             for await token in Activity<BookingActivityAttributes>.pushToStartTokenUpdates {
                 notifyListeners("activityToken", data: ["kind": "start", "binding": binding,

@@ -53,7 +53,8 @@ export function attachBookingDock(bookings) {
     toggle.setAttribute('aria-expanded', String(expanded));
     toggle.addEventListener('click', () => { expanded = !expanded; paint(); }); header.append(toggle);
     const list = node('div', undefined, 'pm-booking-dock-list');
-    const entries = [...pending.map(b => ({ b, pending: true })), ...upcoming.map(b => ({ b, pending: false }))];
+    const entries = [...pending.map(b => ({ b, pending: true })), ...upcoming.map(b => ({ b, pending: false }))]
+      .sort((a, b) => startsAt(a.b) - startsAt(b.b));
     const summary = pending.length && upcoming.length
       ? [{ b: pending[0], pending: true }, { b: upcoming[0], pending: false }] : entries.slice(0, 2);
     for (const item of expanded ? entries : summary) list.append(row(item.b, item.pending));
