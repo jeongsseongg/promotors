@@ -56,7 +56,7 @@
       ]);
     } finally { clearTimeout(timer); }
   }
-  function create({ rpc, getToken, openTarget }) {
+  function create({ rpc, getToken, openTarget, bookings }) {
     let dialog, content, feedback, busy = false, state, opener, generation = 0, activeTab = 'recent', tabs;
     async function call(action, data = {}, token = getToken()) {
       if (!token) throw new Error('로그인 후 알림을 이용해 주세요.');
@@ -218,6 +218,7 @@
       if (!content) return;
       for (const tab of tabs.children) tab.setAttribute('aria-current', tab.dataset.tab === activeTab ? 'page' : 'false');
       content.replaceChildren(activeTab === 'recent' ? inbox() : settings());
+      if (activeTab === 'recent' && bookings) content.prepend(bookings.render());
       if (activeTab === 'settings' && (state.admin || state.canViewLogs)) content.append(admin());
     }
     function settings() {
@@ -304,6 +305,7 @@
       });
       return form;
     }
+    bookings?.listen(() => { if (content && activeTab === 'recent') render(); });
     async function enable() {
       await refresh(); await subscribe(); await refresh();
     }

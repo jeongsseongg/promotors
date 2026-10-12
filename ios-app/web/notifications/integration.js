@@ -1,6 +1,7 @@
 /* Existing app owns authentication/navigation; notification IDs are resolved on the server first. */
-(() => {
+(async () => {
   'use strict';
+  PM_PRIVATE_MUTATORS.add('pm_admin_booking_actions');
   let transition = Promise.resolve();
   let pendingId = new URL(location.href).searchParams.get('notification') || '';
   let unread = null, observedButton, optInErrorShown = false;
@@ -14,7 +15,18 @@
     if (params.p_action === 'state') { unread = result.items.filter(item => !item.read_at).length; updateBadge(); }
     return result;
   }
-  const api = PMNotifications.create({ rpc: notificationRpc, getToken: () => authToken, openTarget });
+  const styles = document.createElement('link');
+  styles.rel = 'stylesheet'; styles.href = 'notifications/booking-actions.css?v=20261012';
+  document.head.append(styles);
+  const { createBookingActions } = await import('./booking-actions.js?v=20261012');
+  const bookings = createBookingActions({ rpc: supabaseRpc, getToken: () => authToken, isAdmin: () => isAdmin,
+    onChanged: async result => {
+      await hydrateSupabaseData();
+      if (result.changed && result.booking.status === '예약') pushCustomerMessage(result.booking, `${result.booking.branch} ${result.booking.date} ${result.booking.time} 예약이 확정되었습니다.`, { bookingId: result.booking.id, type: 'booking-approved' });
+      if (isAdmin) renderAdmBook();
+    }
+  });
+  const api = PMNotifications.create({ rpc: notificationRpc, getToken: () => authToken, openTarget, bookings });
   new MutationObserver(() => {
     const current = document.getElementById('mypage-alerts');
     if (!current || current === observedButton) return;
@@ -42,7 +54,8 @@
         if (!booking) throw new Error('NOT_FOUND');
         showView('adm-book');
         adm.branch = booking.branch; adm.selDate = booking.date;
-        return renderAdmBook();
+        renderAdmBook();
+        return bookings.open(booking.id);
       }
       if (!member) throw new Error('AUTH_REQUIRED');
       if (target.kind === 'repair') return openWorkStatusPage();
@@ -69,20 +82,23 @@
       }
     }
     await api.restore().catch(() => {});
+    await bookings.start().catch(() => {});
     if (!pendingId) return;
     if (!authToken) { openMemberModal('login'); return; }
     const id = pendingId; pendingId = '';
     const url = new URL(location.href); url.searchParams.delete('notification');
     history.replaceState(history.state, '', url);
-    await api.open(id);
+    await openTarget({ notificationId: id });
   }
   function disconnect() {
+    bookings.reset();
     unread = null;
     transition = api.disconnect().catch(() => {});
     return transition;
   }
+  window.PMBookingActions = bookings;
   window.PMPush = {
-    enable, open: () => authToken ? api.open() : openMemberModal('login'), disconnect,
+    enable, open: async () => { if (!authToken) return openMemberModal('login'); await bookings.start().catch(() => {}); return api.open(); }, disconnect,
     sessionChanged: () => { transition = transition.then(resume); return transition; }
   };
   window.addEventListener('load', () => {
@@ -111,5 +127,6 @@
       disconnect().finally(() => { if (authToken !== event.newValue) location.reload(); });
     }
   });
+  window.PMPush.sessionChanged();
   window.addEventListener('focus', () => { if (document.visibilityState === 'visible') window.PMPush.sessionChanged(); });
 })();

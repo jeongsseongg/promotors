@@ -4741,21 +4741,8 @@ function miniBtn(text, fn, danger) {
 }
 
 async function approveBooking(bookingId) {
-  const arr = getBookings();
-  const booking = arr.find(b => b.id === bookingId);
-  if (!booking || !canAccessBranch(booking.branch)) return;
-  booking.status = '예약';
-  booking.checkedAt = new Date().toISOString();
-  booking.checkedBy = adminActorLabel();
-  try {
-    await persistBookings(arr);
-  } catch (error) {
-    console.warn('Booking approval save failed', error);
-    await pmAlert('예약 확정을 서버에 저장하지 못했습니다. 다시 시도해주세요.', '예약 확정');
-    return;
-  }
-  pushCustomerMessage(booking, `${booking.branch} ${booking.date} ${booking.time} 예약이 확정되었습니다.`, { bookingId: booking.id, type: 'booking-approved' });
-  renderAdmBook();
+  if (!window.PMBookingActions) return pmAlert('예약 처리 화면을 준비 중입니다. 잠시 후 다시 눌러 주세요.');
+  return window.PMBookingActions.open(bookingId).catch(() => pmAlert('예약을 열 수 없습니다. 로그인과 지점 권한을 확인해 주세요.'));
 }
 
 function openMoveBooking(idx) {
