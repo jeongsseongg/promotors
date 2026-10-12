@@ -12,7 +12,9 @@ public class DelegationService extends com.google.androidbrowserhelper.trusted.D
     @Override
     public boolean onNotifyNotificationWithChannel(String tag, int id,
             Notification notification, String channelName) {
-        if (tag != null && tag.startsWith("pm-booking-pending-")) {
+        // Chromium wraps a developer tag as p[b]#<origin>#1<developer_tag>.
+        if (tag != null && (tag.startsWith("pm-booking-pending-")
+                || tag.matches("^pb?#https://www\\.promotors\\.kr/?#1pm-booking-pending-[A-Za-z0-9_-]{1,128}$"))) {
             notification.flags |= Notification.FLAG_ONGOING_EVENT | Notification.FLAG_ONLY_ALERT_ONCE;
             notification.flags &= ~Notification.FLAG_AUTO_CANCEL;
             notification.visibility = Notification.VISIBILITY_PRIVATE;
