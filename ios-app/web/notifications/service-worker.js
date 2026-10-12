@@ -54,6 +54,14 @@
     } catch { return false; }
   }
   self.addEventListener('message', event => {
+    if (event.data?.type === 'PM_BOOKING_PROCESSED' && sameOrigin(event.source?.url) && validId(event.data.id)) {
+      event.waitUntil((async () => {
+        for (const notice of await self.registration.getNotifications()) {
+          if (notice.data?.bookingId === String(event.data.id)) notice.close();
+        }
+      })());
+      return;
+    }
     if (event.data?.type !== 'PM_PUSH_BINDING' || !sameOrigin(event.source?.url)) return;
     const value = typeof event.data.binding === 'string' ? event.data.binding : null;
     event.waitUntil(changeBinding(value).then(() => event.ports?.[0]?.postMessage({ ok: true })));
@@ -64,18 +72,26 @@
       try { payload = event.data?.json(); } catch { return; }
       if (!payload || !validId(payload.id) || !await matchesBinding(payload.binding)) return;
       const marketing = payload.category === 'marketing';
+      const booking = payload.booking;
+      const persistent = booking?.pending === true && validId(booking.id);
+      if (booking && !persistent) {
+        for (const notice of await self.registration.getNotifications()) {
+          if (notice.data?.bookingId === String(booking.id)) notice.close();
+        }
+      }
       await self.registration.showNotification(marketing ? '(광고) 프로모터스' : '프로모터스 알림', {
-        body: marketing ? '이벤트 안내가 있습니다. 수신거부: 앱 알림 설정' : '새로운 안내가 도착했습니다. 앱에서 확인해 주세요.',
+        body: persistent ? `${booking.branch} · ${booking.schedule}\n수락 대기 · 눌러서 예약 확인` : marketing ? '이벤트 안내가 있습니다. 수신거부: 앱 알림 설정' : '새로운 안내가 도착했습니다. 앱에서 확인해 주세요.',
         icon: '/images/logo-icon.png',
-        tag: `pm-notification-${payload.id}`,
+        tag: persistent ? `pm-booking-pending-${booking.id}` : `pm-notification-${payload.id}`,
+        requireInteraction: persistent,
         renotify: false,
-        data: { id: String(payload.id), target: payload.target || null, binding: payload.binding }
+        data: { id: String(payload.id), bookingId: booking?.id, persistent, binding: payload.binding }
       });
       if (!await matchesBinding(payload.binding)) await closeDisplayed();
     })());
   });
   self.addEventListener('notificationclick', event => {
-    event.notification.close();
+    if (!event.notification.data?.persistent) event.notification.close();
     event.waitUntil((async () => {
       const data = event.notification.data;
       if (!data || !validId(data.id) || !await matchesBinding(data.binding)) return;

@@ -1,0 +1,14 @@
+import ActivityKit
+
+@available(iOS 16.2, *)
+struct BookingActivityAttributes: ActivityAttributes {
+    struct ContentState: Codable, Hashable {
+        var pendingCount: Int
+        var upcomingCount: Int
+        var branch: String
+        var schedule: String
+        var bookingId: String
+        var startsAt: Double
+    }
+    var binding: String
+}

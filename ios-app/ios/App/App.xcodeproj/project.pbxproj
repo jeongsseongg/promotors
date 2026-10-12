@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		A02610020000000000000001 /* 02-precision-check.wav in Resources */ = {isa = PBXBuildFile; fileRef = A02610020000000000000002 /* 02-precision-check.wav */; };
 		2FAD9763203C412B000D30F8 /* config.xml in Resources */ = {isa = PBXBuildFile; fileRef = 2FAD9762203C412B000D30F8 /* config.xml */; };
 		4D22ABE92AF431CB00220026 /* CapApp-SPM in Frameworks */ = {isa = PBXBuildFile; productRef = 4D22ABE82AF431CB00220026 /* CapApp-SPM */; };
 		50379B232058CBB4000EE86E /* capacitor.config.json in Resources */ = {isa = PBXBuildFile; fileRef = 50379B222058CBB4000EE86E /* capacitor.config.json */; };
@@ -16,9 +17,15 @@
 		504EC3121FED79650016851F /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 504EC3101FED79650016851F /* LaunchScreen.storyboard */; };
 		50B271D11FEDC1A000F3C39B /* public in Resources */ = {isa = PBXBuildFile; fileRef = 50B271D01FEDC1A000F3C39B /* public */; };
 		9582B6832FE993A70072D4E8 /* SceneDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9582B6822FE993A50072D4E8 /* SceneDelegate.swift */; };
+		24EB0F1EBD284B9882D3BCB9 /* BookingActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4105D18343864D51BB734EC3 /* BookingActivityAttributes.swift */; };
+		AC9A0C318D79445E8FED790C /* BookingActivityPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = B39E056A37EC416ABC367AE7 /* BookingActivityPlugin.swift */; };
+		8AEB3D0C22534666A0A5A26E /* BookingActivity.appex in Copy Files */ = {isa = PBXBuildFile; fileRef = 7AB8410B13294D269E42066F /* BookingActivity.appex */; };
+		8B6F44EE58E245AE8DA97EC0 /* BookingActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5C13D753D1345FEAB2C6406 /* BookingActivityAttributes.swift */; };
+		E16DA7C1DAFD439F97190846 /* BookingActivityWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4087F8359D63476283E5054E /* BookingActivityWidget.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		A02610020000000000000002 /* 02-precision-check.wav */ = {isa = PBXFileReference; lastKnownFileType = audio.wav; path = "02-precision-check.wav"; sourceTree = "<group>"; };
 		2FAD9762203C412B000D30F8 /* config.xml */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = config.xml; sourceTree = "<group>"; };
 		50379B222058CBB4000EE86E /* capacitor.config.json */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.json; path = capacitor.config.json; sourceTree = "<group>"; };
 		504EC3041FED79650016851F /* App.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = App.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -30,6 +37,11 @@
 		50B271D01FEDC1A000F3C39B /* public */ = {isa = PBXFileReference; lastKnownFileType = folder; path = public; sourceTree = "<group>"; };
 		9582B6822FE993A50072D4E8 /* SceneDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SceneDelegate.swift; sourceTree = "<group>"; };
 		958DCC722DB07C7200EA8C5F /* debug.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; name = debug.xcconfig; path = ../debug.xcconfig; sourceTree = SOURCE_ROOT; };
+		4105D18343864D51BB734EC3 /* BookingActivityAttributes.swift */ = {isa = PBXFileReference; name = "BookingActivityAttributes.swift"; path = "BookingActivityAttributes.swift"; sourceTree = "<group>"; fileEncoding = 4; lastKnownFileType = sourcecode.swift; includeInIndex = 0; };
+		B39E056A37EC416ABC367AE7 /* BookingActivityPlugin.swift */ = {isa = PBXFileReference; name = "BookingActivityPlugin.swift"; path = "BookingActivityPlugin.swift"; sourceTree = "<group>"; fileEncoding = 4; lastKnownFileType = sourcecode.swift; includeInIndex = 0; };
+		7AB8410B13294D269E42066F /* BookingActivity.appex */ = {isa = PBXFileReference; name = "BookingActivity.appex"; path = "BookingActivity.appex"; sourceTree = BUILT_PRODUCTS_DIR; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; };
+		C5C13D753D1345FEAB2C6406 /* BookingActivityAttributes.swift */ = {isa = PBXFileReference; name = "BookingActivityAttributes.swift"; path = "App/BookingActivityAttributes.swift"; sourceTree = "<group>"; fileEncoding = 4; lastKnownFileType = sourcecode.swift; includeInIndex = 0; };
+		4087F8359D63476283E5054E /* BookingActivityWidget.swift */ = {isa = PBXFileReference; name = "BookingActivityWidget.swift"; path = "BookingActivity/BookingActivityWidget.swift"; sourceTree = "<group>"; fileEncoding = 4; lastKnownFileType = sourcecode.swift; includeInIndex = 0; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -38,6 +50,13 @@
 			buildActionMask = 2147483647;
 			files = (
 				4D22ABE92AF431CB00220026 /* CapApp-SPM in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		DFA2E1F35A054E6F8ABDA785 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -57,6 +76,7 @@
 			isa = PBXGroup;
 			children = (
 				504EC3041FED79650016851F /* App.app */,
+				7AB8410B13294D269E42066F /* BookingActivity.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -64,6 +84,7 @@
 		504EC3061FED79650016851F /* App */ = {
 			isa = PBXGroup;
 			children = (
+				A02610020000000000000002 /* 02-precision-check.wav */,
 				9582B6822FE993A50072D4E8 /* SceneDelegate.swift */,
 				50379B222058CBB4000EE86E /* capacitor.config.json */,
 				504EC3071FED79650016851F /* AppDelegate.swift */,
@@ -73,6 +94,8 @@
 				504EC3131FED79650016851F /* Info.plist */,
 				2FAD9762203C412B000D30F8 /* config.xml */,
 				50B271D01FEDC1A000F3C39B /* public */,
+				4105D18343864D51BB734EC3 /* BookingActivityAttributes.swift */,
+				B39E056A37EC416ABC367AE7 /* BookingActivityPlugin.swift */,
 			);
 			path = App;
 			sourceTree = "<group>";
@@ -87,6 +110,7 @@
 				504EC3001FED79650016851F /* Sources */,
 				504EC3011FED79650016851F /* Frameworks */,
 				504EC3021FED79650016851F /* Resources */,
+				6E3DDE7063804F42A9A3F159 /* Copy Files */,
 			);
 			buildRules = (
 			);
@@ -100,14 +124,31 @@
 			productReference = 504EC3041FED79650016851F /* App.app */;
 			productType = "com.apple.product-type.application";
 		};
+		C76530FAC7CB49199211188F /* "BookingActivity" */ = {
+			isa = PBXNativeTarget;
+			name = "BookingActivity";
+			productName = "BookingActivity";
+			productReference = 7AB8410B13294D269E42066F;
+			productType = "com.apple.product-type.app-extension";
+			buildConfigurationList = 932711B9278743DC9195BE7D;
+			buildPhases = (
+				0C642E2D9FBD4DD1A8055403 /* Sources */,
+				DFA2E1F35A054E6F8ABDA785 /* Frameworks */,
+				EDD928E656094F3B9C36409C /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
 		504EC2FC1FED79650016851F /* Project object */ = {
 			isa = PBXProject;
 			attributes = {
-				LastSwiftUpdateCheck = 0920;
-				LastUpgradeCheck = 0920;
+				LastSwiftUpdateCheck = 920;
+				LastUpgradeCheck = 920;
 				TargetAttributes = {
 					504EC3031FED79650016851F = {
 						CreatedOnToolsVersion = 9.2;
@@ -133,6 +174,7 @@
 			projectRoot = "";
 			targets = (
 				504EC3031FED79650016851F /* App */,
+				C76530FAC7CB49199211188F /* "BookingActivity" */,
 			);
 		};
 /* End PBXProject section */
@@ -142,12 +184,20 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				A02610020000000000000001 /* 02-precision-check.wav in Resources */,
 				504EC3121FED79650016851F /* LaunchScreen.storyboard in Resources */,
 				50B271D11FEDC1A000F3C39B /* public in Resources */,
 				504EC30F1FED79650016851F /* Assets.xcassets in Resources */,
 				50379B232058CBB4000EE86E /* capacitor.config.json in Resources */,
 				504EC30D1FED79650016851F /* Main.storyboard in Resources */,
 				2FAD9763203C412B000D30F8 /* config.xml in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		EDD928E656094F3B9C36409C /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -160,6 +210,17 @@
 			files = (
 				504EC3081FED79650016851F /* AppDelegate.swift in Sources */,
 				9582B6832FE993A70072D4E8 /* SceneDelegate.swift in Sources */,
+				24EB0F1EBD284B9882D3BCB9 /* BookingActivityAttributes.swift in Sources */,
+				AC9A0C318D79445E8FED790C /* BookingActivityPlugin.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		0C642E2D9FBD4DD1A8055403 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				8B6F44EE58E245AE8DA97EC0 /* BookingActivityAttributes.swift in Sources */,
+				E16DA7C1DAFD439F97190846 /* BookingActivityWidget.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -300,6 +361,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_STYLE = Automatic;
+				CODE_SIGN_ENTITLEMENTS = App/App.entitlements;
 				DEVELOPMENT_TEAM = Z8QYZ8K855;
 				CURRENT_PROJECT_VERSION = 1;
 				INFOPLIST_FILE = App/Info.plist;
@@ -308,7 +370,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 1.0.1;
 				OTHER_SWIFT_FLAGS = "$(inherited) \"-D\" \"COCOAPODS\" \"-DDEBUG\"";
 				PRODUCT_BUNDLE_IDENTIFIER = kr.promotors.app;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -323,6 +385,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_STYLE = Automatic;
+				CODE_SIGN_ENTITLEMENTS = App/App.entitlements;
 				DEVELOPMENT_TEAM = Z8QYZ8K855;
 				CURRENT_PROJECT_VERSION = 1;
 				INFOPLIST_FILE = App/Info.plist;
@@ -331,7 +394,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 1.0.1;
 				PRODUCT_BUNDLE_IDENTIFIER = kr.promotors.app;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "";
@@ -339,6 +402,48 @@
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};
 			name = Release;
+		};
+		9D10CCFD90EA4B1AAD35BE54 /* Debug */ = {
+			name = Debug;
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				INFOPLIST_FILE = "BookingActivity/BookingActivity-Info.plist";
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks @executable_path/../../Frameworks";
+				PRODUCT_NAME = "BookingActivity";
+				SKIP_INSTALL = YES;
+				PRODUCT_BUNDLE_IDENTIFIER = "kr.promotors.app.BookingActivity";
+				IPHONEOS_DEPLOYMENT_TARGET = 16.2;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				DEVELOPMENT_TEAM = Z8QYZ8K855;
+				CODE_SIGN_STYLE = Automatic;
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				MARKETING_VERSION = 1.0.1;
+				CURRENT_PROJECT_VERSION = 1;
+			};
+		};
+		956D4180EC544986A82D3468 /* Release */ = {
+			name = Release;
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				INFOPLIST_FILE = "BookingActivity/BookingActivity-Info.plist";
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks @executable_path/../../Frameworks";
+				PRODUCT_NAME = "BookingActivity";
+				SKIP_INSTALL = YES;
+				PRODUCT_BUNDLE_IDENTIFIER = "kr.promotors.app.BookingActivity";
+				IPHONEOS_DEPLOYMENT_TARGET = 16.2;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				DEVELOPMENT_TEAM = Z8QYZ8K855;
+				CODE_SIGN_STYLE = Automatic;
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				MARKETING_VERSION = 1.0.1;
+				CURRENT_PROJECT_VERSION = 1;
+			};
 		};
 /* End XCBuildConfiguration section */
 
@@ -361,6 +466,15 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
+		932711B9278743DC9195BE7D /* Build configuration list for PBXNativeTarget "BookingActivity" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				9D10CCFD90EA4B1AAD35BE54 /* Debug */,
+				956D4180EC544986A82D3468 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 /* End XCConfigurationList section */
 
 /* Begin XCLocalSwiftPackageReference section */
@@ -377,6 +491,20 @@
 			productName = "CapApp-SPM";
 		};
 /* End XCSwiftPackageProductDependency section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		6E3DDE7063804F42A9A3F159 /* Copy Files */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				8AEB3D0C22534666A0A5A26E /* BookingActivity.appex in Copy Files */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			name = "Copy Files";
+			dstPath = "";
+			dstSubfolderSpec = 13;
+		};
+/* End PBXCopyFilesBuildPhase section */
 	};
 	rootObject = 504EC2FC1FED79650016851F /* Project object */;
 }
