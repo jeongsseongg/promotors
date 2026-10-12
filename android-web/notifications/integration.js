@@ -6,13 +6,24 @@
   let transition = Promise.resolve();
   let pendingId = new URL(location.href).searchParams.get('notification') || '';
   let unread = null, observedButton, optInErrorShown = false;
+  async function privateRpc(name, params) {
+    if (PM_PRIVATE_MUTATORS.has(name)) {
+      try { window.PMPrivacyEpoch.headers(); }
+      catch (error) {
+        if (error.code !== 'PRIVACY_EPOCH_NOT_READY' && error.message !== 'PRIVACY_EPOCH_NOT_READY') throw error;
+        const context = await hydrateSupabaseData();
+        if (!context.ok) throw new Error('계정 정보를 확인하지 못했습니다. 다시 시도해 주세요.');
+      }
+    }
+    return supabaseRpc(name, params);
+  }
   function updateBadge() {
     const label = document.querySelector('#mypage-alerts em');
     const text = unread ? `읽지 않은 알림 ${unread}개` : '새 알림 없음';
     if (label && unread !== null && label.textContent !== text) label.textContent = text;
   }
   async function notificationRpc(name, params) {
-    const result = await supabaseRpc(name, params);
+    const result = await privateRpc(name, params);
     if (params.p_action === 'state') { unread = result.items.filter(item => !item.read_at).length; updateBadge(); }
     return result;
   }
@@ -21,7 +32,7 @@
   document.head.append(styles);
   const { createBookingActions } = await import('./booking-actions.js?v=20261012');
   const { attachBookingDock } = await import('./booking-dock.js?v=20261012');
-  const bookings = createBookingActions({ rpc: supabaseRpc, getToken: () => authToken, isAdmin: () => isAdmin,
+  const bookings = createBookingActions({ rpc: privateRpc, getToken: () => authToken, isAdmin: () => isAdmin,
     canView: branch => isTopAdmin() || adminBranches.includes(branch),
     onChanged: async result => {
       const registration = await navigator.serviceWorker?.getRegistration().catch(() => null);

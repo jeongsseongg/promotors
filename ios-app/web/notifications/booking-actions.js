@@ -48,14 +48,13 @@ export function createBookingActions({ rpc, getToken, isAdmin, onChanged, canVie
   }
   async function start() {
     clearInterval(timer);
-    await refresh();
-    if (!isAdmin() || !getToken()) return;
-    clearInterval(timer);
+    if (!isAdmin() || !getToken()) return reset();
     timer = setInterval(() => {
       if (document.visibilityState === 'visible') refresh().catch(() => {
         if (feedback) feedback.textContent = '최신 상태를 확인하지 못했어요. 처리 전에 다시 확인합니다.';
       });
     }, 12000);
+    await refresh();
   }
   function render() {
     const section = el('section', undefined, 'pm-booking-pending');
