@@ -2,7 +2,7 @@
 export function attachBookingDevice(bookings) {
   const cap = window.Capacitor;
   const plugin = cap?.isNativePlatform?.() && cap.isPluginAvailable('BookingActivity') ? cap.registerPlugin('BookingActivity') : null;
-  let signature = '', sequence = Promise.resolve();
+  let signature = '', syncedAt = 0, sequence = Promise.resolve();
   function snapshot() {
     const state = bookings.snapshot(), first = state.items[0] || state.upcoming[0];
     const time = String(first?.time || '00:00').slice(0, 5);
@@ -19,11 +19,12 @@ export function attachBookingDevice(bookings) {
     if (!plugin) return;
     const state = snapshot(), binding = window.PMNativePush?.binding;
     const next = JSON.stringify({ ...state, binding });
-    if (signature === next) return;
+    if (signature === next && Date.now() - syncedAt < 60000) return;
     signature = next;
     sequence = sequence.catch(() => {}).then(async () => {
       if (!state.active || !binding || binding !== window.PMNativePush?.binding || !snapshot().active) await plugin.clear();
       else await plugin.sync({ ...state, binding });
+      syncedAt = Date.now();
     }).catch(() => { signature = ''; });
   });
 }

@@ -5,13 +5,13 @@ declare
   a public.pm_accounts%rowtype; dev public.pm_push_devices%rowtype;
   did uuid; value text; endpoint_value text; current_binding uuid;
 begin
+  perform pm_privacy.before_write(p_token);
   -- Preserve the live notification API's account/erasure/session gates.
   perform public.pm_notifications(p_token,'state','{}'::jsonb);
   select ac.* into a from public.pm_sessions s join public.pm_accounts ac using(login_id)
   where s.token_hash=public.pm_token_hash(p_token) and s.expires_at>now() and ac.active;
   if a.login_id is null then raise exception 'AUTH_REQUIRED'; end if;
   if p_action='native_activity' then
-    perform pm_privacy.before_write(p_token);
     if a.role not in ('general','main','developer') then raise exception 'ADMIN_REQUIRED'; end if;
     if coalesce(p_data->>'kind','') not in ('start','update') or coalesce(p_data->>'token','') !~ '^[a-f0-9]{64,}$' or length(p_data->>'token')>256 then raise exception 'INVALID_DEVICE'; end if;
     update public.pm_push_devices set subscription=jsonb_set(subscription,

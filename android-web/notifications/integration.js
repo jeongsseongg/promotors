@@ -2,6 +2,7 @@
 (async () => {
   'use strict';
   PM_PRIVATE_MUTATORS.add('pm_admin_booking_actions');
+  PM_PRIVATE_MUTATORS.add('pm_native_push_subscribe');
   let transition = Promise.resolve();
   let pendingId = new URL(location.href).searchParams.get('notification') || '';
   let unread = null, observedButton, optInErrorShown = false;

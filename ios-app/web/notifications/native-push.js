@@ -6,9 +6,19 @@
   const plugin = available ? cap.registerPlugin('PushNotifications') : null;
   let permission = 'default', token = null, registration, binding = null, pendingTap = null, epoch = 0;
   let activityCall, activityDevice;
+  const pendingActivities = new Map();
   async function activityToken(event) {
     if (!binding || event.binding !== binding || !activityCall) return;
-    await activityCall('native_activity', { deviceId: activityDevice, binding, kind: event.kind, token: event.token }).catch(() => {});
+    pendingActivities.set(event.kind, event);
+    const current = epoch;
+    for (let attempt = 0; attempt < 3 && current === epoch; attempt += 1) {
+      try {
+        await activityCall('native_activity', { deviceId: activityDevice, binding, kind: event.kind, token: event.token });
+        if (pendingActivities.get(event.kind) === event) pendingActivities.delete(event.kind);
+        return;
+      } catch { if (attempt < 2) await new Promise(resolve => setTimeout(resolve, (attempt + 1) * 1000)); }
+    }
+    console.warn('LIVE_ACTIVITY_TOKEN_SYNC_FAILED');
   }
   function openPending() {
     if (!pendingTap || !binding) return;
@@ -63,12 +73,14 @@
     if (current !== epoch) throw new Error('로그인 상태가 변경되었습니다.');
     binding = result.binding;
     activityCall = call; activityDevice = deviceId;
+    for (const event of pendingActivities.values()) activityToken(event);
     window.PMBookingActions?.refresh().catch(() => {});
     openPending();
   }
   async function clear() {
     epoch += 1; token = null; binding = null; pendingTap = null;
     activityCall = null; activityDevice = null;
+    pendingActivities.clear();
     if (cap?.isPluginAvailable?.('BookingActivity')) await cap.registerPlugin('BookingActivity').clear?.();
     if (plugin) {
       await plugin.removeAllDeliveredNotifications();
