@@ -26,6 +26,19 @@
 .pm-booking-pending-row { display: flex; flex-direction: column; gap: .5rem; width: 100%; margin-top: var(--pm-booking-space); text-align: left; padding: var(--pm-booking-space); }
 .pm-booking-link { color: var(--pm-booking-blue); font-weight: 600; }
 .pm-booking-empty { padding: var(--pm-booking-space); background: var(--pm-booking-bg); border-radius: .75rem; }
+.pm-booking-dock { position: fixed; z-index: 125; inset-inline-end: var(--pm-booking-space); bottom: var(--pm-booking-space); box-sizing: border-box; width: calc(100% - 2 * var(--pm-booking-space)); max-width: 26rem; padding: var(--pm-booking-space); border: 1px solid var(--pm-booking-border); border-radius: var(--pm-booking-radius); background: white; color: var(--pm-booking-ink); box-shadow: 0 .5rem 2rem rgb(25 31 40 / 12%); font-size: clamp(1rem, 1vw, 1.125rem); line-height: 1.5; }
+.pm-booking-dock-header { display: flex; align-items: center; justify-content: space-between; gap: .5rem; }
+.pm-booking-dock-header strong { font-size: 1rem; }
+.pm-booking-dock-header button { flex-shrink: 0; padding-inline: .75rem; }
+.pm-booking-dock-list { display: flex; flex-direction: column; max-height: 32dvh; overflow-y: auto; overscroll-behavior: contain; margin-top: .5rem; }
+.pm-booking-dock:not(.pm-booking-dock-expanded) .pm-booking-dock-row .pm-booking-link { display: none; }
+.pm-booking-dock-expanded .pm-booking-dock-list { max-height: 45dvh; }
+.pm-booking-dock-row { display: grid; gap: .25rem; border: 0; border-bottom: 1px solid var(--pm-booking-border); padding: .75rem 0; background: white; color: var(--pm-booking-ink); font: inherit; text-align: left; cursor: pointer; overflow-wrap: anywhere; }
+.pm-booking-dock-row:focus-visible { outline: 3px solid var(--pm-booking-blue); outline-offset: -3px; }
+.pm-booking-dock-state { color: var(--pm-booking-blue); font-weight: 600; }
+.pm-booking-dock-row .pm-booking-muted { margin: 0; }
+.pm-booking-dock-message { margin: .5rem 0 0; font-size: .875rem; color: var(--pm-booking-muted); }
+@media (max-width: 900px) { .pm-booking-dock { bottom: calc(5.5rem + env(safe-area-inset-bottom)); } }
 @media (max-width: 600px) {
   .pm-booking-dialog[open] {
     display: flex;

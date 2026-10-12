@@ -1,6 +1,6 @@
 /* Pending work is derived from booking status, never notification read state. */
-export function createBookingActions({ rpc, getToken, isAdmin, onChanged }) {
-  let loadError = '', items = [], detail, selected, feedback, busy = false, timer, generation = 0;
+export function createBookingActions({ rpc, getToken, isAdmin, onChanged, canView = () => true }) {
+  let loadError = '', items = [], upcoming = [], loaded = false, detail, selected, feedback, busy = false, timer, generation = 0;
   const listeners = new Set();
   function el(tag, text, cls) {
     const node = document.createElement(tag);
@@ -31,7 +31,9 @@ export function createBookingActions({ rpc, getToken, isAdmin, onChanged }) {
     let result;
     try { result = await request('pending'); loadError = ''; }
     catch (error) { loadError = '처리 대기 예약을 불러오지 못했어요. 다시 열어 주세요.'; for (const notify of listeners) notify(); throw error; }
-    items = result.items || [];
+    items = (result.items || []).filter(row => canView(row.branch));
+    upcoming = (result.upcoming || []).filter(row => canView(row.branch));
+    loaded = true;
     for (const notify of listeners) notify();
     if (selected && detail && !busy) {
       const current = await request('get', { id: selected.id });
@@ -41,7 +43,7 @@ export function createBookingActions({ rpc, getToken, isAdmin, onChanged }) {
   function pending() { return ['신규', '승인대기'].includes(selected?.status); }
   function close(force = false) { if (busy && force !== true) return; detail?.close(); detail?.remove(); detail = undefined; selected = undefined; }
   function reset() {
-    generation += 1; clearInterval(timer); items = []; close(true);
+    generation += 1; clearInterval(timer); items = []; upcoming = []; loaded = false; loadError = ''; close(true);
     for (const notify of listeners) notify();
   }
   async function start() {
@@ -78,6 +80,7 @@ export function createBookingActions({ rpc, getToken, isAdmin, onChanged }) {
   }
   async function open(id) {
     const result = await request('get', { id });
+    if (!canView(result.booking.branch)) throw new Error('이 지점의 예약을 볼 수 없습니다.');
     close(true); selected = result.booking;
     detail = el('dialog', undefined, 'pm-booking-dialog');
     detail.setAttribute('aria-labelledby', 'pm-booking-title');
@@ -144,5 +147,7 @@ export function createBookingActions({ rpc, getToken, isAdmin, onChanged }) {
       for (const node of detail?.querySelectorAll('button, textarea') || []) node.disabled = false;
     }
   }
-  return { open, render, start, refresh, reset, listen: fn => { listeners.add(fn); return () => listeners.delete(fn); } };
+  return { open, render, start, refresh, reset,
+    snapshot: () => ({ items, upcoming, loaded, error: loadError, active: Boolean(isAdmin() && getToken()) }),
+    listen: fn => { listeners.add(fn); return () => listeners.delete(fn); } };
 }

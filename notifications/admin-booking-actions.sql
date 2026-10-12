@@ -4,7 +4,7 @@ create or replace function public.pm_admin_booking_actions(p_token text, p_actio
 returns jsonb language plpgsql security definer set search_path = public, extensions, pg_temp as $$
 declare
   account public.pm_accounts%rowtype;
-  bookings jsonb; booking jsonb; result jsonb; branch text; reason text;
+  bookings jsonb; booking jsonb; result jsonb; upcoming jsonb; branch text; reason text;
 begin
   perform public.pm_notifications(p_token, 'state', '{}'::jsonb);
   select a.* into account from public.pm_sessions s join public.pm_accounts a using(login_id)
@@ -24,12 +24,17 @@ begin
     select coalesce(jsonb_agg(x order by x->>'date',x->>'time',x->>'id'),'[]') into result
     from jsonb_array_elements(bookings) x
     where x->>'status' in ('신규','승인대기') and
-      (account.role in ('main','developer') or jsonb_array_length(coalesce(account.branches,'[]'::jsonb))=0 or account.branches ? (x->>'branch'));
-    return jsonb_build_object('ok',true,'items',result);
+      (account.role in ('main','developer') or coalesce(account.branches ? (x->>'branch'),false));
+    select coalesce(jsonb_agg(x order by x->>'date',x->>'time',x->>'id'),'[]') into upcoming
+    from jsonb_array_elements(bookings) x
+    where x->>'status'='예약' and coalesce(x->>'historyOnly','false')<>'true'
+      and replace(x->>'date','.','-') >= to_char(now() at time zone 'Asia/Seoul','YYYY-MM-DD')
+      and (account.role in ('main','developer') or coalesce(account.branches ? (x->>'branch'),false));
+    return jsonb_build_object('ok',true,'items',result,'upcoming',upcoming);
   end if;
   select x into booking from jsonb_array_elements(bookings) x where x->>'id'=p_data->>'id';
   branch := booking->>'branch';
-  if booking is null or (account.role='general' and jsonb_array_length(coalesce(account.branches,'[]'::jsonb))>0 and not coalesce(account.branches ? branch,false)) then
+  if booking is null or (account.role='general' and not coalesce(account.branches ? branch,false)) then
     raise exception 'BOOKING_UNAVAILABLE' using errcode='P0001';
   end if;
   if p_action='get' then return jsonb_build_object('ok',true,'booking',booking); end if;

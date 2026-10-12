@@ -19,13 +19,16 @@
   styles.rel = 'stylesheet'; styles.href = 'notifications/booking-actions.css?v=20261012';
   document.head.append(styles);
   const { createBookingActions } = await import('./booking-actions.js?v=20261012');
+  const { attachBookingDock } = await import('./booking-dock.js?v=20261012');
   const bookings = createBookingActions({ rpc: supabaseRpc, getToken: () => authToken, isAdmin: () => isAdmin,
+    canView: branch => isTopAdmin() || adminBranches.includes(branch),
     onChanged: async result => {
       await hydrateSupabaseData();
       if (result.changed && result.booking.status === '예약') pushCustomerMessage(result.booking, `${result.booking.branch} ${result.booking.date} ${result.booking.time} 예약이 확정되었습니다.`, { bookingId: result.booking.id, type: 'booking-approved' });
       if (isAdmin) renderAdmBook();
     }
   });
+  attachBookingDock(bookings);
   const api = PMNotifications.create({ rpc: notificationRpc, getToken: () => authToken, openTarget, bookings });
   new MutationObserver(() => {
     const current = document.getElementById('mypage-alerts');
