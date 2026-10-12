@@ -14,7 +14,7 @@ async function authorization() {
   return value;
 }
 type Subscription = { token: string; activityStart?: string; activityUpdate?: string };
-type Payload = { id: string; binding: string; category: string; alertDelivered?: boolean; booking?: { snapshot: { pendingCount: number; upcomingCount: number; [key: string]: unknown } } };
+type Payload = { id: string; binding: string; category: string; alertDelivered?: boolean; booking?: { pending: boolean; branch: string; schedule: string; snapshot: { pendingCount: number; upcomingCount: number; [key: string]: unknown } } };
 async function sendActivity(subscription: Subscription, payload: Payload, bearer: string) {
   if (!payload.booking) return 'SKIPPED';
   const state = payload.booking.snapshot;
@@ -47,8 +47,8 @@ export async function sendAPNS(subscription: Subscription, payload: Payload) {
     headers: { authorization: `bearer ${bearer}`, 'apns-topic': 'kr.promotors.app',
       'apns-push-type': 'alert', 'apns-priority': '10', 'apns-expiration': String(Math.floor(Date.now()/1000)+300),
       'apns-collapse-id': payload.id, 'content-type': 'application/json' },
-    body: JSON.stringify({ aps: { alert: { title: payload.category === 'marketing' ? '(광고) 프로모터스' : '프로모터스 알림',
-      body: payload.category === 'marketing' ? '이벤트 안내가 있습니다. 수신거부: 앱 알림 설정' : '새로운 안내가 도착했습니다. 앱에서 확인해 주세요.' }, sound: '02-precision-check.wav' },
+    body: JSON.stringify({ aps: { alert: { title: payload.category === 'marketing' ? '(광고) 프로모터스' : payload.booking?.pending ? '새 예약이 들어왔어요' : '프로모터스 알림',
+      body: payload.category === 'marketing' ? '이벤트 안내가 있습니다. 수신거부: 앱 알림 설정' : payload.booking?.pending ? `${payload.booking.branch} · ${payload.booking.schedule}\n눌러서 예약 확인 · 수락 · 거절 · 전화` : '새로운 안내가 도착했습니다. 앱에서 확인해 주세요.' }, sound: '02-precision-check.wav' },
       id: payload.id, binding: payload.binding })
   });
   const reason = response.ok ? '' : (await response.json().catch(() => ({}))).reason;
