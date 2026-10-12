@@ -13,7 +13,7 @@ begin
   if p_action='native_activity' then
     perform pm_privacy.before_write(p_token);
     if a.role not in ('general','main','developer') then raise exception 'ADMIN_REQUIRED'; end if;
-    if p_data->>'kind' not in ('start','update') or coalesce(p_data->>'token','') !~ '^[a-f0-9]{64,256}$' then raise exception 'INVALID_DEVICE'; end if;
+    if coalesce(p_data->>'kind','') not in ('start','update') or coalesce(p_data->>'token','') !~ '^[a-f0-9]{64,}$' or length(p_data->>'token')>256 then raise exception 'INVALID_DEVICE'; end if;
     update public.pm_push_devices set subscription=jsonb_set(subscription,
       array[case p_data->>'kind' when 'start' then 'activityStart' else 'activityUpdate' end],to_jsonb(p_data->>'token'))
     where device_id=(p_data->>'deviceId')::uuid and login_id=a.login_id

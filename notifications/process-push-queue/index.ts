@@ -44,7 +44,10 @@ async function deliver(row: any, config: any) {
       redirect: 'error', signal: AbortSignal.timeout(15000) });
     await rpc('ack', { ...ack, result: res.ok ? 'sent' : 'failed', code: String(res.status) });
   } catch (error) {
-    await rpc('ack', { ...ack, result: 'failed', code: error instanceof Error && error.message === 'APNS_NOT_CONFIGURED' ? 'APNS_NOT_CONFIGURED' : error instanceof Error && error.name === 'TimeoutError' ? 'TIMEOUT' : 'PUSH_TRANSPORT_ERROR' });
+    const code = error instanceof Error && ['APNS_NOT_CONFIGURED', 'BOOKING_CONTEXT_FAILED'].includes(error.message)
+      ? error.message : error instanceof Error && error.name === 'TimeoutError' ? 'TIMEOUT' : 'PUSH_TRANSPORT_ERROR';
+    console.error(JSON.stringify({ deliveryId: row.id, code }));
+    await rpc('ack', { ...ack, result: 'failed', code });
   }
 }
 Deno.serve(async (req) => {

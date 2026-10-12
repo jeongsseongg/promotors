@@ -14,7 +14,7 @@ async function authorization() {
   return value;
 }
 type Subscription = { token: string; activityStart?: string; activityUpdate?: string };
-type Payload = { id: string; binding: string; category: string; booking?: { snapshot: { pendingCount: number; upcomingCount: number; [key: string]: unknown } } };
+type Payload = { id: string; binding: string; category: string; alertDelivered?: boolean; booking?: { snapshot: { pendingCount: number; upcomingCount: number; [key: string]: unknown } } };
 async function sendActivity(subscription: Subscription, payload: Payload, bearer: string) {
   if (!payload.booking) return 'SKIPPED';
   const state = payload.booking.snapshot;
@@ -42,7 +42,7 @@ export async function sendAPNS(subscription: Subscription, payload: Payload) {
   if (!/^[a-f0-9]{64}$/.test(subscription.token)) return { ok: false, code: '410' };
   const bearer = await authorization();
   // Production App Store transport. No customer data appears on a locked shared device.
-  const response = await fetch(`https://api.push.apple.com/3/device/${subscription.token}`, {
+  const response = payload.alertDelivered ? new Response(null, { status: 200 }) : await fetch(`https://api.push.apple.com/3/device/${subscription.token}`, {
     method: 'POST', redirect: 'error', signal: AbortSignal.timeout(15000),
     headers: { authorization: `bearer ${bearer}`, 'apns-topic': 'kr.promotors.app',
       'apns-push-type': 'alert', 'apns-priority': '10', 'apns-expiration': String(Math.floor(Date.now()/1000)+300),
@@ -53,7 +53,7 @@ export async function sendAPNS(subscription: Subscription, payload: Payload) {
   });
   const reason = response.ok ? '' : (await response.json().catch(() => ({}))).reason;
   const activityCode = response.ok ? await sendActivity(subscription, payload, bearer).catch(() => 'ACTIVITY_TRANSPORT_ERROR') : 'SKIPPED';
-  if (!['200', 'SKIPPED'].includes(activityCode)) console.warn(JSON.stringify({ code: activityCode, transport: 'liveactivity' }));
+  if (activityCode.startsWith('ACTIVITY_')) return { ok: false, code: `${activityCode}_ALERT_SENT` };
   return { ok: response.ok, code: ['Unregistered', 'BadDeviceToken', 'DeviceTokenNotForTopic'].includes(reason)
-    ? '410' : response.ok ? '200' : `APNS_${response.status}_${String(reason || 'ERROR').slice(0,40)}` };
+    ? '410' : response.ok ? activityCode === 'NO_ACTIVITY_TOKEN' ? '200_NO_ACTIVITY_TOKEN' : '200' : `APNS_${response.status}_${String(reason || 'ERROR').slice(0,40)}` };
 }
