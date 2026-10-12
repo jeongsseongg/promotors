@@ -203,4 +203,3 @@ begin
   return clean_booking;
 end
 $function$;
-
