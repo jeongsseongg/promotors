@@ -23,12 +23,16 @@
   const bookings = createBookingActions({ rpc: supabaseRpc, getToken: () => authToken, isAdmin: () => isAdmin,
     canView: branch => isTopAdmin() || adminBranches.includes(branch),
     onChanged: async result => {
+      const registration = await navigator.serviceWorker?.getRegistration().catch(() => null);
+      registration?.active?.postMessage({ type: 'PM_BOOKING_PROCESSED', id: result.booking.id });
       await hydrateSupabaseData();
       if (result.changed && result.booking.status === '예약') pushCustomerMessage(result.booking, `${result.booking.branch} ${result.booking.date} ${result.booking.time} 예약이 확정되었습니다.`, { bookingId: result.booking.id, type: 'booking-approved' });
       if (isAdmin) renderAdmBook();
     }
   });
   attachBookingDock(bookings);
+  const { attachBookingDevice } = await import('./booking-device.js?v=20261012');
+  attachBookingDevice(bookings);
   const api = PMNotifications.create({ rpc: notificationRpc, getToken: () => authToken, openTarget, bookings });
   new MutationObserver(() => {
     const current = document.getElementById('mypage-alerts');

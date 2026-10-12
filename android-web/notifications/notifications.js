@@ -60,7 +60,7 @@
     let dialog, content, feedback, busy = false, state, opener, generation = 0, activeTab = 'recent', tabs;
     async function call(action, data = {}, token = getToken()) {
       if (!token) throw new Error('로그인 후 알림을 이용해 주세요.');
-      let result = await rpc(action === 'native_subscribe' ? 'pm_native_push_subscribe' : 'pm_notifications', { p_token: token, p_action: action, p_data: data });
+      let result = await rpc(['native_subscribe', 'native_activity'].includes(action) ? 'pm_native_push_subscribe' : 'pm_notifications', { p_token: token, p_action: action, p_data: data });
       if (result?.error) throw new Error('알림 요청을 처리하지 못했습니다. 잠시 후 다시 시도해 주세요.');
       if (result?.data !== undefined) result = result.data;
       if (Array.isArray(result) && result.length === 1 && !result[0]?.title) result = result[0];

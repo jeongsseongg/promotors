@@ -12,6 +12,11 @@ public class DelegationService extends com.google.androidbrowserhelper.trusted.D
     @Override
     public boolean onNotifyNotificationWithChannel(String tag, int id,
             Notification notification, String channelName) {
+        if (tag != null && tag.startsWith("pm-booking-pending-")) {
+            notification.flags |= Notification.FLAG_ONGOING_EVENT | Notification.FLAG_ONLY_ALERT_ONCE;
+            notification.flags &= ~Notification.FLAG_AUTO_CANCEL;
+            notification.visibility = Notification.VISIBILITY_PRIVATE;
+        }
         Uri sound = Uri.parse("android.resource://" + getPackageName() + "/" + R.raw.precision_check);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             // Use AndroidX's existing channel ID so user mute/sound choices stay respected.

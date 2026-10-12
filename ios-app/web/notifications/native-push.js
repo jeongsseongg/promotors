@@ -5,6 +5,11 @@
   const available = cap?.isNativePlatform?.() && cap.isPluginAvailable('PushNotifications');
   const plugin = available ? cap.registerPlugin('PushNotifications') : null;
   let permission = 'default', token = null, registration, binding = null, pendingTap = null, epoch = 0;
+  let activityCall, activityDevice;
+  async function activityToken(event) {
+    if (!binding || event.binding !== binding || !activityCall) return;
+    await activityCall('native_activity', { deviceId: activityDevice, binding, kind: event.kind, token: event.token }).catch(() => {});
+  }
   function openPending() {
     if (!pendingTap || !binding) return;
     const data = pendingTap; pendingTap = null;
@@ -57,10 +62,14 @@
     const result = await call('native_subscribe', { deviceId, token: value });
     if (current !== epoch) throw new Error('로그인 상태가 변경되었습니다.');
     binding = result.binding;
+    activityCall = call; activityDevice = deviceId;
+    window.PMBookingActions?.refresh().catch(() => {});
     openPending();
   }
   async function clear() {
     epoch += 1; token = null; binding = null; pendingTap = null;
+    activityCall = null; activityDevice = null;
+    if (cap?.isPluginAvailable?.('BookingActivity')) await cap.registerPlugin('BookingActivity').clear?.();
     if (plugin) {
       await plugin.removeAllDeliveredNotifications();
       await plugin.unregister();
@@ -72,6 +81,7 @@
       pendingTap = data; openPending();
     });
   }
-  window.PMNativePush = { available: Boolean(available), check, request, subscribe, clear,
+  window.PMNativePush = { available: Boolean(available), check, request, subscribe, clear, activityToken,
+    get binding() { return binding; },
     get permission() { return permission; }, get connected() { return Boolean(binding); } };
 })();

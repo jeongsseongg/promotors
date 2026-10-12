@@ -10,6 +10,18 @@ begin
   select ac.* into a from public.pm_sessions s join public.pm_accounts ac using(login_id)
   where s.token_hash=public.pm_token_hash(p_token) and s.expires_at>now() and ac.active;
   if a.login_id is null then raise exception 'AUTH_REQUIRED'; end if;
+  if p_action='native_activity' then
+    perform pm_privacy.before_write(p_token);
+    if a.role not in ('general','main','developer') then raise exception 'ADMIN_REQUIRED'; end if;
+    if p_data->>'kind' not in ('start','update') or coalesce(p_data->>'token','') !~ '^[a-f0-9]{64,256}$' then raise exception 'INVALID_DEVICE'; end if;
+    update public.pm_push_devices set subscription=jsonb_set(subscription,
+      array[case p_data->>'kind' when 'start' then 'activityStart' else 'activityUpdate' end],to_jsonb(p_data->>'token'))
+    where device_id=(p_data->>'deviceId')::uuid and login_id=a.login_id
+      and session_hash=public.pm_token_hash(p_token) and binding=(p_data->>'binding')::uuid
+      and revoked_at is null and subscription->>'transport'='apns';
+    if not found then raise exception 'DEVICE_BINDING_REQUIRED'; end if;
+    return jsonb_build_object('ok',true);
+  end if;
   if p_action is distinct from 'native_subscribe' then raise exception 'INVALID_ACTION'; end if;
   did=(p_data->>'deviceId')::uuid; value=lower(p_data->>'token');
   if did is null or value is null or value !~ '^[a-f0-9]{64}$' then raise exception 'INVALID_DEVICE'; end if;
@@ -34,7 +46,7 @@ begin
   insert into public.pm_push_devices(device_id,login_id,session_hash,subscription,endpoint,binding)
   values(did,a.login_id,public.pm_token_hash(p_token),jsonb_build_object('transport','apns','token',value),endpoint_value,current_binding)
   on conflict(device_id) do update set login_id=excluded.login_id,session_hash=excluded.session_hash,
-    subscription=excluded.subscription,endpoint=excluded.endpoint,binding=excluded.binding,revoked_at=null,
+    subscription=case when pm_push_devices.binding=excluded.binding then pm_push_devices.subscription||excluded.subscription else excluded.subscription end,endpoint=excluded.endpoint,binding=excluded.binding,revoked_at=null,
     updated_at=case when pm_push_devices.binding=excluded.binding then pm_push_devices.updated_at else now() end;
   return jsonb_build_object('binding',current_binding);
 end $$;

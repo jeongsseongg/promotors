@@ -13,7 +13,32 @@ async function authorization() {
   cached = { value, expires: Date.now() + 45 * 60 * 1000 };
   return value;
 }
-export async function sendAPNS(subscription: { token: string }, payload: { id: string; binding: string; category: string }) {
+type Subscription = { token: string; activityStart?: string; activityUpdate?: string };
+type Payload = { id: string; binding: string; category: string; booking?: { snapshot: { pendingCount: number; upcomingCount: number; [key: string]: unknown } } };
+async function sendActivity(subscription: Subscription, payload: Payload, bearer: string) {
+  if (!payload.booking) return 'SKIPPED';
+  const state = payload.booking.snapshot;
+  const ended = state.pendingCount + state.upcomingCount === 0;
+  const token = subscription.activityUpdate || (!ended ? subscription.activityStart : undefined);
+  if (!token || !/^[a-f0-9]{64,256}$/.test(token)) return 'NO_ACTIVITY_TOKEN';
+  const event = subscription.activityUpdate ? ended ? 'end' : 'update' : 'start';
+  const timestamp = Math.floor(Date.now() / 1000);
+  const aps: Record<string, unknown> = { timestamp, event, 'content-state': state, 'stale-date': timestamp + 300 };
+  if (event === 'start') {
+    aps['attributes-type'] = 'BookingActivityAttributes';
+    aps.attributes = { binding: payload.binding };
+    aps.alert = { title: '프로모터스 예약', body: '처리할 예약이 있습니다.' };
+  }
+  if (ended) aps['dismissal-date'] = timestamp;
+  const response = await fetch(`https://api.push.apple.com/3/device/${token}`, {
+    method: 'POST', redirect: 'error', signal: AbortSignal.timeout(15000),
+    headers: { authorization: `bearer ${bearer}`, 'apns-topic': 'kr.promotors.app.push-type.liveactivity',
+      'apns-push-type': 'liveactivity', 'apns-priority': '10', 'apns-expiration': String(timestamp + 300), 'content-type': 'application/json' },
+    body: JSON.stringify({ aps })
+  });
+  return response.ok ? '200' : `ACTIVITY_${response.status}`;
+}
+export async function sendAPNS(subscription: Subscription, payload: Payload) {
   if (!/^[a-f0-9]{64}$/.test(subscription.token)) return { ok: false, code: '410' };
   const bearer = await authorization();
   // Production App Store transport. No customer data appears on a locked shared device.
@@ -27,6 +52,8 @@ export async function sendAPNS(subscription: { token: string }, payload: { id: s
       id: payload.id, binding: payload.binding })
   });
   const reason = response.ok ? '' : (await response.json().catch(() => ({}))).reason;
+  const activityCode = response.ok ? await sendActivity(subscription, payload, bearer).catch(() => 'ACTIVITY_TRANSPORT_ERROR') : 'SKIPPED';
+  if (!['200', 'SKIPPED'].includes(activityCode)) console.warn(JSON.stringify({ code: activityCode, transport: 'liveactivity' }));
   return { ok: response.ok, code: ['Unregistered', 'BadDeviceToken', 'DeviceTokenNotForTopic'].includes(reason)
     ? '410' : response.ok ? '200' : `APNS_${response.status}_${String(reason || 'ERROR').slice(0,40)}` };
 }

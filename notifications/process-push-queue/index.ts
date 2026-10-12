@@ -23,6 +23,13 @@ async function deliver(row: any, config: any) {
   const ack = { id: row.id, leaseId: row.leaseId };
   if (!(await rpc('validate', ack)).valid) return rpc('ack', { ...ack, result: 'cancelled', code: 'REVOKED' });
   try {
+    const context = await fetch(`${base}/rest/v1/rpc/pm_booking_push_context`, {
+      method: 'POST', headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ p_id: row.id, p_lease: row.leaseId })
+    });
+    if (!context.ok) throw new Error('BOOKING_CONTEXT_FAILED');
+    const booking = await context.json();
+    if (booking) row.payload.booking = booking;
     if (row.subscription.transport === 'apns') {
       const result = await sendAPNS(row.subscription, row.payload);
       await rpc('ack', { ...ack, result: result.ok ? 'sent' : 'failed', code: result.code });
