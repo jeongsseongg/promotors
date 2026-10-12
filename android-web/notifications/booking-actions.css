@@ -26,4 +26,41 @@
 .pm-booking-pending-row { display: flex; flex-direction: column; gap: .5rem; width: 100%; margin-top: var(--pm-booking-space); text-align: left; padding: var(--pm-booking-space); }
 .pm-booking-link { color: var(--pm-booking-blue); font-weight: 600; }
 .pm-booking-empty { padding: var(--pm-booking-space); background: var(--pm-booking-bg); border-radius: .75rem; }
-@media (max-width: 480px) { .pm-booking-dialog { max-height: 96dvh; } .pm-booking-body { padding: var(--pm-booking-space); } .pm-booking-actions { padding-inline: var(--pm-booking-space); } }
+@media (max-width: 600px) {
+  .pm-booking-dialog[open] {
+    display: flex;
+    flex-direction: column;
+    inset: 0;
+    margin: 0;
+    width: 100%;
+    max-width: none;
+    block-size: 100dvh;
+    max-height: 100dvh;
+    border-radius: 0;
+    overflow: hidden;
+  }
+  .pm-booking-header {
+    flex-shrink: 0;
+    padding-top: max(var(--pm-booking-space), env(safe-area-inset-top));
+    padding-inline: calc(var(--pm-booking-space) * 1.5);
+    border-bottom: 0;
+  }
+  .pm-booking-body {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding: var(--pm-booking-space) calc(var(--pm-booking-space) * 1.5);
+  }
+  .pm-booking-body h2 { margin-top: var(--pm-booking-space); }
+  .pm-booking-schedule { padding: calc(var(--pm-booking-space) * 1.5); }
+  .pm-booking-facts div { padding-block: .75rem; }
+  .pm-booking-call { margin-top: var(--pm-booking-space); font-weight: 600; }
+  .pm-booking-dialog > .pm-booking-actions {
+    flex-shrink: 0;
+    padding-inline: calc(var(--pm-booking-space) * 1.5);
+    padding-bottom: max(calc(var(--pm-booking-space) * 1.5), env(safe-area-inset-bottom));
+  }
+  .pm-booking-actions .pm-booking-button { min-height: 3.5rem; }
+  .pm-booking-rejection .pm-booking-actions { padding-inline: 0; }
+}
