@@ -24,7 +24,9 @@
     if (!pendingTap || !binding) return;
     const data = pendingTap; pendingTap = null;
     if (data.binding === binding && data.id) {
-      window.dispatchEvent(new CustomEvent('pm-native-notification', { detail: { id: data.id } }));
+      if (data.action && data.bookingId) {
+        window.dispatchEvent(new CustomEvent('pm-native-booking-open', { detail: { id: String(data.bookingId), action: data.action, trustedAction: true, binding: data.binding } }));
+      } else window.dispatchEvent(new CustomEvent('pm-native-notification', { detail: { id: data.id } }));
     }
   }
   async function check() {
@@ -90,7 +92,8 @@
   if (plugin) {
     plugin.addListener('pushNotificationActionPerformed', event => {
       const data = event.notification.data || {};
-      pendingTap = data; openPending();
+      const action = event.actionId === 'PM_BOOKING_ACCEPT' ? 'accept' : event.actionId === 'PM_BOOKING_REJECT' ? 'reject' : '';
+      pendingTap = { ...data, action }; openPending();
     });
   }
   window.PMNativePush = { available: Boolean(available), check, request, subscribe, clear, activityToken,

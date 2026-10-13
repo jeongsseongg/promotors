@@ -58,7 +58,7 @@ android {
         applicationId 'kr.promotors.app'
         minSdkVersion 24
         targetSdkVersion 36
-        versionCode 5
+        versionCode 6
         versionName '1.0.3'
 
         // The name for the application

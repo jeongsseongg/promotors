@@ -1,5 +1,6 @@
 import UIKit
 import Capacitor
+import UserNotifications
 
 @UIApplicationMain
 class AppDelegate: UIResponder, UIApplicationDelegate {
@@ -14,7 +15,17 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     var window: UIWindow?
 
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
-        // Override point for customization after application launch.
+        let accept = UNNotificationAction(identifier: "PM_BOOKING_ACCEPT", title: "예약 승인",
+                                          options: [.foreground, .authenticationRequired])
+        let reject = UNNotificationAction(identifier: "PM_BOOKING_REJECT", title: "거절",
+                                          options: [.foreground, .authenticationRequired, .destructive])
+        let category = UNNotificationCategory(identifier: "PM_BOOKING_ACTIONS", actions: [accept, reject],
+                                              intentIdentifiers: [], options: [])
+        UNUserNotificationCenter.current().getNotificationCategories { existing in
+            var categories = existing.filter { $0.identifier != category.identifier }
+            categories.insert(category)
+            UNUserNotificationCenter.current().setNotificationCategories(categories)
+        }
         return true
     }
 

@@ -26,6 +26,14 @@ public class DelegationService extends com.google.androidbrowserhelper.trusted.D
             channelName = "예약 일정";
             countdown(notification);
         }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            CharSequence body = notification.extras.getCharSequence(Notification.EXTRA_TEXT, "");
+            if (body.length() > 0) {
+                // Recover the original Chromium builder so tap/action PendingIntents stay intact.
+                notification = Notification.Builder.recoverBuilder(this, notification)
+                        .setStyle(new Notification.BigTextStyle().bigText(body)).build();
+            }
+        }
         Uri sound = persistent ? null : Uri.parse("android.resource://" + getPackageName() + "/" + R.raw.precision_check);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             // Use AndroidX's existing channel ID so user mute/sound choices stay respected.

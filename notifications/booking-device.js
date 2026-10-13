@@ -9,10 +9,12 @@ export function attachBookingDevice(bookings) {
     const timestamp = Date.parse(`${String(first?.date || '').replaceAll('.', '-')}T${time}:00+09:00`);
     return { active: state.active && state.loaded, pendingCount: state.items.length, upcomingCount: state.upcoming.length,
       branch: first?.branch || '프로모터스', schedule: first ? `${first.date} · ${first.time}` : '', bookingId: String(first?.id || ''),
-      startsAt: Number.isFinite(timestamp) ? timestamp / 1000 : 0 };
+      startsAt: Number.isFinite(timestamp) ? timestamp / 1000 : 0,
+      customerName: String(first?.name || '').slice(0, 60), vehicleName: String(first?.model || '').slice(0, 80),
+      vehiclePlate: String(first?.car || '').slice(0, 30) };
   }
   if (plugin) {
-    plugin.addListener('bookingOpen', event => window.dispatchEvent(new CustomEvent('pm-native-booking-open', { detail: { id: String(event.id) } })));
+    plugin.addListener('bookingOpen', event => window.dispatchEvent(new CustomEvent('pm-native-booking-open', { detail: { id: String(event.id), action: ['accept', 'reject'].includes(event.action) ? event.action : '', trustedAction: event.trustedAction === true, binding: event.binding } })));
     plugin.addListener('activityToken', event => window.PMNativePush?.activityToken(event));
   }
   bookings.listen(() => {

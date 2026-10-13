@@ -6,8 +6,19 @@
   let transition = Promise.resolve();
   let pendingId = new URL(location.href).searchParams.get('notification') || '';
   let pendingBooking = new URL(location.href).searchParams.get('booking') || '';
+  let pendingBookingAction = new URL(location.href).searchParams.get('bookingAction') || '';
+  const bookingAction = value => ['accept', 'reject'].includes(value) ? value : '';
+  let sessionEpoch = 0, pendingBookingEpoch = 0, pendingBookingOwner = authToken || '';
+  let pendingBookingBinding = new URL(location.href).searchParams.get('bookingBinding') || '';
+  let pendingNativeAction = false;
+  function queueBooking(data, native = false) {
+    pendingBooking = String(data.id || ''); pendingBookingAction = bookingAction(data.action);
+    pendingBookingBinding = String(data.binding || ''); pendingNativeAction = native && data.trustedAction === true;
+    pendingBookingOwner = authToken || ''; pendingBookingEpoch = sessionEpoch;
+    window.PMPush?.sessionChanged();
+  }
   window.addEventListener('pm-native-booking-open', event => {
-    pendingBooking = String(event.detail.id || ''); window.PMPush?.sessionChanged();
+    queueBooking(event.detail || {}, true);
   });
   let unread = null, observedButton, optInErrorShown = false;
   async function privateRpc(name, params) {
@@ -32,10 +43,10 @@
     return result;
   }
   const styles = document.createElement('link');
-  styles.rel = 'stylesheet'; styles.href = 'notifications/booking-actions.css?v=20261013';
+  styles.rel = 'stylesheet'; styles.href = 'notifications/booking-actions.css?v=20261013-customers';
   document.head.append(styles);
-  const { createBookingActions } = await import('./booking-actions.js?v=20261012');
-  const { createBookingSchedule } = await import('./booking-schedule.js?v=20261013');
+  const { createBookingActions } = await import('./booking-actions.js?v=20261013-customers-actions');
+  const { createBookingSchedule } = await import('./booking-schedule.js?v=20261013-customers');
   const bookings = createBookingActions({ rpc: privateRpc, getToken: () => authToken, isAdmin: () => isAdmin,
     canView: branch => isTopAdmin() || adminBranches.includes(branch),
     onChanged: async result => {
@@ -48,7 +59,7 @@
   });
   const schedule = createBookingSchedule(bookings);
   window.PMBookingSchedule = schedule;
-  const { attachBookingDevice } = await import('./booking-device.js?v=20261013');
+  const { attachBookingDevice } = await import('./booking-device.js?v=20261013-customers');
   attachBookingDevice(bookings);
   const api = PMNotifications.create({ rpc: notificationRpc, getToken: () => authToken, openTarget, bookings });
   new MutationObserver(() => {
@@ -76,7 +87,7 @@
         if (target.kind === 'repair') return openRunAlbumModal(target.id, { allowDelete: true });
         const booking = getBookings().find(row => row.id === target.id);
         if (!booking) throw new Error('NOT_FOUND');
-        return schedule.open(booking.id);
+        return bookings.open(booking.id);
       }
       if (!member) throw new Error('AUTH_REQUIRED');
       if (target.kind === 'repair') return openWorkStatusPage();
@@ -93,6 +104,7 @@
     return true;
   }
   async function resume() {
+    const epoch = sessionEpoch, owner = authToken;
     if (authToken && localStorage.getItem('pm-push-opt-in-v1')) {
       try { await enable(); optInErrorShown = false; }
       catch {
@@ -106,10 +118,14 @@
     await bookings.start().catch(() => {});
     if (pendingBooking) {
       if (!authToken) { openMemberModal('login'); return; }
-      const id = pendingBooking; pendingBooking = '';
-      const url = new URL(location.href); url.searchParams.delete('booking');
+      const id = pendingBooking, requested = bookingAction(pendingBookingAction);
+      const bindingMatches = pendingBookingBinding && (pendingNativeAction
+        ? pendingBookingBinding === window.PMNativePush?.binding : pendingBookingBinding === window.PMWebPushBinding);
+      const action = requested && bindingMatches && pendingBookingOwner === authToken && pendingBookingEpoch === sessionEpoch ? requested : '';
+      pendingBooking = ''; pendingBookingAction = ''; pendingBookingBinding = ''; pendingNativeAction = false;
+      const url = new URL(location.href); url.searchParams.delete('booking'); url.searchParams.delete('bookingAction'); url.searchParams.delete('bookingBinding');
       history.replaceState(history.state, '', url);
-      try { await bookings.openSchedule(id); }
+      try { if (requested) await bookings.open(id, action ? { action } : {}); else await bookings.openSchedule(id); }
       catch { await pmAlert('예약 일정을 열 수 없습니다. 관리자 로그인과 지점 권한을 확인해 주세요.'); }
     }
     if (!pendingId) return;
@@ -156,7 +172,7 @@
     if (event.data?.type === 'PM_PUSH_OPEN') {
       pendingId = String(event.data.id || ''); window.PMPush.sessionChanged();
     } else if (event.data?.type === 'PM_BOOKING_SCHEDULE_OPEN') {
-      pendingBooking = String(event.data.id || ''); window.PMPush.sessionChanged();
+      queueBooking(event.data);
     } else if (event.data?.type === 'PM_PUSH_REFRESH') window.PMPush.sessionChanged();
   });
   window.addEventListener('storage', event => {
