@@ -9414,4 +9414,3 @@ window.addEventListener('pagehide', () => {
   logEvent('page_exit', { view: activityCurrentView }, { keepalive: true });
 });
 
-import('./app-launch/popup.js?v=20261002i').catch(error => console.warn('앱 안내를 불러오지 못했습니다.', error));
