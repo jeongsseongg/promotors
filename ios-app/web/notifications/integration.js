@@ -5,6 +5,10 @@
   PM_PRIVATE_MUTATORS.add('pm_native_push_subscribe');
   let transition = Promise.resolve();
   let pendingId = new URL(location.href).searchParams.get('notification') || '';
+  let pendingBooking = new URL(location.href).searchParams.get('booking') || '';
+  window.addEventListener('pm-native-booking-open', event => {
+    pendingBooking = String(event.detail.id || ''); window.PMPush?.sessionChanged();
+  });
   let unread = null, observedButton, optInErrorShown = false;
   async function privateRpc(name, params) {
     if (PM_PRIVATE_MUTATORS.has(name)) {
@@ -28,10 +32,10 @@
     return result;
   }
   const styles = document.createElement('link');
-  styles.rel = 'stylesheet'; styles.href = 'notifications/booking-actions.css?v=20261012';
+  styles.rel = 'stylesheet'; styles.href = 'notifications/booking-actions.css?v=20261013';
   document.head.append(styles);
   const { createBookingActions } = await import('./booking-actions.js?v=20261012');
-  const { attachBookingDock } = await import('./booking-dock.js?v=20261012');
+  const { createBookingSchedule } = await import('./booking-schedule.js?v=20261013');
   const bookings = createBookingActions({ rpc: privateRpc, getToken: () => authToken, isAdmin: () => isAdmin,
     canView: branch => isTopAdmin() || adminBranches.includes(branch),
     onChanged: async result => {
@@ -42,8 +46,9 @@
       if (isAdmin) renderAdmBook();
     }
   });
-  attachBookingDock(bookings);
-  const { attachBookingDevice } = await import('./booking-device.js?v=20261012');
+  const schedule = createBookingSchedule(bookings);
+  window.PMBookingSchedule = schedule;
+  const { attachBookingDevice } = await import('./booking-device.js?v=20261013');
   attachBookingDevice(bookings);
   const api = PMNotifications.create({ rpc: notificationRpc, getToken: () => authToken, openTarget, bookings });
   new MutationObserver(() => {
@@ -71,10 +76,7 @@
         if (target.kind === 'repair') return openRunAlbumModal(target.id, { allowDelete: true });
         const booking = getBookings().find(row => row.id === target.id);
         if (!booking) throw new Error('NOT_FOUND');
-        showView('adm-book');
-        adm.branch = booking.branch; adm.selDate = booking.date;
-        renderAdmBook();
-        return bookings.open(booking.id);
+        return schedule.open(booking.id);
       }
       if (!member) throw new Error('AUTH_REQUIRED');
       if (target.kind === 'repair') return openWorkStatusPage();
@@ -102,6 +104,14 @@
     }
     await api.restore().catch(() => {});
     await bookings.start().catch(() => {});
+    if (pendingBooking) {
+      if (!authToken) { openMemberModal('login'); return; }
+      const id = pendingBooking; pendingBooking = '';
+      const url = new URL(location.href); url.searchParams.delete('booking');
+      history.replaceState(history.state, '', url);
+      try { await bookings.openSchedule(id); }
+      catch { await pmAlert('예약 일정을 열 수 없습니다. 관리자 로그인과 지점 권한을 확인해 주세요.'); }
+    }
     if (!pendingId) return;
     if (!authToken) { openMemberModal('login'); return; }
     const id = pendingId; pendingId = '';
@@ -116,6 +126,13 @@
     return transition;
   }
   window.PMBookingActions = bookings;
+  bookings.openSchedule = async id => {
+    if (id) {
+      const result = await privateRpc('pm_admin_booking_actions', { p_token: authToken, p_action: 'get', p_data: { id } });
+      if (!isAdmin || !canAccessBranch(result.booking?.branch)) throw new Error('FORBIDDEN');
+    }
+    return schedule.open(id);
+  };
   window.PMPush = {
     enable, open: async () => { if (!authToken) return openMemberModal('login'); await bookings.start().catch(() => {}); return api.open(); }, disconnect,
     sessionChanged: () => { transition = transition.then(resume); return transition; }
@@ -138,6 +155,8 @@
   navigator.serviceWorker?.addEventListener('message', event => {
     if (event.data?.type === 'PM_PUSH_OPEN') {
       pendingId = String(event.data.id || ''); window.PMPush.sessionChanged();
+    } else if (event.data?.type === 'PM_BOOKING_SCHEDULE_OPEN') {
+      pendingBooking = String(event.data.id || ''); window.PMPush.sessionChanged();
     } else if (event.data?.type === 'PM_PUSH_REFRESH') window.PMPush.sessionChanged();
   });
   window.addEventListener('storage', event => {

@@ -1,4 +1,4 @@
-:root { --pm-booking-space: 1rem; --pm-booking-radius: 1.5rem; --pm-booking-border: #e5e8eb; --pm-booking-ink: #191f28; --pm-booking-muted: #596575; --pm-booking-blue: #0064ff; --pm-booking-bg: #f5f6f8; }
+:root { --pm-booking-space: 1rem; --pm-booking-radius: 1.5rem; --pm-booking-border: #e5e8eb; --pm-booking-ink: #191f28; --pm-booking-muted: #596575; --pm-booking-blue: #20235f; --pm-booking-bg: #f5f6f8; --pm-booking-accent: #f4cf36; }
 .pm-booking-dialog { box-sizing: border-box; padding: 0; margin: auto; border: 0; border-radius: var(--pm-booking-radius); background: white; color: var(--pm-booking-ink); width: calc(100% - 32px); max-width: 32rem; max-height: 92dvh; overflow-y: auto; font-size: clamp(1rem, 1vw, 1.125rem); line-height: 1.6; }
 .pm-booking-dialog::backdrop { background: rgb(25 31 40 / 45%); }
 .pm-booking-header { display: flex; justify-content: space-between; align-items: center; padding: var(--pm-booking-space) calc(var(--pm-booking-space) * 1.5); border-bottom: 1px solid var(--pm-booking-border); }
@@ -26,6 +26,21 @@
 .pm-booking-pending-row { display: flex; flex-direction: column; gap: .5rem; width: 100%; margin-top: var(--pm-booking-space); text-align: left; padding: var(--pm-booking-space); }
 .pm-booking-link { color: var(--pm-booking-blue); font-weight: 600; }
 .pm-booking-empty { padding: var(--pm-booking-space); background: var(--pm-booking-bg); border-radius: .75rem; }
+.pm-booking-schedule-entry { display: block; width: calc(100% - 2 * var(--pm-booking-space)); margin: var(--pm-booking-space) auto; max-width: 60rem; font-weight: 700; text-align: left; }
+.pm-booking-schedule-page { font-family: Pretendard, -apple-system, BlinkMacSystemFont, sans-serif; max-width: 48rem; }
+.pm-booking-schedule-controls { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--pm-booking-space); margin-block: calc(var(--pm-booking-space) * 1.5); }
+.pm-booking-schedule-tabs { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .5rem; }
+.pm-booking-schedule-tabs [aria-pressed="true"] { color: white; background: var(--pm-booking-blue); border-color: var(--pm-booking-blue); }
+.pm-booking-schedule-controls label { display: grid; gap: .5rem; min-width: 0; color: var(--pm-booking-muted); font-size: .875rem; }
+.pm-booking-schedule-controls input, .pm-booking-schedule-controls select { box-sizing: border-box; width: 100%; min-width: 0; min-height: 3rem; padding: .5rem; border: 1px solid var(--pm-booking-border); border-radius: .75rem; background: white; color: var(--pm-booking-ink); font: inherit; }
+.pm-booking-schedule-controls > button { align-self: end; }
+.pm-booking-schedule-day h3 { margin: calc(var(--pm-booking-space) * 1.5) 0 .5rem; font-size: 1rem; }
+.pm-booking-schedule-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: .5rem; box-sizing: border-box; width: 100%; margin-bottom: var(--pm-booking-space); padding: var(--pm-booking-space); border: 1px solid var(--pm-booking-border); border-radius: var(--pm-booking-space); background: white; color: var(--pm-booking-ink); font: inherit; text-align: left; cursor: pointer; overflow-wrap: anywhere; }
+.pm-booking-schedule-row > :nth-child(n+3) { grid-column: 1 / -1; }
+.pm-booking-schedule-time { font-size: clamp(1.25rem, 4vw, 1.5rem); }
+.pm-booking-schedule-row .pm-booking-muted { margin: 0; }
+.pm-booking-schedule-focused { border-color: var(--pm-booking-blue); box-shadow: inset .25rem 0 var(--pm-booking-accent); }
+.pm-booking-schedule-row:focus-visible { outline: 3px solid var(--pm-booking-blue); outline-offset: 2px; }
 .pm-booking-dock { position: fixed; z-index: 125; inset-inline-end: var(--pm-booking-space); bottom: var(--pm-booking-space); box-sizing: border-box; width: calc(100% - 2 * var(--pm-booking-space)); max-width: 26rem; padding: var(--pm-booking-space); border: 1px solid var(--pm-booking-border); border-radius: var(--pm-booking-radius); background: white; color: var(--pm-booking-ink); box-shadow: 0 .5rem 2rem rgb(25 31 40 / 12%); font-size: clamp(1rem, 1vw, 1.125rem); line-height: 1.5; }
 .pm-booking-dock-header { display: flex; align-items: center; justify-content: space-between; gap: .5rem; }
 .pm-booking-dock-header strong { font-size: 1rem; }

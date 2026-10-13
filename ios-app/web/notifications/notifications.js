@@ -117,6 +117,8 @@
         const result = await call('subscribe', { subscription: subscription.toJSON(), deviceId: deviceId() });
         if (sessionGeneration !== generation) throw new Error('로그인 상태가 변경되었습니다. 다시 시도해 주세요.');
         registration.active?.postMessage({ type: 'PM_PUSH_BINDING', binding: result.binding || null });
+        global.PMWebPushBinding = result.binding || null;
+        global.PMBookingActions?.refresh().catch(() => {});
         await call('preferences', { enabled: true });
       } catch (error) {
         if (newlyCreated) await subscription.unsubscribe();
@@ -130,6 +132,7 @@
       if (subscription) await subscription.unsubscribe();
     }
     async function clearBinding() {
+      global.PMWebPushBinding = null;
       if (native?.available) { await native.clear(); return; }
       if (!('serviceWorker' in navigator)) return;
       const registration = await navigator.serviceWorker.getRegistration();
@@ -172,7 +175,10 @@
       if (current.preferences?.enabled) {
         if (sessionGeneration !== generation) return;
         const result = await call('subscribe', { subscription: subscription.toJSON(), deviceId: deviceId() });
-        if (sessionGeneration === generation) registration.active?.postMessage({ type: 'PM_PUSH_BINDING', binding: result.binding || null });
+        if (sessionGeneration === generation) {
+          registration.active?.postMessage({ type: 'PM_PUSH_BINDING', binding: result.binding || null });
+          global.PMWebPushBinding = result.binding || null;
+        }
       }
       else await disconnect();
     }
