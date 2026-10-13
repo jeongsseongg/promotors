@@ -5,7 +5,7 @@
   PM_PRIVATE_MUTATORS.add('pm_native_push_subscribe');
   let transition = Promise.resolve();
   let pendingId = new URL(location.href).searchParams.get('notification') || '';
-  let pendingBooking = '';
+  let pendingBooking = new URL(location.href).searchParams.get('booking') || '';
   window.addEventListener('pm-native-booking-open', event => {
     pendingBooking = String(event.detail.id || ''); window.PMPush?.sessionChanged();
   });
@@ -107,6 +107,8 @@
     if (pendingBooking) {
       if (!authToken) { openMemberModal('login'); return; }
       const id = pendingBooking; pendingBooking = '';
+      const url = new URL(location.href); url.searchParams.delete('booking');
+      history.replaceState(history.state, '', url);
       try { await bookings.openSchedule(id); }
       catch { await pmAlert('예약 일정을 열 수 없습니다. 관리자 로그인과 지점 권한을 확인해 주세요.'); }
     }
@@ -153,6 +155,8 @@
   navigator.serviceWorker?.addEventListener('message', event => {
     if (event.data?.type === 'PM_PUSH_OPEN') {
       pendingId = String(event.data.id || ''); window.PMPush.sessionChanged();
+    } else if (event.data?.type === 'PM_BOOKING_SCHEDULE_OPEN') {
+      pendingBooking = String(event.data.id || ''); window.PMPush.sessionChanged();
     } else if (event.data?.type === 'PM_PUSH_REFRESH') window.PMPush.sessionChanged();
   });
   window.addEventListener('storage', event => {

@@ -16,12 +16,17 @@ export function attachBookingDevice(bookings) {
     plugin.addListener('activityToken', event => window.PMNativePush?.activityToken(event));
   }
   bookings.listen(() => {
-    if (!plugin) return;
-    const state = snapshot(), binding = window.PMNativePush?.binding;
+    const state = snapshot(), binding = plugin ? window.PMNativePush?.binding : window.PMWebPushBinding;
     const next = JSON.stringify({ ...state, binding });
     if (signature === next && Date.now() - syncedAt < 60000) return;
     signature = next;
     sequence = sequence.catch(() => {}).then(async () => {
+      if (!plugin) {
+        if (!binding || binding !== window.PMWebPushBinding || !snapshot().active) return;
+        const registration = await navigator.serviceWorker?.getRegistration().catch(() => null);
+        registration?.active?.postMessage({ type: 'PM_BOOKING_SNAPSHOT', state, binding });
+        syncedAt = Date.now(); return;
+      }
       if (!state.active || !binding || binding !== window.PMNativePush?.binding || !snapshot().active) await plugin.clear();
       else await plugin.sync({ ...state, binding });
       syncedAt = Date.now();

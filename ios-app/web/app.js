@@ -9413,4 +9413,3 @@ window.addEventListener('pagehide', () => {
   activityPageExited = true;
   logEvent('page_exit', { view: activityCurrentView }, { keepalive: true });
 });
-

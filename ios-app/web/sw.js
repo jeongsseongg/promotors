@@ -7,4 +7,4 @@ self.addEventListener('fetch', event => {
   }
 });
 
-importScripts('/notifications/service-worker.js?v=1790592719062');
+importScripts('/notifications/service-worker.js?v=20261013-schedule');

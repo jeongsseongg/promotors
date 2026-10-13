@@ -13,20 +13,22 @@ public class DelegationService extends com.google.androidbrowserhelper.trusted.D
     public boolean onNotifyNotificationWithChannel(String tag, int id,
             Notification notification, String channelName) {
         // Chromium wraps a developer tag as p[b]#<origin>#1<developer_tag>.
-        if (tag != null && (tag.startsWith("pm-booking-pending-")
-                || tag.matches("^pb?#https://www\\.promotors\\.kr/?#1pm-booking-pending-[A-Za-z0-9_-]{1,128}$"))) {
+        boolean persistent = tag != null && (tag.startsWith("pm-booking-pending-")
+                || tag.matches("^pb?#https://www\\.promotors\\.kr/?#1pm-booking-pending-[A-Za-z0-9_-]{1,128}$"));
+        if (persistent) {
             notification.flags |= Notification.FLAG_ONGOING_EVENT | Notification.FLAG_ONLY_ALERT_ONCE;
             notification.flags &= ~Notification.FLAG_AUTO_CANCEL;
             notification.visibility = Notification.VISIBILITY_PRIVATE;
+            channelName = "예약 일정";
         }
-        Uri sound = Uri.parse("android.resource://" + getPackageName() + "/" + R.raw.precision_check);
+        Uri sound = persistent ? null : Uri.parse("android.resource://" + getPackageName() + "/" + R.raw.precision_check);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             // Use AndroidX's existing channel ID so user mute/sound choices stay respected.
             String channelId = channelName.toLowerCase(Locale.ROOT).replace(' ', '_') + "_channel_id";
             NotificationManager manager = getSystemService(NotificationManager.class);
             if (manager.getNotificationChannel(channelId) == null) {
                 NotificationChannel channel = new NotificationChannel(channelId, channelName,
-                        NotificationManager.IMPORTANCE_DEFAULT);
+                        persistent ? NotificationManager.IMPORTANCE_LOW : NotificationManager.IMPORTANCE_DEFAULT);
                 AudioAttributes audio = new AudioAttributes.Builder()
                         .setUsage(AudioAttributes.USAGE_NOTIFICATION)
                         .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION).build();
