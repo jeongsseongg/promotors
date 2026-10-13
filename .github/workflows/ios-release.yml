@@ -125,7 +125,7 @@ jobs:
           ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
         run: |
           set -euo pipefail
-          xcodebuild -project ios/App/App.xcodeproj -scheme App -configuration Release -destination 'generic/platform=iOS' -archivePath "$RUNNER_TEMP/Promotors.xcarchive" -allowProvisioningUpdates -authenticationKeyPath "$HOME/.appstoreconnect/private_keys/AuthKey_${ASC_KEY_ID}.p8" -authenticationKeyID "$ASC_KEY_ID" -authenticationKeyIssuerID "$ASC_ISSUER_ID" DEVELOPMENT_TEAM=Z8QYZ8K855 CODE_SIGN_STYLE=Automatic CODE_SIGN_IDENTITY='Apple Distribution' CURRENT_PROJECT_VERSION="$GITHUB_RUN_NUMBER" archive > "$RUNNER_TEMP/archive.log" 2>&1 || { tail -100 "$RUNNER_TEMP/archive.log"; exit 1; }
+          xcodebuild -project ios/App/App.xcodeproj -scheme App -configuration Release -destination 'generic/platform=iOS' -archivePath "$RUNNER_TEMP/Promotors.xcarchive" -allowProvisioningUpdates -authenticationKeyPath "$HOME/.appstoreconnect/private_keys/AuthKey_${ASC_KEY_ID}.p8" -authenticationKeyID "$ASC_KEY_ID" -authenticationKeyIssuerID "$ASC_ISSUER_ID" DEVELOPMENT_TEAM=Z8QYZ8K855 CODE_SIGN_STYLE=Automatic CURRENT_PROJECT_VERSION="$GITHUB_RUN_NUMBER" archive > "$RUNNER_TEMP/archive.log" 2>&1 || { tail -100 "$RUNNER_TEMP/archive.log"; exit 1; }
           echo "Signed archive build $GITHUB_RUN_NUMBER succeeded" >> "$GITHUB_STEP_SUMMARY"
       - name: Export and upload
         if: github.event_name == 'workflow_dispatch' && inputs.upload && inputs.simulator_only != true
