@@ -15,7 +15,7 @@ const SUPABASE_DATA_KEYS = [
 ];
 const SUPABASE_PUBLIC_DATA_KEYS = new Set([
   'pm-branches', 'pm-notices', 'promotors-cases', 'pm-products', 'pm-blocked',
-  'pm-blog-settings', 'pm-intro-slides', 'pm-home-view', 'pm-event-banners'
+  'pm-blog-settings', 'pm-intro-slides', 'pm-home-view', 'pm-event-banners', 'pm-branch-hours'
 ]);
 const SUPABASE_ID_MERGE_KEYS = new Set([
   'pm-bookings', 'pm-service-runs', 'pm-messages',
@@ -954,6 +954,7 @@ const DEFAULT_BRANCH_HOURS = Object.freeze({
   lunchEnabled: false, lunchStart: '12:00', lunchEnd: '13:00', closedDates: []
 });
 const getBranchHoursMap = () => store.get('pm-branch-hours', {});
+let branchHoursReady = false;
 function branchHours(branch) {
   const saved = getBranchHoursMap()[branch] || {};
   const legacyDay = day => ({
@@ -1005,6 +1006,7 @@ function branchDateInfo(branch, date) {
   return { closed, reason: closed ? '휴무' : '', settings, day };
 }
 function branchSlotReason(branch, date, time) {
+  if (getSupabaseConfig() && (!branchHoursReady || !getBranchHoursMap()[branch])) return '확인중';
   const info = branchDateInfo(branch, date);
   if (info.closed) return '휴무';
   const { settings, day } = info;
@@ -1015,12 +1017,17 @@ function branchSlotReason(branch, date, time) {
   return '';
 }
 async function hydrateBranchHours() {
-  if (!getSupabaseConfig()) return;
+  if (!getSupabaseConfig()) return true;
   try {
     const value = await supabaseRpc('pm_branch_hours_read');
-    store.setLocal('pm-branch-hours', value && typeof value === 'object' ? value : {});
+    if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('INVALID_BRANCH_HOURS');
+    store.setLocal('pm-branch-hours', value);
+    branchHoursReady = true;
+    return true;
   } catch (error) {
+    branchHoursReady = false;
     if (!String(error?.message || '').includes('pm_branch_hours_read')) console.warn('Branch hours load failed', error);
+    return false;
   }
 }
 async function saveBranchHours(branch, settings) {
@@ -1786,6 +1793,7 @@ function openMemberModal(tab) {
       store.setLocal('pm-member', member);
       logEvent(tab === 'signup' ? 'signup_complete' : 'login_complete');
       await hydrateSupabaseData();
+      await hydrateBranchHours();
       closeModal();
       applyAuthUI();
     } catch (error) {
@@ -4076,6 +4084,8 @@ function dateKey(y, m, d) { return `${y}.${String(m + 1).padStart(2, '0')}.${Str
 async function renderCalendar(message) {
   const renderSequence = ++calendarRenderSequence;
   const { branch, y, m } = cal;
+  if (!await hydrateBranchHours()) message = '예약 가능 시간을 확인하지 못했습니다. 잠시 후 다시 시도해주세요.';
+  if (renderSequence !== calendarRenderSequence || !cal || cal.branch !== branch || cal.y !== y || cal.m !== m) return;
   const bookings = getBookings().filter(b => b.branch === branch && isActiveBooking(b));
   let occupiedSlots;
   try {
@@ -4194,7 +4204,7 @@ function renderSlots(branchBookings, occupiedSlots = new Set()) {
       el.textContent = unavailableReason;
       el.disabled = true;
       el.classList.add('blocked', 'business-closed');
-      el.title = unavailableReason === '점심' ? '점심시간에는 예약할 수 없습니다.' : '영업시간 외에는 예약할 수 없습니다.';
+      el.title = unavailableReason === '확인중' ? '예약 가능 시간을 확인하지 못했습니다.' : unavailableReason === '점심' ? '점심시간에는 예약할 수 없습니다.' : '영업시간 외에는 예약할 수 없습니다.';
     } else if (blockedTimes.includes(t)) {
       el.innerHTML = `<strong>${t}</strong><small>예약마감</small>`;
       el.disabled = true;
@@ -4300,6 +4310,17 @@ function renderServiceStep() {
       pmAlert(`${activeBooking.date} ${activeBooking.time} 예약된 날짜가 있습니다. 취소 후 신청해주세요.`);
       return;
     }
+    const hoursLoaded = await hydrateBranchHours();
+    if (!selectionCurrent()) return;
+    if (!hoursLoaded) {
+      await pmAlert('예약 가능 시간을 확인하지 못했습니다. 잠시 후 다시 시도해주세요.');
+      return;
+    }
+    if (branchSlotReason(selection.branch, selection.selDate, selection.selTime)) {
+      cal.selTime = null;
+      renderCalendar('선택한 날짜 또는 시간은 해당 지점의 휴무·영업시간 외이거나 점심시간입니다.');
+      return;
+    }
     const arr = getBookings();
     let latestAvailability;
     try {
@@ -4381,12 +4402,12 @@ function renderServiceStep() {
         renderCalendar('죄송합니다. 방금 다른 고객이 해당 시간을 예약했습니다.');
       } else if (code.includes('ACTIVE_BOOKING_EXISTS')) {
         await pmAlert('해당 차량번호로 접수된 예약이 이미 있습니다. 지점으로 문의해주세요.');
-      } else if (code.includes('GUEST_BOOKING_LUNCH_TIME')) {
+      } else if (code.includes('BOOKING_LUNCH_TIME')) {
         renderCalendar('선택한 시간은 해당 지점의 점심시간입니다. 다른 시간을 선택해주세요.');
-      } else if (code.includes('GUEST_BOOKING_BUSINESS_CLOSED')) {
+      } else if (code.includes('BOOKING_BUSINESS_CLOSED')) {
         renderCalendar('선택한 날짜 또는 시간은 해당 지점의 휴무·영업시간 외입니다.');
       } else {
-        await pmAlert('예약을 서버에 저장하지 못했습니다. SQL 적용 여부와 네트워크를 확인해주세요.');
+        await pmAlert('예약을 접수하지 못했습니다. 잠시 후 다시 시도해주세요.');
       }
       return;
     }
@@ -9392,3 +9413,5 @@ window.addEventListener('pagehide', () => {
   activityPageExited = true;
   logEvent('page_exit', { view: activityCurrentView }, { keepalive: true });
 });
+
+import('./app-launch/popup.js?v=20261002i').catch(error => console.warn('앱 안내를 불러오지 못했습니다.', error));

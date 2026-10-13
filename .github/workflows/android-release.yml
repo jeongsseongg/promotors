@@ -1,7 +1,7 @@
 name: Promotors Android
 on:
   push:
-    branches: [codex/app-permissions-20261002]
+    branches: [codex/app-permissions-20261002, codex/booking-notifications-20261013]
     paths: ['android-twa/**', '.github/workflows/android-release.yml']
   workflow_dispatch:
 permissions:

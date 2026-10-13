@@ -12,7 +12,7 @@ export function attachBookingDevice(bookings) {
       startsAt: Number.isFinite(timestamp) ? timestamp / 1000 : 0 };
   }
   if (plugin) {
-    plugin.addListener('bookingOpen', event => bookings.open(String(event.id)).catch(() => {}));
+    plugin.addListener('bookingOpen', event => window.dispatchEvent(new CustomEvent('pm-native-booking-open', { detail: { id: String(event.id) } })));
     plugin.addListener('activityToken', event => window.PMNativePush?.activityToken(event));
   }
   bookings.listen(() => {
