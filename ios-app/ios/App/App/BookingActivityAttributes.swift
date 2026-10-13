@@ -9,6 +9,9 @@ struct BookingActivityAttributes: ActivityAttributes {
         var schedule: String
         var bookingId: String
         var startsAt: Double
+        var customerName: String?
+        var vehicleName: String?
+        var vehiclePlate: String?
     }
     var binding: String
 }
