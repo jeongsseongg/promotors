@@ -2,9 +2,7 @@
 export function createConnectionNotice({ api, getToken }) {
   let snapshot = null, busy = false, message = '', revision = 0;
   const cards = new Map();
-  const installed = () => window.Capacitor?.isNativePlatform?.() ||
-    navigator.standalone || matchMedia('(display-mode: standalone)').matches ||
-    matchMedia('(display-mode: fullscreen)').matches || document.referrer.startsWith('android-app://');
+  const installed = () => window.Capacitor?.isNativePlatform?.() === true;
   const node = (tag, text, className) => {
     const value = document.createElement(tag);
     if (text) value.textContent = text;

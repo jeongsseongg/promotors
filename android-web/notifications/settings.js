@@ -29,7 +29,7 @@
     }
     section.append(group, sound(api), maintenance(api));
     section.append(button('테스트 알림 보내기', api.test, 'pm-notify-button pm-notify-text-button'));
-    section.append(el('p', '소리와 진동은 휴대폰의 알림 설정을 따라요.', 'pm-notify-footnote'));
+    section.append(el('p', '소리와 진동은 기기의 알림 설정을 따라요.', 'pm-notify-footnote'));
     return section;
   }
   function sound({ element: el, button, status }) {
