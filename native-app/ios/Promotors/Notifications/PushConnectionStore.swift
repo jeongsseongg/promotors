@@ -53,6 +53,7 @@ final class PushConnectionStore {
         lock.lock(); defer { lock.unlock() }
         guard let binding = target["binding"] as? String, binding == activeBinding else { return nil }
         var safe = target
+        safe["nativeEventId"] = UUID().uuidString
         safe["trustedAction"] = false
         if trusted {
             let nonce = UUID().uuidString
@@ -63,8 +64,9 @@ final class PushConnectionStore {
         }
         pendingTarget = safe; return safe
     }
-    func takeTarget() -> [String: Any]? {
+    func takeTarget(matching eventId: String? = nil) -> [String: Any]? {
         lock.lock(); defer { lock.unlock() }
+        if let eventId, pendingTarget?["nativeEventId"] as? String != eventId { return nil }
         let target = pendingTarget; pendingTarget = nil; return target
     }
     func consumeTrustedAction(_ nonce: String) -> Bool {

@@ -15,14 +15,16 @@ final class PromotorsPush: RCTEventEmitter {
     override func supportedEvents() -> [String]! {
         ["pm-notification-open", "pm-push-token-refreshed", "pm-activity-token"]
     }
-    override func startObserving() { observing = true }
-    override func stopObserving() { observing = false }
+    override func startObserving() { DispatchQueue.main.async { self.observing = true } }
+    override func stopObserving() { DispatchQueue.main.async { self.observing = false } }
     static var hasObservers: Bool { instance?.observing == true }
     static func emit(_ name: String, body: [String: Any]) {
-        DispatchQueue.main.async {
-            guard let emitter = instance, emitter.observing else { return }
+        let context = PushConnectionStore.shared.context()
+        let deliver = {
+            guard PushConnectionStore.shared.isCurrent(context), let emitter = instance, emitter.observing else { return }
             emitter.sendEvent(withName: name, body: body)
         }
+        if Thread.isMainThread { deliver() } else { DispatchQueue.main.async(execute: deliver) }
     }
     private static func permission(_ status: UNAuthorizationStatus) -> String {
         switch status {

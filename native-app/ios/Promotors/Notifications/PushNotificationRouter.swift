@@ -68,12 +68,12 @@ enum PushNotificationRouter {
         value.range(of: "^[A-Za-z0-9_-]{1,160}$", options: .regularExpression) != nil
     }
     private static func deliver(_ target: [String: Any], trusted: Bool) {
-        guard let safe = PushConnectionStore.shared.capture(target, trusted: trusted) else { return }
+        let store = PushConnectionStore.shared, context = PushConnectionStore.shared.context()
+        guard let safe = store.capture(target, trusted: trusted), let eventId = safe["nativeEventId"] as? String else { return }
         DispatchQueue.main.async {
-            if PromotorsPush.hasObservers {
-                _ = PushConnectionStore.shared.takeTarget()
-                PromotorsPush.emit("pm-notification-open", body: safe)
-            }
+            guard store.isCurrent(context), PromotorsPush.hasObservers,
+                  let current = store.takeTarget(matching: eventId) else { return }
+            PromotorsPush.emit("pm-notification-open", body: current)
         }
     }
 }
