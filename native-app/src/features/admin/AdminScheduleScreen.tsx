@@ -21,10 +21,10 @@ export function AdminScheduleScreen() {
   const all = resource.data?.schedule.filter(row => !branch || row.branch === branch) || [];
   const rows = view === 'pending' ? resource.data?.queue.items.filter(row => !branch || row.branch === branch) || [] : all.filter(row => row.date === date);
   const counts = all.reduce<Record<string, number>>((result, row) => {if (!['취소', '거절'].includes(row.status)) result[row.date] = (result[row.date] || 0) + 1; return result;}, {});
-  async function accept(id: string) {
+  async function decide(id: string, reason?: string) {
     if (busyId) return; setBusyId(id); setError(''); setMessage('');
-    try {const result = await services.adminBookings.accept(id); setMessage(result.changed ? '예약을 승인했습니다.' : '이미 처리된 예약입니다. 최신 상태를 확인해 주세요.'); await resource.reload();}
-    catch (e) {setError(e instanceof Error ? e.message : '예약을 승인하지 못했습니다.');}
+    try {const result = reason ? await services.adminBookings.reject(id, reason) : await services.adminBookings.accept(id); setMessage(result.changed ? (reason ? '예약을 거절했습니다.' : '예약을 승인했습니다.') : '이미 처리된 예약입니다. 최신 상태를 확인해 주세요.'); await resource.reload();}
+    catch (e) {setError(e instanceof Error ? e.message : '예약을 처리하지 못했습니다.');}
     finally {setBusyId('');}
   }
   return <Screen title="예약관리" onBack={nav.back} refreshing={resource.loading} onRefresh={resource.reload}
@@ -37,6 +37,6 @@ export function AdminScheduleScreen() {
     <DataState loading={resource.loading && !resource.data} error={resource.error} empty={!resource.loading && !rows.length ? (session.role === 'general' && !session.branches.length ? '배정된 지점이 없습니다. 메인관리자에게 문의해 주세요.' : '표시할 예약이 없습니다.') : ''} onRetry={resource.reload}/>
     {error ? <Text accessibilityRole="alert" style={ui.error}>{error}</Text> : null}{message ? <Text accessibilityRole="alert" style={ui.body}>{message}</Text> : null}
     {rows.slice().sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time)).map(row => <BookingCard key={row.id} booking={row}
-      busy={!!busyId} onOpen={() => nav.go({name: 'admin-booking', id: row.id})} onAccept={['신규', '승인대기'].includes(row.status) ? () => void accept(row.id) : undefined}/>)}
+      busy={!!busyId} onOpen={() => nav.go({name: 'admin-booking', id: row.id})} onReject={reason => void decide(row.id, reason)} onAccept={['신규', '승인대기'].includes(row.status) ? () => void decide(row.id) : undefined}/>)}
   </Screen>;
 }

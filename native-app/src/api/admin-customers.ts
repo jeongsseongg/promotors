@@ -6,7 +6,7 @@ import type { CustomerFile, ManagedRun } from '../domain/management';
 export function createAdminCustomersService(access: AdminAccess, id: () => string) {
   async function list() { return access.members(); }
   async function get(memberId: string) {
-    await access.load(true); const profile = (await access.members()).find(member => member.id === memberId); requireValue(profile, 'CUSTOMER_UNAVAILABLE');
+    await access.loadTop(); const profile = (await access.members()).find(member => member.id === memberId); requireValue(profile, 'CUSTOMER_UNAVAILABLE');
     const files = access.value<Record<string, CustomerFile>>('pm-customers', {}), file = files[String(profile.car || '')] || { memo: '', memoEntries: [], records: [] };
     const owned = (row: JsonRecord) => row.memberId === memberId || (row.customer as MemberProfile | undefined)?.id === memberId;
     if (file.memo && !file.memoEntries?.length) file.memoEntries = [{ id: 'legacy-memo', body: file.memo, createdAt: file.memoUpdatedAt || '' }];

@@ -1,4 +1,4 @@
-import { requireValue } from './errors';
+import { ApiError, requireValue } from './errors';
 import type { SessionService } from '../auth/session';
 import type { ManagedRun } from '../domain/management';
 
@@ -11,8 +11,10 @@ export function createRepairPhotoAccess(session: SessionService) {
   }
   async function authorize(key: string) {
     requireValue(/^[A-Za-z0-9_.-]{1,240}$/.test(key) && !/^(branch|notice|case|intro|event)-/.test(key), 'FORBIDDEN');
-    await session.ensureReady(); const { token, state } = session.credentials(); requireValue(token && state.authenticated, 'AUTH_REQUIRED');
-    if (state.role === 'main') return;
+    const entering = session.credentials(); await session.ensureReady(); const { token, state } = session.credentials();
+    if (entering.token !== token || entering.state.revision !== state.revision) throw new ApiError('SESSION_CHANGED');
+    requireValue(token && state.authenticated, 'AUTH_REQUIRED');
+    if (state.role === 'main' || state.role === 'developer') return;
     const upload = pending.get(key);
     if (state.role === 'general' && upload?.owner === token && upload.revision === state.revision && state.branches.includes(upload.branch)) return;
     const payload = session.data()?.rows.find(row => row.data_key === 'pm-service-runs')?.payload;

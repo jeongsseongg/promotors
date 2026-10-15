@@ -72,11 +72,11 @@ class AdminWorkService {
     else { run.status = '출고 완료'; run.completedAt = new Date().toISOString(); }
   }
   approveStep(id: string) {
-    return this.exclusive(async () => { this.access.requireMain(); const run = await this.run(id), step = run.steps[run.currentStep];
+    return this.exclusive(async () => { const run = await this.run(id), step = run.steps[run.currentStep]; this.access.requireMain();
       requireValue(step?.submitted && !step.approved, 'WORK_STEP_UNAVAILABLE'); this.advance(run, step); return this.save(run, '승인 · 고객 전송', step); });
   }
   rejectStep(id: string, reason: string) {
-    return this.exclusive(async () => { this.access.requireMain(); const run = await this.run(id), step = run.steps[run.currentStep];
+    return this.exclusive(async () => { const run = await this.run(id), step = run.steps[run.currentStep]; this.access.requireMain();
       requireValue(step?.submitted && !step.approved && reason.length <= 1000, 'WORK_STEP_UNAVAILABLE');
       step.submitted = false; step.rejectedAt = new Date().toISOString(); step.rejectReason = reason.trim(); run.status = `${step.name} 재작업`;
       return this.save(run, '반려', step); });

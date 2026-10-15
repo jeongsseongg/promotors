@@ -174,6 +174,14 @@ final class PromotorsPush: RCTEventEmitter {
             trigger: UNTimeIntervalNotificationTrigger(timeInterval: 1, repeats: false))
         UNUserNotificationCenter.current().add(request) { error in resolve(error == nil) }
     }
+    @objc(reportQaReady:resolver:rejecter:)
+    func reportQaReady(_ values: NSDictionary, resolver resolve: @escaping RCTPromiseResolveBlock, rejecter reject: @escaping RCTPromiseRejectBlock) {
+        guard let report = NativeQaConfiguration.readyReport(values),
+              let data = try? JSONSerialization.data(withJSONObject: report, options: [.sortedKeys]),
+              let message = String(data: data, encoding: .utf8) else { resolve(false); return }
+        NSLog("PROMOTORS_NATIVE_QA_READY %@", message)
+        resolve(true)
+    }
     @objc(getQaConfiguration:rejecter:)
     func getQaConfiguration(_ resolve: @escaping RCTPromiseResolveBlock, rejecter reject: @escaping RCTPromiseRejectBlock) {
         if let value = NativeQaConfiguration.value { resolve(value) } else { resolve(NSNull()) }

@@ -4,7 +4,7 @@ import type { JsonRecord, Promotions } from '../domain/types';
 
 export function createAdminPromotionsService(access: AdminAccess, id: () => string) {
   async function load(): Promise<Promotions> {
-    await access.session.ensureReady(); access.requireMain(); const value = await access.rpc.call<Promotions>('pm_promo_read');
+    await access.load(true); const value = await access.rpc.call<Promotions>('pm_promo_read');
     for (const key of ['coupons', 'assignments', 'couponUsage', 'events', 'entries'] as const) requireValue(Array.isArray(value[key]), 'INVALID_RESPONSE'); return value;
   }
   async function save(value: Promotions) { access.requireMain(); await access.rpc.call('pm_promo_write', { p_payload: value }); return value; }

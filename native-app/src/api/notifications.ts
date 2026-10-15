@@ -5,7 +5,7 @@ import type { AdminBookingDetail, AdminBookingQueue, NativeBookingSnapshot, Nati
   NotificationPreferences, NotificationState, NotificationTarget, PushConnection } from '../domain/types';
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const recordId = /^[A-Za-z0-9_-]{1,160}$/;
+const recordId = /^[A-Za-z0-9:_-]{1,128}$/;
 interface PendingOpen { raw: NotificationOpenTarget; owner: string | null; revision: number; generation: number }
 class NotificationsService {
   private binding: string | null = null;
@@ -13,6 +13,7 @@ class NotificationsService {
   private revision = -1;
   private generation = 0;
   private busy = false;
+  private restoreQueued = false;
   private opening = false;
   private restoredOwner = '';
   private platformQueue: Promise<void> = Promise.resolve();
@@ -64,6 +65,11 @@ class NotificationsService {
   private platformChange(run: () => Promise<void>) {
     const next = this.platformQueue.catch(() => {}).then(run); this.platformQueue = next; return next;
   }
+  private retryQueuedRestore() {
+    if (!this.restoreQueued || this.busy || this.opening) return;
+    this.restoreQueued = false;
+    void this.restoreConnection().catch(() => {});
+  }
   private async connect(permission: 'default' | 'granted' | 'denied', enable: boolean) {
     requireValue(this.push && this.deviceId, 'PUSH_NOT_CONFIGURED');
     if (permission !== 'granted') throw new ApiError('NOTIFICATION_PERMISSION_DENIED');
@@ -100,10 +106,11 @@ class NotificationsService {
       requireValue(token, 'AUTH_REQUIRED');
       const permission = await this.push.requestPermission(); this.guard(token, state.revision, generation);
       await this.connect(permission, true); return this.connection();
-    } finally { this.busy = false; void this.flushOpen(); }
+    } finally { this.busy = false; this.retryQueuedRestore(); void this.flushOpen(); }
   }
   async restoreConnection() {
-    if (this.busy || this.opening || !this.push || !this.deviceId || !this.session.snapshot().authenticated) return;
+    if (!this.push || !this.deviceId || !this.session.snapshot().authenticated) return;
+    if (this.busy || this.opening) { this.restoreQueued = true; return; }
     this.busy = true;
     const { token, state } = this.session.credentials(), generation = this.generation;
     try {
@@ -111,7 +118,7 @@ class NotificationsService {
       this.guard(token, state.revision, generation);
       if (value.preferences.enabled && permission === 'granted') await this.connect(permission, false);
       else await this.reset(false);
-    } finally { this.busy = false; void this.flushOpen(); }
+    } finally { this.busy = false; this.retryQueuedRestore(); void this.flushOpen(); }
   }
   async disable(allDevices = false) {
     const { token, state } = this.session.credentials(), id = await this.deviceId?.();
@@ -121,6 +128,7 @@ class NotificationsService {
   }
   private async reset(clearPending = true) {
     this.generation++; this.binding = null; this.owner = null; this.revision = -1; this.restoredOwner = '';
+    this.restoreQueued = false;
     if (clearPending) this.pendingTarget = null;
     else if (this.pendingTarget) this.pendingTarget = { ...this.pendingTarget, raw: { ...this.pendingTarget.raw, action: undefined, trustedAction: false } };
     await this.platformChange(() => this.push?.clear() || Promise.resolve());
@@ -133,7 +141,8 @@ class NotificationsService {
     const { token, state } = this.session.credentials(), generation = this.generation;
     this.assertSession(token, state.revision);
     requireValue(uuid.test(raw.binding), 'INVALID_ARGUMENT');
-    requireValue((!raw.notificationId || recordId.test(raw.notificationId)) && (!raw.bookingId || recordId.test(raw.bookingId)), 'INVALID_ARGUMENT');
+    requireValue((raw.notificationId === undefined || typeof raw.notificationId === 'string' && recordId.test(raw.notificationId)) &&
+      (raw.bookingId === undefined || typeof raw.bookingId === 'string' && recordId.test(raw.bookingId)), 'INVALID_ARGUMENT');
     let target: NotificationTarget;
     if (raw.notificationId && recordId.test(raw.notificationId)) target = await this.resolve(raw.notificationId);
     else if (raw.bookingId && recordId.test(raw.bookingId)) {
@@ -186,6 +195,7 @@ class NotificationsService {
     if (this.opening || this.busy || !this.pendingTarget || !this.listeners.size || !this.session.snapshot().authenticated) return null;
     const pending = this.pendingTarget; this.pendingTarget = null; this.opening = true;
     const { token, state } = this.session.credentials(), generation = this.generation;
+    let retryLater = false;
     try {
       const verified = await this.verifyOpen(pending.raw);
       let target = verified;
@@ -195,8 +205,18 @@ class NotificationsService {
       this.guard(token, state.revision, generation);
       for (const listener of this.listeners) listener(target);
       return target;
-    } catch { return null; }
-    finally { this.opening = false; if (this.pendingTarget) void this.flushOpen(); }
+    } catch (error) {
+      const current = this.session.credentials();
+      if (error instanceof ApiError && ['NETWORK_ERROR', 'TIMEOUT'].includes(error.code) && !this.pendingTarget &&
+        token === current.token && state.revision === current.state.revision && generation === this.generation &&
+        pending.generation === generation && (pending.owner === null || pending.owner === token)) {
+        this.pendingTarget = pending; retryLater = true;
+      }
+      return null;
+    } finally {
+      this.opening = false; this.retryQueuedRestore();
+      if (this.pendingTarget && !retryLater) void this.flushOpen();
+    }
   }
   subscribeOpen(listener: (target: NotificationTarget) => void) {
     this.listeners.add(listener); void this.flushOpen(); return () => { this.listeners.delete(listener); };

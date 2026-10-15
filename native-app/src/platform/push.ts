@@ -19,6 +19,7 @@ const bridge = NativeModules.PromotorsPush as NativeBridge | undefined;
 const uuid = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
 const id = /^[A-Za-z0-9:_-]{1,128}$/;
 let currentBinding: string | null = null;
+let pendingBinding: string | null = null;
 let generation = 0;
 function native() {
   if (!bridge || !['ios', 'android'].includes(Platform.OS)) throw new Error('앱 알림을 준비하지 못했습니다. 앱을 다시 열어 주세요.');
@@ -29,7 +30,8 @@ function target(value: unknown): NotificationOpenTarget | null {
   if (!value || typeof value !== 'object') return null;
   const raw = value as NotificationOpenTarget;
   if (typeof raw.binding !== 'string' || !uuid.test(raw.binding) ||
-    raw.notificationId !== undefined && !id.test(raw.notificationId) || raw.bookingId !== undefined && !id.test(raw.bookingId)) return null;
+    raw.notificationId !== undefined && (typeof raw.notificationId !== 'string' || !id.test(raw.notificationId)) ||
+    raw.bookingId !== undefined && (typeof raw.bookingId !== 'string' || !id.test(raw.bookingId))) return null;
   const action = raw.action === 'accept' || raw.action === 'reject' ? raw.action : undefined;
   return {binding: raw.binding, notificationId: raw.notificationId, bookingId: raw.bookingId,
     action, trustedAction: Boolean(action && raw.trustedAction === true)};
@@ -51,12 +53,15 @@ export const nativePush: NativePushPlatform = {
   async bind(binding) {
     if (!uuid.test(binding)) throw new Error('알림 연결 정보를 확인하지 못했습니다.');
     const captured = generation;
-    await native().bindConnection(binding);
-    if (captured === generation) currentBinding = binding;
-    else throw new Error('알림 연결 계정이 변경되었습니다.');
+    pendingBinding = binding;
+    try {
+      await native().bindConnection(binding);
+      if (captured === generation) currentBinding = binding;
+      else throw new Error('알림 연결 계정이 변경되었습니다.');
+    } finally {if (captured === generation && pendingBinding === binding) pendingBinding = null;}
   },
   async clear() {
-    generation++; currentBinding = null;
+    generation++; currentBinding = null; pendingBinding = null;
     await native().clearConnection();
   },
   onOpen(listener) {
@@ -87,7 +92,8 @@ export function onTokenRefresh(listener: () => void) {
 export function onActivityToken(listener: (event: {binding: string; kind: 'start' | 'update'; token: string}) => void) {
   const sub = events?.addListener('pm-activity-token', raw => {
     const value = raw as {binding?: unknown; kind?: unknown; token?: unknown};
-    if (value && value.binding === currentBinding && (value.kind === 'start' || value.kind === 'update') &&
+    if (value && typeof value.binding === 'string' && uuid.test(value.binding) &&
+      value.binding === (pendingBinding || currentBinding) && (value.kind === 'start' || value.kind === 'update') &&
       typeof value.token === 'string' && /^[a-f0-9]{64,256}$/.test(value.token)) listener({
         binding: value.binding as string, kind: value.kind as 'start' | 'update', token: value.token});
   });

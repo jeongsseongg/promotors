@@ -25,8 +25,8 @@ export function ManagementScreen({section, id}: {section?: Section; id?: string}
     <MenuRow title="작업 진행 · 사진 관리" detail="입고부터 출고까지 단계별로 관리" onPress={() => nav.go({name: 'management', section: 'work'})}/>
     <MenuRow title="고객 문의" detail="문의 내역 확인과 답변" onPress={() => nav.go({name: 'management', section: 'inquiries'})}/>
     <MenuRow title="영업시간 · 휴무" detail="담당 지점 예약 가능 시간 설정" onPress={() => nav.go({name: 'management', section: 'hours'})}/>
-    {session.role === 'main' ? <><MenuRow title="고객 관리" detail="회원 · 차량 · 정비 기록 · 메모" onPress={() => nav.go({name: 'management', section: 'customers'})}/>
-      <MenuRow title="게시글 · 매장 정보" detail="공지, 정비사례, 서비스와 매장 소개" onPress={() => nav.go({name: 'management', section: 'content'})}/>
+    {session.role === 'main' || session.role === 'developer' ? <MenuRow title="고객 관리" detail="회원 · 차량 · 정비 기록 · 메모" onPress={() => nav.go({name: 'management', section: 'customers'})}/> : null}
+    {session.role === 'main' ? <><MenuRow title="게시글 · 매장 정보" detail="공지, 정비사례, 서비스와 매장 소개" onPress={() => nav.go({name: 'management', section: 'content'})}/>
       <MenuRow title="쿠폰 · 이벤트" detail="쿠폰 지급과 이벤트 공개" onPress={() => nav.go({name: 'management', section: 'promotions'})}/></> : null}
   </View></Screen>;
 }

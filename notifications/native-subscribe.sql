@@ -40,7 +40,12 @@ begin
     raise exception 'DEVICE_LIMIT';
   end if;
   select * into dev from public.pm_push_devices where device_id=did for update;
-  if dev.device_id is not null and dev.login_id<>a.login_id and dev.endpoint<>endpoint_value then
+  if dev.device_id is not null and dev.login_id<>a.login_id and dev.endpoint<>endpoint_value
+    and dev.revoked_at is null and exists(
+      select 1 from public.pm_sessions previous_session join public.pm_accounts previous_account using(login_id)
+      where previous_session.token_hash=dev.session_hash and previous_session.login_id=dev.login_id
+        and previous_session.expires_at>now() and previous_account.active
+    ) then
     raise exception 'DEVICE_CONFLICT';
   end if;
   -- Token-preserving reinstalls revoke the old binding and retain delivery audit rows.

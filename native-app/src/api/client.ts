@@ -3,7 +3,9 @@ import type { SessionSnapshot } from '../domain/types';
 
 export const PROMOTORS_SERVER = 'https://ytigiculewerivyytxza.supabase.co';
 export const NATIVE_SOURCE = 'promotors-native://app';
+export const NATIVE_SYNC_RPC = 'pm_native_sync_read';
 export type RpcName = 'pm_login' | 'pm_admin_login' | 'pm_register' | 'pm_logout' | 'pm_sync_read'
+  | 'pm_native_sync_read' | 'pm_is_developer'
   | 'pm_sync_write' | 'pm_sync_merge_by_id' | 'pm_member_booking_create' | 'pm_booking_availability'
   | 'pm_branch_hours_read' | 'pm_admin_booking_actions' | 'pm_notifications' | 'pm_native_push_subscribe'
   | 'pm_account_deletion' | 'pm_deletion_receipt' | 'pm_asset_get' | 'pm_change_password'
@@ -103,7 +105,7 @@ class NativeRpcClient {
   }
   async privateAssetUrl(key: string): Promise<string> {
     requireValue(typeof key === 'string' && /^[A-Za-z0-9_.-]{1,240}$/.test(key), 'INVALID_ARGUMENT');
-    await this.hooks?.ensureReady();
+    const entering = this.hooks?.credentials(); await this.hooks?.ensureReady(); this.assertCurrent(entering, entering?.token);
     const current = this.hooks?.credentials();
     requireValue(current?.token && current.state.authenticated, 'AUTH_REQUIRED');
     const value = await this.request(`/storage/v1/object/sign/promotors-private/${encodeURIComponent(key)}`,
@@ -119,7 +121,7 @@ class NativeRpcClient {
     requireValue(['image/jpeg', 'image/png', 'image/webp'].includes(contentType), 'INVALID_ARGUMENT');
     const entering = this.hooks?.credentials();
     await this.hooks?.ensureReady(); this.assertCurrent(entering, entering?.token); const current = this.hooks?.credentials();
-    requireValue(current?.token && current.state.authenticated && ['main', 'general'].includes(current.state.role || ''), 'ADMIN_REQUIRED');
+    requireValue(current?.token && current.state.authenticated && ['main', 'general', 'developer'].includes(current.state.role || ''), 'ADMIN_REQUIRED');
     requireValue(Number.isSafeInteger(current.state.privacyEpoch), 'PRIVACY_EPOCH_NOT_READY');
     const publicAsset = !key.startsWith('service-');
     if (publicAsset) requireValue(current.state.role === 'main', 'MAIN_ADMIN_REQUIRED');

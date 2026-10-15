@@ -106,7 +106,7 @@ object PushNotifications {
     if (!permitted(context)) return@synchronized
     channels(context)
     val booking = snapshot.optString("bookingId").takeIf { it.isNotBlank() }
-    val intent = PushTargets.create(context, null, booking, binding)
+    val intent = PushTargets.schedule(context, booking, binding)
     val identity = listOf("customerName", "vehicleName", "vehiclePlate")
       .map { snapshot.optString(it) }.filter { it.isNotBlank() }.joinToString(" · ")
     val line = listOf(snapshot.optString("branch"), snapshot.optString("schedule"), identity)
@@ -125,6 +125,7 @@ object PushNotifications {
   }
 
   fun clearSchedule(context: Context) {
+    PushTargets.clearSchedule(context)
     NotificationManagerCompat.from(context).cancel(SCHEDULE_TAG, 0)
   }
 }

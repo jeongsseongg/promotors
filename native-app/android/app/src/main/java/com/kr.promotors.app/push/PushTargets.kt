@@ -31,11 +31,45 @@ object PushTargets {
     while (targets.length() >= 120) targets.remove(targets.keys().next())
     targets.put(nonce, target)
     PushState.preferences(context).edit().putString("targets", targets.toString()).commit()
+    Created(nonce, pendingIntent(context, nonce))
+  }
+
+  private fun pendingIntent(context: Context, nonce: String): PendingIntent {
     val intent = Intent(context, MainActivity::class.java).setAction(ACTION)
       .setData(Uri.parse("promotors-internal://notification/$nonce"))
       .putExtra(EXTRA, nonce).addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
-    Created(nonce, PendingIntent.getActivity(context, nonce.hashCode(), intent,
-      PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE))
+    return PendingIntent.getActivity(context, nonce.hashCode(), intent,
+      PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+  }
+
+  fun schedule(context: Context, bookingId: String?, binding: String,
+    now: Long = System.currentTimeMillis() / 1000): Created = synchronized(PushState.lock) {
+    val targets = load(context)
+    var reusable: String? = null
+    targets.keys().asSequence().filter { targets.optJSONObject(it)?.optBoolean("_schedule") == true }
+      .toList().forEach { nonce ->
+        val value = targets.getJSONObject(nonce)
+        if (reusable == null && value.optString("binding") == binding &&
+          value.optString("bookingId") == bookingId.orEmpty() && value.optLong("expires", 0) > now) {
+          reusable = nonce
+          value.put("expires", now + 86400)
+        } else targets.remove(nonce)
+      }
+    PushState.preferences(context).edit().putString("targets", targets.toString()).commit()
+    val existing = reusable
+    if (existing != null) return@synchronized Created(existing, pendingIntent(context, existing))
+    val created = create(context, null, bookingId, binding, now = now)
+    val updated = load(context)
+    updated.getJSONObject(created.nonce).put("_schedule", true)
+    PushState.preferences(context).edit().putString("targets", updated.toString()).commit()
+    created
+  }
+
+  fun clearSchedule(context: Context) = synchronized(PushState.lock) {
+    val targets = load(context)
+    targets.keys().asSequence().filter { targets.optJSONObject(it)?.optBoolean("_schedule") == true }
+      .toList().forEach { targets.remove(it) }
+    PushState.preferences(context).edit().putString("targets", targets.toString()).commit()
   }
 
   private fun load(context: Context): JSONObject = try {
@@ -49,6 +83,7 @@ object PushTargets {
     PushState.preferences(context).edit().putString("targets", targets.toString()).commit()
     if (!PushState.consented(context) || target.optString("binding") != PushState.binding(context) ||
       target.optLong("expires", 0) <= now) return@synchronized null
+    target.remove("_schedule")
     target
   }
 

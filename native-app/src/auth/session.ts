@@ -1,4 +1,4 @@
-import type { RpcClient } from '../api/client';
+import { NATIVE_SYNC_RPC, type RpcClient } from '../api/client';
 import { ApiError, requireValue } from '../api/errors';
 import type { AuthContext, MemberProfile, Role, SessionSnapshot, SessionStorage, StoredSession, SyncRow, SyncSnapshot } from '../domain/types';
 
@@ -91,13 +91,19 @@ class SessionController {
     await this.clearResources();
   }
   private async loadSnapshot(owner: string | null, revision: number): Promise<SyncSnapshot> {
-    const rows = await this.rpc.call<unknown>('pm_sync_read', { p_token: owner }, { skipReadiness: true });
+    const rows = await this.rpc.call<unknown>(NATIVE_SYNC_RPC, { p_token: owner }, { skipReadiness: true });
     if (owner !== this.token || revision !== this.state.revision) throw new ApiError('SESSION_CHANGED');
     let next: SyncSnapshot;
     try { next = parseSync(rows, this.floor); }
     catch (error) { await this.invalidate('PRIVACY_EPOCH_CHANGED'); throw error; }
     requireValue(owner || !next.context.authenticated, 'INVALID_RESPONSE');
     if (owner && !next.context.authenticated) { await this.clear(); throw new ApiError('INVALID_SESSION'); }
+    if (owner && next.context.role === 'main') {
+      const developer = await this.rpc.call<unknown>('pm_is_developer', { p_token: owner }, { skipReadiness: true });
+      if (owner !== this.token || revision !== this.state.revision) throw new ApiError('SESSION_CHANGED');
+      requireValue(typeof developer === 'boolean', 'INVALID_RESPONSE');
+      if (developer) next.context = { ...next.context, role: 'developer' };
+    }
     const changed = this.state.privacyEpoch !== null && (next.epoch !== this.state.privacyEpoch ||
       this.state.role !== (next.context.role || null) || this.state.profile?.id !== next.context.profile?.id ||
       JSON.stringify(this.state.branches) !== JSON.stringify(next.context.branches || []));
@@ -159,7 +165,7 @@ class SessionController {
   private async restoreStored() {
     const revision = this.state.revision, saved = await this.storage.readSession();
     if (revision !== this.state.revision) throw new ApiError('SESSION_CHANGED');
-    if (!saved?.token) { await this.refresh(); return this.snapshot(); }
+    if (!saved?.token) { await this.clear(false); await this.refresh(); return this.snapshot(); }
     if (saved.expiresAt && Date.parse(saved.expiresAt) <= Date.now()) { await this.clear(); return this.snapshot(); }
     this.floor = Math.max(this.floor, Number.isSafeInteger(saved.privacyEpoch) ? Number(saved.privacyEpoch) : 0);
     this.token = saved.token; this.persistent = true;

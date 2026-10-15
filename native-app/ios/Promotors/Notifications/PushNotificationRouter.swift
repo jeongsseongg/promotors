@@ -65,7 +65,7 @@ enum PushNotificationRouter {
         return target
     }
     private static func validId(_ value: String) -> Bool {
-        value.range(of: "^[A-Za-z0-9_-]{1,160}$", options: .regularExpression) != nil
+        value.range(of: "^[A-Za-z0-9:_-]{1,128}$", options: .regularExpression) != nil
     }
     private static func deliver(_ target: [String: Any], trusted: Bool) {
         let store = PushConnectionStore.shared, context = PushConnectionStore.shared.context()

@@ -78,6 +78,22 @@ def expand_card(source, title):
             return hierarchy()
     return source
 
+def save_ongoing_notification():
+    # A ticking system Chronometer never becomes idle for uiautomator's dump.
+    # Verify the actual posted OS record and screenshot without stopping its clock.
+    for _ in range(15):
+        records = adb('shell', 'dumpsys', 'notification', '--noredact').decode('utf8')
+        own = [record for record in re.split(r'(?=NotificationRecord\()', records)
+               if 'pkg=kr.promotors.app' in record and '처리 대기 1건' in record]
+        if own:
+            record = own[0]
+            assert 'BMW 520d' in record and '예시 고객' in record and '비공개' in record
+            (output / 'booking-ongoing-notification.txt').write_text(record, encoding='utf8')
+            (output / 'booking-ongoing-notification.png').write_bytes(adb('exec-out', 'screencap', '-p'))
+            return
+        time.sleep(1)
+    raise RuntimeError('Actual ongoing reservation notification not posted')
+
 adb('install', '-r', str(root / 'android/app/build/outputs/apk/debug/app-debug.apk'))
 adb('shell', 'pm', 'revoke', 'kr.promotors.app', 'android.permission.POST_NOTIFICATIONS')
 adb('shell', 'pm', 'clear-permission-flags', 'kr.promotors.app', 'android.permission.POST_NOTIFICATIONS', 'user-set', 'user-fixed')
@@ -102,9 +118,11 @@ for screen, label in [('booking', '정비 예약'), ('mypage', '마이페이지'
         tap('상시알림 예시', source)
         wait_for('예시 상시알림 표시 요청')
         adb('shell', 'cmd', 'statusbar', 'expand-notifications')
-        source = wait_for('처리 대기 1건')
-        save('booking-ongoing-notification', expand_card(source, '처리 대기 1건'))
+        time.sleep(2)
+        save_ongoing_notification()
         adb('shell', 'cmd', 'statusbar', 'collapse')
+        tap('예시 지우기', wait_for('예시 지우기'))
+        wait_for('예시 상시알림을 지웠습니다.')
         tap('새 예약 알림 예시', wait_for('새 예약 알림 예시'))
         wait_for('새 예약 예시 알림 표시 요청')
         adb('shell', 'cmd', 'statusbar', 'expand-notifications')

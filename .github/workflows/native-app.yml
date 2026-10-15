@@ -19,6 +19,18 @@ concurrency:
   group: promotors-independent-native
   cancel-in-progress: true
 jobs:
+  server:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.19.0
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - name: Verify native server privacy, registration and reservation actions
+        run: node --test scripts/test-fcm-account-switch.cjs scripts/test-fcm-subscribe.cjs scripts/test-fcm-transport.cjs scripts/test-fcm-worker.cjs scripts/test-native-booking-action.cjs scripts/test-native-push.cjs scripts/test-native-subscribe.cjs native-app/server/tests/test-native-sync.cjs
   android:
     runs-on: ubuntu-latest
     timeout-minutes: 45
