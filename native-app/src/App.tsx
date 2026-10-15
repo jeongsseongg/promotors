@@ -85,14 +85,15 @@ export default function App({services, push, initialRoute, updates, notification
     return () => listener.remove();
   }, [services]);
   const route = stack[stack.length - 1];
-  const automaticNotifications = useAutomaticNotifications(push, session, !restoreError && ['home', 'my', 'admin'].includes(route.name));
+  const automaticNotifications = useAutomaticNotifications(push, session, !restoreError && ['home', 'my', 'admin', 'notification-settings'].includes(route.name));
+  const screenPush = useMemo(() => ({...push, openSettings: automaticNotifications.openSettings}), [push, automaticNotifications.openSettings, automaticNotifications.phase]);
   const signupLegal = (route.name === 'terms' || route.name === 'privacy') && stack[stack.length - 2]?.name === 'signup' ? route.name : undefined;
   const signupFlow = route.name === 'signup' || !!signupLegal;
   const protectedRoute = privateRoutes.has(route.name) && !session.authenticated;
   const adminRoute = route.name === 'admin' || route.name === 'admin-booking' || route.name === 'management';
   const adminForbidden = adminRoute && session.authenticated && session.role === 'customer';
   return <SafeAreaProvider><StatusBar barStyle="dark-content"/>
-    <AppContext services={services} push={push} navigation={navigation}>
+    <AppContext services={services} push={screenPush} navigation={navigation}>
       {restoreError ? <Screen title="연결 확인"><Text accessibilityRole="alert" style={ui.error}>{restoreError}</Text><Button label="다시 시도" onPress={() => void restore()}/><Button secondary label="소개 화면 보기" onPress={() => {setRestoreError(''); go({name: 'home'});}}/></Screen> : session.status === 'restoring' ? <View style={styles.loading}><ActivityIndicator color={color.navy}/><Text style={ui.body}>로그인 상태를 확인하고 있어요.</Text></View> :
         <View style={ui.flex} key={session.authenticated ? [session.profile?.id, session.profile?.car, session.role, session.branches.join('|'), session.privacyEpoch].join(':') : 'signed-out'}>
           {protectedRoute ? <AuthScreen/> : adminForbidden ? <MyScreen/> : signupFlow ? <SignupFlow legal={signupLegal}/> : <Content key={stack.length + ':' + route.name + ('id' in route ? ':' + route.id : '')} route={route}/>}

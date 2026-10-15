@@ -56,11 +56,11 @@ export function useAutomaticNotifications(push: NativePush, session: SessionSnap
     return () => subscription.remove();
   }, []);
   const phase = result.owner === owner ? result.phase : 'idle';
-  async function openSettings() {
+  const openSettings = useCallback(async () => {
     settingsOwner.current = owner;
     try {await push.openSettings();}
     catch {settingsOwner.current = ''; if (context.current.owner === owner) setResult({owner, phase: 'error', message: '휴대폰 설정을 열지 못했어요. 다시 시도해 주세요.'});}
-  }
+  }, [owner, push]);
   function dismiss() {handled.current = owner; settingsOwner.current = ''; setResume(0); setResult({owner, phase: 'idle'});}
   return {phase, message: result.owner === owner ? result.message : undefined,
     visible: !!owner && eligible && active && !['idle', 'checking'].includes(phase),
