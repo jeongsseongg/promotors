@@ -1,5 +1,6 @@
 import React, {useEffect, useState} from 'react';
 import {ActivityIndicator, AppRegistry, Image, NativeModules, StyleSheet, Text, View} from 'react-native';
+import {SafeAreaProvider, SafeAreaView} from 'react-native-safe-area-context';
 import App from './src/App';
 import {QaNativeControls} from './src/qa/QaNativeControls';
 import {createQaEnvironment} from './src/qa/fixture-services';
@@ -29,13 +30,15 @@ function QaApp() {
   }, []);
   if (error) return <View style={styles.loading}><Text style={styles.error}>{error}</Text></View>;
   if (!environment) return <View style={styles.loading}><ActivityIndicator/><Text>네이티브 테스트 화면 준비 중</Text></View>;
-  return <View style={styles.root}><App services={environment.services} push={environment.push} initialRoute={environment.initialRoute}/>
-    {environment.showNativeControls ? <QaNativeControls/> : null}
-    <View pointerEvents="none" style={styles.qa}><Text style={styles.qaText}>테스트 화면 · 예시 정보·이미지 · 실제 발송 없음</Text></View>
-  </View>;
+  return <SafeAreaProvider style={styles.root}><App services={environment.services} push={environment.push} initialRoute={environment.initialRoute}/>
+    <SafeAreaView edges={['bottom']} style={styles.footer}>
+      {environment.showNativeControls ? <QaNativeControls/> : null}
+      <View pointerEvents="none" style={styles.qa}><Text style={styles.qaText}>테스트 화면 · 예시 정보·이미지 · 실제 발송 없음</Text></View>
+    </SafeAreaView>
+  </SafeAreaProvider>;
 }
 const styles = StyleSheet.create({
-  root: {flex: 1}, loading: {flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24, gap: 16},
+  root: {flex: 1}, footer: {backgroundColor: '#EAF0F9'}, loading: {flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24, gap: 16},
   error: {fontSize: 18, color: '#B73232'}, qa: {paddingVertical: 4, backgroundColor: '#EAF0F9', alignItems: 'center'},
   qaText: {fontSize: 11, color: '#071E55'},
 });

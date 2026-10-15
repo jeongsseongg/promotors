@@ -4,6 +4,7 @@ apply plugin: "com.facebook.react"
 apply plugin: "com.google.gms.google-services"
 
 def nativeQa = providers.gradleProperty("nativeQa").orElse("false").get().toBoolean()
+def releaseConfig = new groovy.json.JsonSlurper().parse(rootProject.file("../release.json"))
 gradle.taskGraph.whenReady { graph ->
     if (nativeQa && graph.allTasks.any { it.project == project && it.name.toLowerCase().contains("release") }) {
         throw new GradleException("Native QA fixtures cannot be included in a release build")
@@ -94,8 +95,8 @@ android {
         applicationId "kr.promotors.app"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 7
-        versionName "1.1.0"
+        versionCode releaseConfig.androidCode as Integer
+        versionName releaseConfig.version as String
         buildConfigField "boolean", "QA_BUNDLED", nativeQa.toString()
     }
     buildFeatures { buildConfig true }

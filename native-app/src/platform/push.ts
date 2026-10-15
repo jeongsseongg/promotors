@@ -17,7 +17,7 @@ interface NativeBridge {
 }
 const bridge = NativeModules.PromotorsPush as NativeBridge | undefined;
 const uuid = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
-const id = /^[A-Za-z0-9_-]{1,160}$/;
+const id = /^[A-Za-z0-9:_-]{1,128}$/;
 let currentBinding: string | null = null;
 let generation = 0;
 function native() {

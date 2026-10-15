@@ -25,6 +25,7 @@ add_file(project, app, 'Promotors/02-precision-check.wav', true)
 Dir.glob(File.join(root, 'assets/fonts/*.otf')).each do |file|
   add_file(project, app, '../assets/fonts/' + File.basename(file), true)
 end
+add_file(project, app, '../assets/fonts/LICENSE.txt', true)
 app.add_dependency(widget) unless app.dependencies.any? { |dependency| dependency.target == widget }
 embed = app.copy_files_build_phases.find { |phase| phase.name == 'Embed App Extensions' } ||
   app.new_copy_files_build_phase('Embed App Extensions')

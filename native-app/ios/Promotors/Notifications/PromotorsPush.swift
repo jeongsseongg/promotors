@@ -154,20 +154,28 @@ final class PromotorsPush: RCTEventEmitter {
     @objc(clearBookingSchedule:rejecter:)
     func clearBookingSchedule(_ resolve: @escaping RCTPromiseResolveBlock, rejecter reject: @escaping RCTPromiseRejectBlock) {
         Task { @MainActor in
+            guard #available(iOS 16.2, *) else { resolve(nil); return }
             do { try await BookingActivityController.shared.clear(); resolve(nil) }
             catch { reject("LIVE_ACTIVITY_CLEAR_FAILED", "상시알림을 정리하지 못했습니다.", error as NSError) }
         }
     }
+    @objc(showQaNotification:rejecter:)
+    func showQaNotification(_ resolve: @escaping RCTPromiseResolveBlock, rejecter reject: @escaping RCTPromiseRejectBlock) {
+        guard NativeQaConfiguration.isAllowed else { resolve(false); return }
+        let binding = "00000000-0000-4000-8000-000000000015"
+        guard PushConnectionStore.shared.context().binding == binding else { resolve(false); return }
+        let content = UNMutableNotificationContent()
+        content.title = "새 예약이 들어왔어요"
+        content.body = "테스트 알림 · 실제 예약 변경 없음\n예시 고객 · BMW 520d · 차량번호 비공개\n프로모터스 안산점 · 방문 일정 예시"
+        content.sound = .default
+        content.categoryIdentifier = "PM_BOOKING_ACTIONS"
+        content.userInfo = ["id": "qa-notification", "bookingId": "qa-pending", "binding": binding]
+        let request = UNNotificationRequest(identifier: "pm-native-qa-booking", content: content,
+            trigger: UNTimeIntervalNotificationTrigger(timeInterval: 1, repeats: false))
+        UNUserNotificationCenter.current().add(request) { error in resolve(error == nil) }
+    }
     @objc(getQaConfiguration:rejecter:)
     func getQaConfiguration(_ resolve: @escaping RCTPromiseResolveBlock, rejecter reject: @escaping RCTPromiseRejectBlock) {
-#if DEBUG
-        let arguments = ProcessInfo.processInfo.arguments
-        guard let index = arguments.firstIndex(of: "-PM_NATIVE_QA_SCREEN"), arguments.indices.contains(index + 1),
-              ["booking", "mypage", "admin", "notifications"].contains(arguments[index + 1]) else { resolve(NSNull()); return }
-        let permission = arguments.firstIndex(of: "-PM_NATIVE_QA_PERMISSION").flatMap { arguments.indices.contains($0 + 1) ? arguments[$0 + 1] : nil }
-        resolve(["screen": arguments[index + 1], "requestOsPermission": permission?.uppercased() == "YES"])
-#else
-        resolve(NSNull())
-#endif
+        if let value = NativeQaConfiguration.value { resolve(value) } else { resolve(NSNull()) }
     }
 }

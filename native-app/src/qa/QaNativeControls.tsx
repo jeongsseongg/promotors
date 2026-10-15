@@ -28,9 +28,22 @@ export function QaNativeControls() {
     } catch (failure) {setMessage(failure instanceof Error ? failure.message : '상시알림을 표시하지 못했습니다.');}
     finally {setBusy(false);}
   }
+  async function showNewBooking() {
+    if (busy) return; setBusy(true);
+    const bridge = NativeModules.PromotorsPush;
+    try {
+      if (!bridge?.showQaNotification || !bridge?.bindConnection) throw new Error('네이티브 예시 알림 기능이 연결되지 않았습니다.');
+      if (await bridge.requestPermission() !== 'granted') throw new Error('앱 알림 권한을 허용해 주세요.');
+      await bridge.bindConnection(binding);
+      if (!await bridge.showQaNotification()) throw new Error('테스트 전용 알림을 표시하지 못했습니다.');
+      setMessage('새 예약 예시 알림 표시 요청 · 운영 서버 요청 없음');
+      console.info('PROMOTORS_NATIVE_QA_NOTIFICATION', JSON.stringify({serverRequests: 0}));
+    } catch (failure) {setMessage(failure instanceof Error ? failure.message : '예시 알림을 표시하지 못했습니다.');}
+    finally {setBusy(false);}
+  }
   return <View style={styles.box}><Text style={styles.text}>{message}</Text><View style={styles.row}>
     <View style={styles.flex}><Button secondary label="상시알림 예시" busy={busy} onPress={() => void display(true)}/></View>
     <View style={styles.flex}><Button secondary label="예시 지우기" disabled={busy} onPress={() => void display(false)}/></View>
-  </View></View>;
+  </View><Button secondary label="새 예약 알림 예시" disabled={busy} onPress={() => void showNewBooking()}/></View>;
 }
 const styles = StyleSheet.create({box: {padding: 8, gap: 4, backgroundColor: '#EAF0F9'}, row: {flexDirection: 'row', gap: 8}, flex: {flex: 1}, text: {fontSize: 11, color: '#071E55', textAlign: 'center'}});

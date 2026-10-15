@@ -70,7 +70,7 @@ final class BookingActivityController {
                     await activity.update(content)
                     self.observe(activity, context: context)
                 } else {
-                    let activity = try Activity.request(attributes: BookingActivityAttributes(binding: binding), content: content, pushType: .token)
+                    let activity = try Activity.request(attributes: BookingActivityAttributes(binding: binding), content: content, pushType: NativeQaConfiguration.isAllowed ? nil : .token)
                     self.observe(activity, context: context)
                 }
             }
@@ -91,7 +91,7 @@ final class BookingActivityController {
         }
     }
     private func observe(_ activity: Activity<BookingActivityAttributes>, context: PushConnectionEpoch) {
-        guard observedActivities.insert(activity.id).inserted else { return }
+        guard !NativeQaConfiguration.isAllowed, observedActivities.insert(activity.id).inserted else { return }
         if let token = activity.pushToken { emit(token, kind: "update", context: context) }
         tokenTasks.append(Task { @MainActor in
             for await token in activity.pushTokenUpdates {
@@ -102,7 +102,7 @@ final class BookingActivityController {
     }
     @available(iOS 17.2, *)
     private func observeStart(_ context: PushConnectionEpoch) {
-        guard !startObserved, context.binding != nil else { return }
+        guard !NativeQaConfiguration.isAllowed, !startObserved, context.binding != nil else { return }
         startObserved = true
         if let token = Activity<BookingActivityAttributes>.pushToStartToken { emit(token, kind: "start", context: context) }
         tokenTasks.append(Task { @MainActor in
