@@ -2280,7 +2280,7 @@ body:not(.developer) .developer-only { display: none !important; }
   border-radius: 8px;
   color: #2b2f33;
 }
-.slot:hover:not(:disabled) { border-color: var(--navy); color: var(--navy); }
+.slot:hover:not(:disabled):not(.sel) { border-color: var(--navy); color: var(--navy); }
 .slot:disabled { background: #f5f6f8; color: #c3cad3; cursor: default; text-decoration: line-through; }
 .slot.sel { background: var(--navy); color: var(--yellow); border-color: var(--navy); font-weight: 700; }
 .slot.mine { background: #e6f7ee; border-color: #03c75a; color: #038550; text-decoration: none; }
@@ -6523,6 +6523,9 @@ button.step-photo-slot {
   font-weight: 700;
 }
 .slot.sel { box-shadow: 0 4px 12px rgba(30, 36, 100, .22); }
+@media (max-width: 520px) {
+  #modal-card .slot { padding-inline: 6px; white-space: nowrap; }
+}
 .slot.reserved-slot {
   display: inline-flex;
   flex-direction: column;

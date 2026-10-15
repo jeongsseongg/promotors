@@ -87,7 +87,7 @@
       if (native?.available) { await native.check(); state.deviceConnected = native.connected; }
       else if (supported() && getPermission() === 'granted') {
         const registration = await navigator.serviceWorker.getRegistration();
-        state.deviceConnected = Boolean(await registration?.pushManager?.getSubscription());
+        state.deviceConnected = Boolean(global.PMWebPushBinding && await registration?.pushManager?.getSubscription());
       }
       render();
     }
@@ -117,6 +117,8 @@
         const result = await call('subscribe', { subscription: subscription.toJSON(), deviceId: deviceId() });
         if (sessionGeneration !== generation) throw new Error('로그인 상태가 변경되었습니다. 다시 시도해 주세요.');
         registration.active?.postMessage({ type: 'PM_PUSH_BINDING', binding: result.binding || null });
+        global.PMWebPushBinding = result.binding || null;
+        global.PMBookingActions?.refresh().catch(() => {});
         await call('preferences', { enabled: true });
       } catch (error) {
         if (newlyCreated) await subscription.unsubscribe();
@@ -130,6 +132,7 @@
       if (subscription) await subscription.unsubscribe();
     }
     async function clearBinding() {
+      global.PMWebPushBinding = null;
       if (native?.available) { await native.clear(); return; }
       if (!('serviceWorker' in navigator)) return;
       const registration = await navigator.serviceWorker.getRegistration();
@@ -172,7 +175,10 @@
       if (current.preferences?.enabled) {
         if (sessionGeneration !== generation) return;
         const result = await call('subscribe', { subscription: subscription.toJSON(), deviceId: deviceId() });
-        if (sessionGeneration === generation) registration.active?.postMessage({ type: 'PM_PUSH_BINDING', binding: result.binding || null });
+        if (sessionGeneration === generation) {
+          registration.active?.postMessage({ type: 'PM_PUSH_BINDING', binding: result.binding || null });
+          global.PMWebPushBinding = result.binding || null;
+        }
       }
       else await disconnect();
     }
@@ -185,10 +191,10 @@
       feedback = undefined;
       opener?.focus();
     }
-    async function open(notificationId) {
+    async function open(notificationId, requestedTab = 'recent') {
       if (dialog) { dialog.focus(); return; }
       await Promise.all([import('./inbox.js?v=20261002'), import('./settings.js?v=20261002')]);
-      activeTab = 'recent';
+      activeTab = requestedTab === 'settings' ? 'settings' : 'recent';
       opener = document.activeElement;
       dialog = element('dialog', undefined, 'pm-notify-dialog');
       dialog.setAttribute('aria-labelledby', 'pm-notify-title');
@@ -309,7 +315,11 @@
     async function enable() {
       await refresh(); await subscribe(); await refresh();
     }
-    return { open, disconnect, restore, enable };
+    return { open, disconnect, restore, enable, connection: async () => {
+      await refresh();
+      return { supported: Boolean(supported()), permission: getPermission(), enabled: state.preferences.enabled,
+        connected: Boolean(state.preferences.enabled && state.deviceConnected) };
+    } };
   }
   global.PMNotifications = Object.freeze({ create });
 })(window);

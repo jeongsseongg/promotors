@@ -46,7 +46,10 @@
   const { attachBookingDevice } = await import('./booking-device.js?v=20261012');
   attachBookingDevice(bookings);
   const api = PMNotifications.create({ rpc: notificationRpc, getToken: () => authToken, openTarget, bookings });
+  const { createConnectionNotice } = await import('./connection.js?v=20261015');
+  const connection = createConnectionNotice({ api, getToken: () => authToken });
   new MutationObserver(() => {
+    connection.mount();
     const current = document.getElementById('mypage-alerts');
     if (!current || current === observedButton) return;
     observedButton = current; updateBadge();
@@ -91,6 +94,7 @@
     return true;
   }
   async function resume() {
+    const owner = authToken;
     if (authToken && localStorage.getItem('pm-push-opt-in-v1')) {
       try { await enable(); optInErrorShown = false; }
       catch {
@@ -102,6 +106,7 @@
     }
     await api.restore().catch(() => {});
     await bookings.start().catch(() => {});
+    if (owner === authToken) await connection.sync();
     if (!pendingId) return;
     if (!authToken) { openMemberModal('login'); return; }
     const id = pendingId; pendingId = '';
@@ -111,7 +116,7 @@
   }
   function disconnect() {
     bookings.reset();
-    unread = null;
+    unread = null; connection.reset();
     transition = api.disconnect().catch(() => {});
     return transition;
   }
@@ -120,13 +125,15 @@
     enable, open: async () => { if (!authToken) return openMemberModal('login'); await bookings.start().catch(() => {}); return api.open(); }, disconnect,
     sessionChanged: () => { transition = transition.then(resume); return transition; }
   };
-  window.addEventListener('load', () => {
+  function loadPermissions() {
     if (window.PMPermissions) return;
     const styles = document.createElement('link');
     styles.rel = 'stylesheet'; styles.href = 'notifications/permissions.css?v=20261002';
     document.head.append(styles);
     import('./permissions.js?v=20261002').catch(() => console.warn('알림 권한 안내를 불러오지 못했습니다.'));
-  }, { once: true });
+  }
+  if (document.readyState === 'complete') loadPermissions();
+  else window.addEventListener('load', loadPermissions, { once: true });
   document.addEventListener('click', event => {
     if (event.target.closest('#mypage-alerts, #admin-push-settings')) {
       event.preventDefault(); event.stopImmediatePropagation(); window.PMPush.open();
