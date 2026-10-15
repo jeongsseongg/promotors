@@ -87,7 +87,7 @@
       if (native?.available) { await native.check(); state.deviceConnected = native.connected; }
       else if (supported() && getPermission() === 'granted') {
         const registration = await navigator.serviceWorker.getRegistration();
-        state.deviceConnected = Boolean(await registration?.pushManager?.getSubscription());
+        state.deviceConnected = Boolean(global.PMWebPushBinding && await registration?.pushManager?.getSubscription());
       }
       render();
     }
@@ -191,10 +191,10 @@
       feedback = undefined;
       opener?.focus();
     }
-    async function open(notificationId) {
+    async function open(notificationId, requestedTab = 'recent') {
       if (dialog) { dialog.focus(); return; }
       await Promise.all([import('./inbox.js?v=20261002'), import('./settings.js?v=20261002')]);
-      activeTab = 'recent';
+      activeTab = requestedTab === 'settings' ? 'settings' : 'recent';
       opener = document.activeElement;
       dialog = element('dialog', undefined, 'pm-notify-dialog');
       dialog.setAttribute('aria-labelledby', 'pm-notify-title');
@@ -315,7 +315,11 @@
     async function enable() {
       await refresh(); await subscribe(); await refresh();
     }
-    return { open, disconnect, restore, enable };
+    return { open, disconnect, restore, enable, connection: async () => {
+      await refresh();
+      return { supported: Boolean(supported()), permission: getPermission(), enabled: state.preferences.enabled,
+        connected: Boolean(state.preferences.enabled && state.deviceConnected) };
+    } };
   }
   global.PMNotifications = Object.freeze({ create });
 })(window);
