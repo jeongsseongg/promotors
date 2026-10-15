@@ -4,6 +4,7 @@ import android.app.Application
 import android.os.Looper
 import androidx.core.content.pm.PackageInfoCompat
 import androidx.test.core.app.ApplicationProvider
+import com.facebook.react.bridge.BridgeReactContext
 import com.facebook.react.bridge.JavaOnlyMap
 import com.facebook.react.bridge.Promise
 import com.facebook.react.bridge.ReactApplicationContext
@@ -42,7 +43,7 @@ class PromotorsUpdateModuleTest {
   }
 
   @Before fun setup() {
-    context = ReactApplicationContext(ApplicationProvider.getApplicationContext<Application>())
+    context = BridgeReactContext(ApplicationProvider.getApplicationContext<Application>())
     play = FakeAppUpdateManager(context)
     currentCode = PackageInfoCompat.getLongVersionCode(context.packageManager.getPackageInfo(context.packageName, 0))
     assertTrue("The installed test package must have a real version code", currentCode > 0)
