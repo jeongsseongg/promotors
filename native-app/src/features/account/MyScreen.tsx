@@ -28,7 +28,7 @@ export function MyScreen() {
   return <Screen title="마이페이지" refreshing={account.loading} onRefresh={account.reload} testID="my-screen">
     <Text style={ui.title}>{profile?.name || (session.role === 'customer' ? '고객' : '관리자')}님,{ '\n' }안녕하세요.</Text>
     {session.role !== 'customer' ? <View style={ui.card}><Text style={ui.heading}>매장 운영</Text><Text style={ui.muted}>{session.branches.length ? session.branches.join(' · ') : '전체 지점'}</Text>
-      <Button label="예약 관리" onPress={() => nav.go({name: 'admin'})}/><MenuRow title="예약 알림함" onPress={() => nav.go({name: 'notifications'})}/></View> : <>
+      <Button label="예약 관리" onPress={() => nav.go({name: 'admin'})}/><MenuRow title="매장 관리" detail="작업·고객·콘텐츠·운영 설정" onPress={() => nav.go({name: 'management'})}/><MenuRow title="예약 알림함" onPress={() => nav.go({name: 'notifications'})}/></View> : <>
       <DataState loading={account.loading && !account.data} error={account.error} onRetry={account.reload}/>
       <View style={styles.vehicle}><View style={ui.spread}><Text style={styles.plate}>{profile?.car || '등록된 차량'}</Text><Text style={styles.badge}>{stage < 0 ? '예약 전' : labels[stage]}</Text></View>
         <Text style={styles.model}>{profile?.model || '차량정보를 확인해 주세요.'}</Text>

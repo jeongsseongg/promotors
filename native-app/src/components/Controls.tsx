@@ -3,12 +3,12 @@ import {ActivityIndicator, Pressable, StyleSheet, Text, TextInput, TextInputProp
 import {color, font} from '../theme/tokens';
 import {ui} from '../theme/styles';
 
-type ButtonProps = {label: string; onPress: () => void; secondary?: boolean; danger?: boolean; disabled?: boolean; busy?: boolean; testID?: string};
-export function Button({label, onPress, secondary, danger, disabled, busy, testID}: ButtonProps) {
+type ButtonProps = {label: string; onPress: () => void; secondary?: boolean; accent?: boolean; danger?: boolean; disabled?: boolean; busy?: boolean; testID?: string};
+export function Button({label, onPress, secondary, accent, danger, disabled, busy, testID}: ButtonProps) {
   return <Pressable accessibilityRole="button" accessibilityState={{disabled: !!disabled || !!busy}} testID={testID}
     disabled={disabled || busy} onPress={onPress}
-    style={({pressed}) => [styles.button, secondary && styles.secondary, danger && styles.danger, (disabled || busy) && styles.disabled, pressed && styles.pressed]}>
-    {busy ? <ActivityIndicator color={secondary ? color.navy : color.surface}/> : <Text style={[styles.buttonText, secondary && styles.secondaryText]}>{label}</Text>}
+    style={({pressed}) => [styles.button, secondary && styles.secondary, accent && styles.accent, danger && styles.danger, (disabled || busy) && styles.disabled, pressed && styles.pressed]}>
+    {busy ? <ActivityIndicator color={secondary ? color.navy : color.surface}/> : <Text style={[styles.buttonText, (secondary || accent) && styles.secondaryText]}>{label}</Text>}
   </Pressable>;
 }
 export function Field({label, error, ...props}: TextInputProps & {label: string; error?: string}) {
@@ -34,7 +34,7 @@ const styles = StyleSheet.create({
   button: {minHeight: 54, paddingHorizontal: 20, paddingVertical: 14, borderRadius: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: color.navy},
   buttonText: {fontFamily: font.bold, fontSize: 17, lineHeight: 25, color: color.surface, textAlign: 'center'},
   secondary: {backgroundColor: color.surface, borderColor: color.border, borderWidth: 1},
-  secondaryText: {color: color.navy}, danger: {backgroundColor: color.danger},
+  accent: {backgroundColor: color.yellow}, secondaryText: {color: color.navy}, danger: {backgroundColor: color.danger},
   disabled: {opacity: 0.42}, pressed: {opacity: 0.72}, field: {gap: 8},
   input: {minHeight: 54, borderWidth: 1, borderColor: color.border, borderRadius: 14, paddingHorizontal: 16, paddingVertical: 12, fontFamily: font.regular, fontSize: 16, color: color.text, backgroundColor: color.surface},
   multiline: {minHeight: 112, textAlignVertical: 'top'},

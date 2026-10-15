@@ -13,6 +13,7 @@ export function createQaAccount(data: ReturnType<typeof createQaData>, auth: Ret
   return {
     load: async () => ({profile: auth.session.snapshot().profile, bookings: clone(scoped()), runs: clone(data.runs), messages: clone(messages)}),
     assetUrl: async (_key: string) => imageUri,
+    legacyAsset: async (_key: string) => null,
     promotions: async () => clone(promotions),
     sendInquiry: async (message: string) => {calls.push('inquiry'); messages.push({id: 'qa-inquiry-' + messages.length, from: 'customer', message, memberId: qaProfile.id, createdAt: new Date().toISOString()});},
     updateProfile: async (profile: JsonRecord) => {calls.push('profile'); auth.update({profile: {...qaProfile, ...profile}});},

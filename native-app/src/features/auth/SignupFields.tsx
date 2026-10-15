@@ -7,7 +7,7 @@ import {ui} from '../../theme/styles';
 export type SignupValues = {name: string; model: string; car: string; phone: string; birthday: string; email: string; address: string; confirmation: string; agreed: boolean};
 export function validateSignup(id: string, password: string, values: SignupValues) {
   if (!/^[A-Za-z0-9._-]{4,40}$/.test(id.trim())) return '아이디는 영문·숫자·점·밑줄·하이픈 4~40자로 입력해 주세요.';
-  if (password.length < 10 || !/[A-Za-z가-힣]/.test(password) || !/\d/.test(password)) return '비밀번호는 문자와 숫자를 포함해 10자 이상 입력해 주세요.';
+  if (password.length < 10 || !/[A-Za-z]/.test(password) || !/\d/.test(password)) return '비밀번호는 영문과 숫자를 포함해 10자 이상 입력해 주세요.';
   if (password !== values.confirmation) return '비밀번호 확인이 일치하지 않습니다.';
   if (!values.name.trim() || !values.model.trim() || !values.car.trim()) return '이름, 차량명, 차량번호를 입력해 주세요.';
   if (!/^01\d{8,9}$/.test(values.phone.replace(/[^0-9]/g, ''))) return '휴대폰번호를 정확히 입력해 주세요.';
@@ -21,7 +21,7 @@ export function SignupFields({values, onChange}: {values: SignupValues; onChange
   const nav = useNav();
   const field = (key: keyof SignupValues, value: string | boolean) => onChange({...values, [key]: value});
   return <View style={ui.stack}>
-    <Text style={ui.muted}>비밀번호는 문자와 숫자를 포함해 10자 이상 입력해 주세요.</Text>
+    <Text style={ui.muted}>비밀번호는 영문과 숫자를 포함해 10자 이상 입력해 주세요.</Text>
     <Field label="비밀번호 확인" value={values.confirmation} onChangeText={v => field('confirmation', v)} secureTextEntry textContentType="newPassword"/>
     <Field label="이름" value={values.name} onChangeText={v => field('name', v)} textContentType="name"/>
     <Field label="차량명" placeholder="예: BMW 520d" value={values.model} onChangeText={v => field('model', v)}/>

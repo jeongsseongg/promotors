@@ -23,7 +23,7 @@ export function createAdminAccess(rpc: RpcClient, session: SessionService) {
     if (reference) {
       const previous = items[reference.index];
       if (!previous || JSON.stringify(previous) !== reference.fingerprint) throw new ApiError('EDIT_CONFLICT');
-      items[reference.index] = entry;
+      items[reference.index] = { ...previous, ...entry };
     } else items.unshift(entry);
     await write(key, items); return entry;
   }

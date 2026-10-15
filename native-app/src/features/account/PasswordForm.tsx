@@ -9,7 +9,7 @@ export function PasswordForm() {
   const [busy, setBusy] = useState(false), [error, setError] = useState(''), [saved, setSaved] = useState(false);
   async function change() {
     if (busy) return; setError(''); setSaved(false);
-    if (next.length < 10 || !/[A-Za-z가-힣]/.test(next) || !/\d/.test(next)) {setError('새 비밀번호는 문자와 숫자를 포함해 10자 이상 입력해 주세요.'); return;}
+    if (next.length < 10 || !/[A-Za-z]/.test(next) || !/\d/.test(next)) {setError('새 비밀번호는 영문과 숫자를 포함해 10자 이상 입력해 주세요.'); return;}
     if (next !== confirmation) {setError('새 비밀번호 확인이 일치하지 않습니다.'); return;}
     if (!current || current === next) {setError('현재 비밀번호와 다른 새 비밀번호를 입력해 주세요.'); return;}
     setBusy(true);
@@ -21,7 +21,7 @@ export function PasswordForm() {
     <Field label="현재 비밀번호" value={current} onChangeText={setCurrent} secureTextEntry textContentType="password"/>
     <Field label="새 비밀번호" value={next} onChangeText={setNext} secureTextEntry textContentType="newPassword"/>
     <Field label="새 비밀번호 확인" value={confirmation} onChangeText={setConfirmation} secureTextEntry textContentType="newPassword"/>
-    <Text style={ui.muted}>문자와 숫자를 포함해 10자 이상 입력해 주세요.</Text>
+    <Text style={ui.muted}>영문과 숫자를 포함해 10자 이상 입력해 주세요.</Text>
     {error ? <Text accessibilityRole="alert" style={ui.error}>{error}</Text> : null}{saved ? <Text accessibilityRole="alert" style={ui.body}>비밀번호가 변경되었습니다.</Text> : null}
     <Button secondary label="비밀번호 변경" busy={busy} onPress={() => void change()}/>
   </View>;

@@ -8,7 +8,7 @@ import {BookingInfo} from '../booking/BookingScreens';
 import {CustomerHistory} from './CustomerHistory';
 import {ui} from '../../theme/styles';
 
-export function AdminBookingScreen({id}: {id: string}) {
+export function AdminBookingScreen({id, notice}: {id: string; notice?: string}) {
   const services = useServices(), nav = useNav();
   const [rejecting, setRejecting] = useState(false), [reason, setReason] = useState(''), [busy, setBusy] = useState(false), [error, setError] = useState(''), [message, setMessage] = useState('');
   const resource = useResource(useCallback(() => services.adminBookings.get(id), [services, id]));
@@ -34,7 +34,7 @@ export function AdminBookingScreen({id}: {id: string}) {
       <View style={ui.flex}><Button label={rejecting ? '거절 확정' : '예약 승인'} danger={rejecting} busy={busy} onPress={() => void decide(rejecting)} testID="booking-decision"/></View></View> : undefined}>
     <DataState loading={resource.loading && !resource.data} error={resource.error} onRetry={resource.reload}/>
     {row ? <><View style={ui.card}><Text style={ui.pillText}>{pending ? '처리 대기' : row.status}</Text><Text style={ui.title}>{row.name || '예약 고객'}</Text><Text style={ui.heading}>{row.model || '차량명 미등록'}</Text><Text style={ui.body}>{row.car || '차량번호 미등록'}</Text></View>
-      {message ? <Text accessibilityRole="alert" style={ui.body}>{message}</Text> : null}
+      {message || notice ? <Text accessibilityRole="alert" style={ui.body}>{message || notice}</Text> : null}
       {rejecting ? <View style={ui.card}><Text style={ui.heading}>예약 거절 사유</Text><Field label="거절 사유" multiline value={reason} onChangeText={setReason} maxLength={200} placeholder="예약을 받을 수 없는 이유를 입력해 주세요."/>
         <Text style={ui.muted}>확정하면 이 예약이 취소 처리됩니다.</Text></View> : null}
       {error ? <Text accessibilityRole="alert" style={ui.error}>{error}</Text> : null}

@@ -79,7 +79,9 @@ class NativeRpcClient {
   }
   async call<T>(name: RpcName, params: Record<string, unknown> = {}, options: RpcOptions = {}): Promise<T> {
     const authenticated = options.authenticated ?? signedIn.has(name);
+    const entering = this.hooks?.credentials();
     if (!options.skipReadiness && (authenticated || epochRequired.has(name))) await this.hooks?.ensureReady();
+    if (!options.allowDetached) this.assertCurrent(entering, entering?.token);
     const captured = this.hooks?.credentials();
     const token = authenticated ? captured?.token : (typeof params.p_token === 'string' ? params.p_token : null);
     if (authenticated && (!token || !captured?.state.authenticated)) throw new ApiError('AUTH_REQUIRED');
@@ -115,7 +117,8 @@ class NativeRpcClient {
   async uploadAsset(key: string, bytes: Uint8Array, contentType: string) {
     requireValue(/^(service|case|notice|branch|intro|event)-[A-Za-z0-9_.-]{1,220}$/.test(key) && bytes.length > 0 && bytes.length <= 6 * 1024 * 1024, 'INVALID_ARGUMENT');
     requireValue(['image/jpeg', 'image/png', 'image/webp'].includes(contentType), 'INVALID_ARGUMENT');
-    await this.hooks?.ensureReady(); const current = this.hooks?.credentials();
+    const entering = this.hooks?.credentials();
+    await this.hooks?.ensureReady(); this.assertCurrent(entering, entering?.token); const current = this.hooks?.credentials();
     requireValue(current?.token && current.state.authenticated && ['main', 'general'].includes(current.state.role || ''), 'ADMIN_REQUIRED');
     requireValue(Number.isSafeInteger(current.state.privacyEpoch), 'PRIVACY_EPOCH_NOT_READY');
     const publicAsset = !key.startsWith('service-');
@@ -123,7 +126,7 @@ class NativeRpcClient {
     const bucket = publicAsset ? 'promotors-public' : 'promotors-private';
     const data = await this.request(`/storage/v1/object/${bucket}/${encodeURIComponent(key)}`, bytes,
       { 'x-promotors-token': current.token, 'x-promotors-data-epoch': String(current.state.privacyEpoch),
-        'Content-Type': contentType, 'cache-control': publicAsset ? '31536000' : 'no-store', 'x-upsert': 'false' });
+        'Content-Type': contentType, 'cache-control': publicAsset ? '31536000' : '0', 'x-upsert': 'false' });
     this.assertCurrent(current, current.token); return data;
   }
 }

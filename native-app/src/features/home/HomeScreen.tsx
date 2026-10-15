@@ -17,7 +17,7 @@ export function HomeScreen() {
     <View style={styles.hero}><Text style={styles.eyebrow}>수입차 정비 전문</Text>
       <Text style={styles.heroTitle}>사진으로 확인하고,{ '\n' }기록으로 관리하세요.</Text>
       <Text style={styles.heroBody}>내 차를 위한 정비 예약부터{ '\n' }작업 과정과 정비 이력까지.</Text>
-      <Button label="정비 예약" onPress={() => nav.go({name: 'reserve'})} testID="home-reserve"/>
+      <Button accent label="정비 예약" onPress={() => nav.go({name: 'reserve'})} testID="home-reserve"/>
     </View>
     <DataState loading={content.loading && !content.data} error={content.error} onRetry={content.reload}/>
     {first?.key ? <AssetImage assetKey={first.key} label="프로모터스 소개"/> : null}

@@ -46,7 +46,7 @@ export function ReserveScreen() {
       <Button label="예약 확인" onPress={() => nav.go({name: session.authenticated ? 'bookings' : 'guest-lookup'})}/></View>
   </Screen>;
   return <Screen title="정비 예약" onBack={() => step ? setStep(0) : nav.back()} testID="reserve-screen"
-    footer={<><Text accessibilityRole={error ? 'alert' : undefined} style={ui.error}>{error}</Text><Button label={step ? '예약 신청' : '다음'} busy={busy}
+    footer={<>{error ? <Text accessibilityRole="alert" style={ui.error}>{error}</Text> : null}<Button label={step ? '예약 신청' : '다음'} busy={busy}
       disabled={!step && (!time || occupied.loading || !!occupied.error)} onPress={() => step ? void submit() : setStep(1)} testID="reserve-next"/></>}>
     <Text style={ui.muted}>{step ? '2 / 2  정비 요청' : '1 / 2  방문 일정'}</Text>
     <DataState loading={setup.loading && !setup.data} error={setup.error} onRetry={setup.reload}/>

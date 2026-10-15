@@ -36,7 +36,7 @@ export function createBookingService(rpc: RpcClient, session: SessionService, id
       p_branch: branch, p_from_date: from, p_to_date: to,
     }) };
 }
-export function createAdminBookingService(rpc: RpcClient, session: SessionService) {
+export function createAdminBookingService(rpc: RpcClient, session: SessionService, onChanged?: () => void) {
   let busy = false;
   function canView(branch: string) { const state = session.snapshot(); return state.role !== 'general' || state.branches.includes(branch); }
   async function request<T>(action: string, data: Record<string, unknown> = {}) {
@@ -57,6 +57,7 @@ export function createAdminBookingService(rpc: RpcClient, session: SessionServic
       if (action === 'reject') requireValue(reason?.trim(), 'REJECTION_REASON_REQUIRED');
       const result = await request<BookingActionResult>(action, { id, ...(reason ? { reason: reason.trim() } : {}) });
       requireValue(result?.booking?.id === id && canView(result.booking.branch), 'FORBIDDEN');
+      onChanged?.();
       return result;
     } finally { busy = false; }
   }

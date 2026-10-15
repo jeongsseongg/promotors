@@ -8,11 +8,11 @@ import {NotificationTarget} from '../../domain/types';
 import {ui} from '../../theme/styles';
 
 export function routeForNotification(target: NotificationTarget, admin: boolean): Route {
-  if (target.kind === 'booking' && target.id) return {name: admin ? 'admin-booking' : 'booking', id: target.id};
+  if (target.kind === 'booking' && target.id) return {name: admin ? 'admin-booking' : 'booking', id: target.id, notice: target.actionFailed ? '알림에서 예약 처리를 완료하지 못했습니다. 최신 정보를 확인하고 아래 버튼으로 다시 처리해 주세요.' : target.actionCompleted ? '알림의 처리 결과입니다. 아래 최신 예약 상태를 확인해 주세요.' : undefined};
   if (target.kind === 'bookingSchedule') return {name: admin ? 'admin' : 'bookings'};
-  if (target.kind === 'repair') return {name: 'work'};
-  if (target.kind === 'inquiry') return {name: 'inquiry'};
-  if (target.kind === 'events') return {name: 'events'};
+  if (target.kind === 'repair') return admin ? {name: 'management', section: 'work', id: target.id} : {name: 'work'};
+  if (target.kind === 'inquiry') return admin ? {name: 'management', section: 'inquiries', id: target.id} : {name: 'inquiry'};
+  if (target.kind === 'events') return admin ? {name: 'management', section: 'promotions'} : {name: 'events'};
   return {name: 'notifications'};
 }
 export function NotificationsScreen() {

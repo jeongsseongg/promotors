@@ -22,7 +22,7 @@ class NotificationsService {
   private readonly stopNative: () => void;
   private readonly stopSession: () => void;
   private readonly stopClear: () => void;
-  constructor(private rpc: RpcClient, private session: SessionService, private push?: NativePushPlatform, private deviceId?: () => Promise<string>) {
+  constructor(private rpc: RpcClient, private session: SessionService, private push?: NativePushPlatform, private deviceId?: () => Promise<string>, private onChanged?: () => void) {
     this.stopNative = push?.onOpen(target => { this.queueOpen(target); void this.flushOpen(); }) || (() => {});
     this.stopSession = session.subscribe(value => {
       const token = session.credentials().token, key = `${token || ''}:${value.revision}`;
@@ -155,7 +155,9 @@ class NotificationsService {
     return target;
   }
   private async performOpenAction(pending: PendingOpen, target: NotificationTarget) {
-    const { raw, owner, revision, generation } = pending;
+    const { raw, generation } = pending, current = this.session.credentials();
+    const restored = pending.owner === null && generation === this.generation;
+    const owner = restored ? current.token : pending.owner, revision = restored ? current.state.revision : pending.revision;
     if (this.session.snapshot().role === 'customer' || raw.trustedAction !== true || !this.push || !this.deviceId ||
       !this.binding || raw.binding !== this.binding || this.owner !== owner || target.kind !== 'booking' || !target.id ||
       !['accept', 'reject'].includes(raw.action || '')) return target;
@@ -173,6 +175,7 @@ class NotificationsService {
           ...(raw.action === 'reject' ? { reason: '관리자 알림에서 거절' } : {}) } });
       this.guard(owner, revision, generation);
       requireValue(result?.booking?.id === target.id && (this.session.snapshot().role !== 'general' || this.session.snapshot().branches.includes(result.booking.branch)), 'FORBIDDEN');
+      this.onChanged?.();
       return { ...target, actionCompleted: true };
     } catch (error) {
       this.guard(owner, revision, generation);
@@ -244,6 +247,6 @@ class NotificationsService {
   deliveryLog() { return this.rpc.call<Record<string, unknown>[]>('pm_notifications', { p_action: 'delivery_log', p_data: {} }); }
   dispose() { this.stopNative(); this.stopSession(); this.stopClear(); this.listeners.clear(); return this.reset(); }
 }
-export function createNotificationsService(rpc: RpcClient, session: SessionService, push?: NativePushPlatform, deviceId?: () => Promise<string>) {
-  return new NotificationsService(rpc, session, push, deviceId);
+export function createNotificationsService(rpc: RpcClient, session: SessionService, push?: NativePushPlatform, deviceId?: () => Promise<string>, onChanged?: () => void) {
+  return new NotificationsService(rpc, session, push, deviceId, onChanged);
 }

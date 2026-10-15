@@ -29,7 +29,7 @@ export function createQaEnvironment(config: QaConfiguration, imageUri: string) {
   const push = createQaPush(!!config.requestOsPermission, enabled => {data.notificationState.preferences.enabled = enabled;});
   const services = {
     session: auth.session,
-    publicContent: {load: async () => clone(data.content), assetUrl: (_key: string) => imageUri},
+    publicContent: {load: async () => clone(data.content), assetUrl: (_key: string) => imageUri, legacyAsset: async (_key: string) => null},
     bookings: {
       list: async () => clone(scoped()),
       hours: async () => Object.fromEntries(data.content.branches.map(branch => [branch.name, {days: Object.fromEntries(Array.from({length: 7}, (_, day) => [String(day), {open: day !== 0, start: '09:30', end: '19:00'}])), lunchEnabled: true, lunchStart: '12:00', lunchEnd: '13:00', closedDates: []}])),

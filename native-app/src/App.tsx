@@ -19,6 +19,7 @@ import {ProfileScreen} from './features/account/ProfileScreen';
 import {PromotionsScreen} from './features/account/PromotionsScreen';
 import {DeletionScreen} from './features/account/DeletionScreen';
 import {LegalScreen} from './features/account/LegalScreen';
+import {ManagementScreen} from './features/management/ManagementScreen';
 import {AdminScheduleScreen} from './features/admin/AdminScheduleScreen';
 import {AdminBookingScreen} from './features/admin/AdminBookingScreen';
 import {NotificationsScreen, routeForNotification} from './features/notifications/NotificationsScreen';
@@ -28,7 +29,7 @@ import {color} from './theme/tokens';
 
 export type AppProps = {services: NativeServices; push: NativePush; initialRoute?: Route};
 const tabs = new Set(['home', 'branches', 'cases', 'notices', 'my']);
-const privateRoutes = new Set(['bookings', 'booking', 'profile', 'history', 'work', 'inquiry', 'coupons', 'events', 'notifications', 'notification-settings', 'admin', 'admin-booking']);
+const privateRoutes = new Set(['bookings', 'booking', 'profile', 'history', 'work', 'inquiry', 'coupons', 'events', 'notifications', 'notification-settings', 'admin', 'admin-booking', 'management']);
 function Content({route}: {route: Route}) {
   switch (route.name) {
     case 'home': return <HomeScreen/>;
@@ -53,8 +54,9 @@ function Content({route}: {route: Route}) {
     case 'deletion': return <DeletionScreen/>;
     case 'privacy': return <LegalScreen kind="privacy"/>;
     case 'terms': return <LegalScreen kind="terms"/>;
+    case 'management': return <ManagementScreen key={(route.section || 'menu') + ':' + (route.id || '')} section={route.section} id={route.id}/>;
     case 'admin': return <AdminScheduleScreen/>;
-    case 'admin-booking': return <AdminBookingScreen id={route.id}/>;
+    case 'admin-booking': return <AdminBookingScreen id={route.id} notice={route.notice}/>;
     case 'notifications': return <NotificationsScreen/>;
     case 'notification-settings': return <NotificationSettingsScreen/>;
   }
@@ -80,7 +82,7 @@ export default function App({services, push, initialRoute}: AppProps) {
   }, [services]);
   const route = stack[stack.length - 1];
   const protectedRoute = privateRoutes.has(route.name) && !session.authenticated;
-  const adminRoute = route.name === 'admin' || route.name === 'admin-booking';
+  const adminRoute = route.name === 'admin' || route.name === 'admin-booking' || route.name === 'management';
   const adminForbidden = adminRoute && session.authenticated && session.role === 'customer';
   return <SafeAreaProvider><StatusBar barStyle="dark-content"/>
     <AppContext services={services} push={push} navigation={navigation}>

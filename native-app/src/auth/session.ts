@@ -26,16 +26,23 @@ function parseSync(value: unknown, floor: number): SyncSnapshot {
   requireValue(contexts.length === 1 && context && typeof context.authenticated === 'boolean', 'INVALID_RESPONSE');
   if (context.authenticated) requireValue(context.role && roles.has(context.role), 'INVALID_RESPONSE');
   const branches = Array.isArray(context.branches) ? context.branches.filter(x => typeof x === 'string') : [];
+  const ownerOf = (item: Record<string, unknown>) => {
+    const direct = String(item.memberId || ''), embedded = String((item.customer as { id?: string } | undefined)?.id || '');
+    return direct && embedded && direct !== embedded ? '' : direct || embedded;
+  };
+  const owners = new Set(rows.filter(row => ['pm-bookings', 'pm-service-runs'].includes(row.data_key)).flatMap(row => Array.isArray(row.payload) ? row.payload : [])
+    .filter(item => branches.includes(item.branch)).map(ownerOf).filter(Boolean));
   const cleaned = rows.filter(row => {
     if (!row || typeof row.data_key !== 'string') return false;
     if (publicKeys.has(row.data_key)) return true;
     if (!context.authenticated) return false;
-    if (context.role === 'general') return ['pm-bookings', 'pm-service-runs'].includes(row.data_key);
+    if (context.role === 'general') return ['pm-bookings', 'pm-service-runs', 'pm-work-audit', 'pm-messages'].includes(row.data_key);
     return !['pm-auth-context', 'pm-privacy-epoch'].includes(row.data_key);
   }).map(row => {
     if (context.role !== 'general' || publicKeys.has(row.data_key)) return row;
     return { ...row, payload: Array.isArray(row.payload) ? row.payload.filter(item => {
       const record = item as Record<string, unknown>;
+      if (row.data_key === 'pm-messages') return owners.has(ownerOf(record));
       return typeof record.branch === 'string' && branches.includes(record.branch);
     }) : [] };
   });

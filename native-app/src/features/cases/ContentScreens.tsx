@@ -4,7 +4,9 @@ import {Screen} from '../../components/Screen';
 import {Choice} from '../../components/Controls';
 import {useNav, useServices} from '../../components/AppContext';
 import {DataState, useResource} from '../../components/DataState';
-import {AssetImage, plainText} from '../../components/Media';
+import {AssetImage} from '../../components/Media';
+import {PhotoViewer} from '../../components/PhotoViewer';
+import {ArticleBody} from './ArticleBody';
 import {ui} from '../../theme/styles';
 
 export function ContentListScreen({kind}: {kind: 'case' | 'notice'}) {
@@ -28,7 +30,7 @@ export function ContentListScreen({kind}: {kind: 'case' | 'notice'}) {
   </Screen>;
 }
 export function ContentDetailScreen({kind, id}: {kind: 'case' | 'notice'; id: string}) {
-  const services = useServices(), nav = useNav();
+  const services = useServices(), nav = useNav(), [photo, setPhoto] = useState('');
   const resource = useResource(useCallback(() => services.publicContent.load(), [services]));
   const rows = kind === 'case' ? resource.data?.cases : resource.data?.notices;
   const post = rows?.find((row, index) => String(row.id || index) === id);
@@ -37,8 +39,8 @@ export function ContentDetailScreen({kind, id}: {kind: 'case' | 'notice'; id: st
       empty={!resource.loading && !resource.error && !post ? '내용이 없거나 더 이상 공개되지 않습니다.' : ''} onRetry={resource.reload}/>
     {post ? <View style={ui.stack}><Text style={ui.title}>{post.title}</Text>
       <Text style={ui.muted}>{[post.branch, post.date, post.model].filter(Boolean).join(' · ')}</Text>
-      {(post.imageKeys || []).map(key => <AssetImage key={key} assetKey={key} label={post.title || '정비 사진'}/>)}
-      <View style={ui.card}><Text selectable style={ui.body}>{plainText(post.bodyHtml || post.body)}</Text></View>
+      <ArticleBody html={post.bodyHtml || post.body || ''} imageKeys={post.imageKeys || []} title={post.title || '정비사진'} onPhoto={setPhoto}/>
     </View> : null}
+    <PhotoViewer uri={photo} onClose={() => setPhoto('')}/>
   </Screen>;
 }

@@ -2,8 +2,9 @@ import { NATIVE_SOURCE, type RpcClient } from './client';
 import { requireValue } from './errors';
 import type { SessionService } from '../auth/session';
 import type { AccountContent, Booking, Inquiry, JsonRecord, MemberProfile, Promotions, ServiceRun } from '../domain/types';
+import type { RepairPhotoAccess } from './repair-photos';
 
-export function createAccountService(rpc: RpcClient, session: SessionService, id: () => string) {
+export function createAccountService(rpc: RpcClient, session: SessionService, id: () => string, photos: RepairPhotoAccess) {
   async function load(): Promise<AccountContent> {
     await session.refresh(); session.requireRole('customer');
     const rows = session.data()?.rows || [];
@@ -34,7 +35,11 @@ export function createAccountService(rpc: RpcClient, session: SessionService, id
     return { coupons: read('coupons'), assignments: read('assignments'), couponUsage: read('couponUsage'), events: read('events'), entries: read('entries') };
   }
   return { load, updateProfile, sendInquiry, promotions,
-    assetUrl: (key: string) => rpc.privateAssetUrl(key),
+    assetUrl: async (key: string) => { await photos.authorize(key); return rpc.privateAssetUrl(key); },
+    legacyAsset: async (key: string) => {
+      await photos.authorize(key); const value = await rpc.call<unknown>('pm_asset_get', { p_key: key }, { authenticated: true });
+      return typeof value === 'string' && /^data:image\/(png|jpeg|webp);base64,/.test(value) ? value : null;
+    },
     changePassword: async (current: string, next: string) => {
       session.requireRole('customer'); requireValue(current && next.length >= 10 && /[A-Za-z]/.test(next) && /\d/.test(next), 'WEAK_PASSWORD');
       await rpc.call('pm_change_password', { p_current: current, p_next: next });

@@ -6,7 +6,7 @@ struct PushConnectionEpoch: Equatable {
     let binding: String?
 }
 
-final class PushConnectionStore {
+final class PushConnectionStore: @unchecked Sendable {
     static let shared = PushConnectionStore()
     private let lock = NSLock()
     private let defaults = UserDefaults.standard
@@ -75,6 +75,7 @@ final class PushConnectionStore {
         return action.binding == activeBinding && action.generation == generation && action.expires > Date()
     }
     func deviceId() throws -> String {
+        lock.lock(); defer { lock.unlock() }
         let query: [String: Any] = [kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: "kr.promotors.app.native-device",
             kSecAttrAccount as String: "installation"]

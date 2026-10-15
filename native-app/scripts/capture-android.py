@@ -3,6 +3,7 @@ import os
 import pathlib
 import re
 import subprocess
+import sys
 import time
 import xml.etree.ElementTree as ET
 
@@ -12,6 +13,16 @@ output.mkdir(parents=True, exist_ok=True)
 
 def adb(*args):
     return subprocess.check_output(['adb', *args])
+
+def failed(kind, error, traceback):
+    try:
+        (output / 'failure.png').write_bytes(adb('exec-out', 'screencap', '-p'))
+        (output / 'failure-logcat.txt').write_bytes(adb('logcat', '-d', '-s', 'ReactNativeJS', 'AndroidRuntime'))
+        (output / 'failure-ui.xml').write_text(hierarchy(), encoding='utf8')
+    finally:
+        sys.__excepthook__(kind, error, traceback)
+
+sys.excepthook = failed
 
 def hierarchy():
     adb('shell', 'uiautomator', 'dump', '/sdcard/pm-ui.xml')

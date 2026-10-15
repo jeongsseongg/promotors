@@ -10,12 +10,13 @@ import {ui} from '../../theme/styles';
 
 export function AdminScheduleScreen() {
   const services = useServices(), nav = useNav(), session = services.session.snapshot();
+  const role = session.role, branchKey = session.branches.join('|');
   const [month, setMonth] = useState(new Date()), [date, setDate] = useState(dateKey(new Date())), [branch, setBranch] = useState('');
   const [view, setView] = useState<'pending' | 'calendar'>('pending'), [busyId, setBusyId] = useState(''), [message, setMessage] = useState(''), [error, setError] = useState('');
   const resource = useResource(useCallback(async () => {
     const [queue, schedule, content] = await Promise.all([services.adminBookings.list(), services.adminBookings.schedule(), services.publicContent.load()]);
-    return {queue, schedule, branches: content.branches.filter(row => session.role !== 'general' || session.branches.includes(row.name))};
-  }, [services, session.role, session.branches]));
+    return {queue, schedule, branches: content.branches.filter(row => role !== 'general' || branchKey.split('|').includes(row.name))};
+  }, [services, role, branchKey]));
   useForegroundRefresh(resource.reload, 12000);
   const all = resource.data?.schedule.filter(row => !branch || row.branch === branch) || [];
   const rows = view === 'pending' ? resource.data?.queue.items.filter(row => !branch || row.branch === branch) || [] : all.filter(row => row.date === date);

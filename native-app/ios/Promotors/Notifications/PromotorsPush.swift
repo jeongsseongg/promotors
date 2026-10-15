@@ -41,7 +41,7 @@ final class PromotorsPush: RCTEventEmitter {
     func requestPermission(_ resolve: @escaping RCTPromiseResolveBlock, rejecter reject: @escaping RCTPromiseRejectBlock) {
         DispatchQueue.main.async {
             UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { _, error in
-                if let error { reject("NOTIFICATION_PERMISSION_FAILED", "앱 알림 권한을 확인하지 못했습니다.", error); return }
+                if let error { reject("NOTIFICATION_PERMISSION_FAILED", "앱 알림 권한을 확인하지 못했습니다.", error as NSError); return }
                 UNUserNotificationCenter.current().getNotificationSettings { resolve(Self.permission($0.authorizationStatus)) }
             }
         }
@@ -86,7 +86,7 @@ final class PromotorsPush: RCTEventEmitter {
     }
     private func failWaiters(_ code: String, message: String, error: Error? = nil) {
         let pending = waiters; waiters.removeAll(); registrationEpoch = nil
-        pending.values.forEach { $0.reject(code, message, error) }
+        pending.values.forEach { $0.reject(code, message, error.map { $0 as NSError }) }
     }
     @objc(bindConnection:resolver:rejecter:)
     func bindConnection(_ binding: String, resolver resolve: @escaping RCTPromiseResolveBlock, rejecter reject: @escaping RCTPromiseRejectBlock) {
@@ -97,7 +97,7 @@ final class PromotorsPush: RCTEventEmitter {
             Task { @MainActor in
                 guard #available(iOS 16.2, *) else { resolve(nil); return }
                 do { try await BookingActivityController.shared.bind(context); resolve(nil) }
-                catch { reject("ACTIVITY_BINDING_FAILED", "상시알림 연결을 준비하지 못했습니다.", error) }
+                catch { reject("ACTIVITY_BINDING_FAILED", "상시알림 연결을 준비하지 못했습니다.", error as NSError) }
             }
         }
     }
@@ -106,12 +106,13 @@ final class PromotorsPush: RCTEventEmitter {
         DispatchQueue.main.async {
             self.failWaiters("SESSION_CHANGED", message: "알림 연결 계정이 변경되었습니다.")
             PushConnectionStore.shared.clear()
+            URLCache.shared.removeAllCachedResponses()
             UIApplication.shared.unregisterForRemoteNotifications()
             self.removeDeliveredNotifications()
             Task { @MainActor in
                 guard #available(iOS 16.2, *) else { resolve(nil); return }
                 do { try await BookingActivityController.shared.clear(); resolve(nil) }
-                catch { reject("ACTIVITY_CLEAR_FAILED", "이전 상시알림을 정리하지 못했습니다.", error) }
+                catch { reject("ACTIVITY_CLEAR_FAILED", "이전 상시알림을 정리하지 못했습니다.", error as NSError) }
             }
         }
     }
@@ -124,7 +125,7 @@ final class PromotorsPush: RCTEventEmitter {
     @objc(getDeviceId:rejecter:)
     func getDeviceId(_ resolve: @escaping RCTPromiseResolveBlock, rejecter reject: @escaping RCTPromiseRejectBlock) {
         do { resolve(try PushConnectionStore.shared.deviceId()) }
-        catch { reject("DEVICE_STORAGE_FAILED", error.localizedDescription, error) }
+        catch { reject("DEVICE_STORAGE_FAILED", error.localizedDescription, error as NSError) }
     }
     @objc(getConnectionStatus:rejecter:)
     func getConnectionStatus(_ resolve: @escaping RCTPromiseResolveBlock, rejecter reject: @escaping RCTPromiseRejectBlock) {
@@ -154,7 +155,7 @@ final class PromotorsPush: RCTEventEmitter {
     func clearBookingSchedule(_ resolve: @escaping RCTPromiseResolveBlock, rejecter reject: @escaping RCTPromiseRejectBlock) {
         Task { @MainActor in
             do { try await BookingActivityController.shared.clear(); resolve(nil) }
-            catch { reject("LIVE_ACTIVITY_CLEAR_FAILED", "상시알림을 정리하지 못했습니다.", error) }
+            catch { reject("LIVE_ACTIVITY_CLEAR_FAILED", "상시알림을 정리하지 못했습니다.", error as NSError) }
         }
     }
     @objc(getQaConfiguration:rejecter:)

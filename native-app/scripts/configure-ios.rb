@@ -37,6 +37,7 @@ project.root_object.known_regions = ['ko', 'en', 'Base']
   target.build_configurations.each do |configuration|
     settings = configuration.build_settings
     settings['PRODUCT_BUNDLE_IDENTIFIER'] = bundle
+    settings['PRODUCT_NAME'] = '$(TARGET_NAME)'
     settings['DEVELOPMENT_TEAM'] = 'Z8QYZ8K855'
     settings['MARKETING_VERSION'] = version.fetch('version')
     settings['CURRENT_PROJECT_VERSION'] = version.fetch('iosBuild').to_s

@@ -34,7 +34,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterD
                      options: [UIApplication.OpenURLOptionsKey: Any] = [:]) -> Bool {
         PushNotificationRouter.captureURL(url)
     }
-    func userNotificationCenter(_ center: UNUserNotificationCenter,
+    nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter,
                                 willPresent notification: UNNotification,
                                 withCompletionHandler completion: @escaping (UNNotificationPresentationOptions) -> Void) {
         completion(PushNotificationRouter.belongsToCurrentConnection(notification.request.content) ? [.banner, .list, .sound] : [])
