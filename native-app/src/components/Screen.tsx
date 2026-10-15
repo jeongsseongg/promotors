@@ -11,9 +11,9 @@ export function Screen({title, children, onBack, action, footer, refreshing, onR
       <Text accessibilityRole="header" style={styles.title}>{title}</Text>{action}
     </View>
     <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <ScrollView keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag" contentContainerStyle={styles.content}
+      <ScrollView keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag"
         refreshControl={onRefresh ? <RefreshControl refreshing={!!refreshing} onRefresh={onRefresh}/> : undefined}>
-        {children}
+        <View collapsable={false} collapsableChildren={false} style={styles.content}>{children}</View>
       </ScrollView>
       {footer ? <SafeAreaView edges={['bottom']} style={styles.footer}>{footer}</SafeAreaView> : null}
     </KeyboardAvoidingView>
