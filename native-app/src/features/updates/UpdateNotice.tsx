@@ -39,18 +39,18 @@ function useUpdateOffer(updates?: StoreUpdates) {
 }
 export function UpdateNotice({updates, eligible}: {updates?: StoreUpdates; eligible: boolean}) {
   const {pending, active, dismiss, generation} = useUpdateOffer(updates);
-  const [busy, setBusy] = useState(false), [error, setError] = useState('');
-  useEffect(() => {setBusy(false); setError('');}, [updates]);
+  const [busy, setBusy] = useState(false), [error, setError] = useState<{key: string; message: string} | null>(null);
+  useEffect(() => {setBusy(false); setError(null);}, [updates]);
   async function openStore() {
     if (!updates || !pending || busy) return;
     const key = pending.key, ticket = generation.current;
-    setBusy(true); setError('');
+    setBusy(true); setError(null);
     try {
       await updates.openStore();
       if (ticket === generation.current) {
         dismiss(key);
       }
-    } catch {if (ticket === generation.current) setError('스토어를 열지 못했어요. 다시 눌러 주세요.');}
+    } catch {if (ticket === generation.current) setError({key, message: '스토어를 열지 못했어요. 다시 눌러 주세요.'});}
     finally {if (ticket === generation.current) setBusy(false);}
   }
   if (!pending) return null;
@@ -62,9 +62,9 @@ export function UpdateNotice({updates, eligible}: {updates?: StoreUpdates; eligi
         <Text accessibilityRole="header" style={styles.title}>새 버전이 나왔어요</Text>
         <Text style={styles.body}>더 편리한 예약과 안정적인 알림을 위해 프로모터스를 업데이트해 주세요.</Text>
         <Text style={styles.version}>설치된 버전 {release.version}{pending.version ? '  ·  새 버전 ' + pending.version : ''}</Text>
-        {error ? <Text accessibilityRole="alert" style={styles.error}>{error}</Text> : null}
+        {error?.key === pending.key ? <Text accessibilityRole="alert" style={styles.error}>{error.message}</Text> : null}
         <Button label="업데이트" accent busy={busy} onPress={() => void openStore()}/>
-        <Button label="나중에" secondary disabled={busy} onPress={() => {dismiss(); setError('');}}/>
+        <Button label="나중에" secondary disabled={busy} onPress={() => {dismiss(); setError(null);}}/>
       </View>
       </ScrollView>
     </SafeAreaView>
