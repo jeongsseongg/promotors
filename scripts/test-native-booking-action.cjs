@@ -88,3 +88,11 @@ test('APNs native actions and explicit rejection preserve existing idempotent be
   assert.equal((await call({ ...native, reason: '다른 사유' }, 'token-a', 'reject')).changed, false);
   assert.equal((await db.query('select count(*) count from action_audit')).rows[0].count, 1);
 }));
+
+test('a synthetic action and its audit are rolled back together', () => using(async ({ db, call, unchanged }) => {
+  await db.exec('begin');
+  assert.equal((await call()).changed, true);
+  assert.equal((await db.query('select count(*) count from action_audit')).rows[0].count, 1);
+  await db.exec('rollback');
+  await unchanged();
+}));
