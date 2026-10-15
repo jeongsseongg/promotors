@@ -23,7 +23,7 @@
   function unsupportedMessage() {
     return global.Capacitor?.getPlatform?.() === 'ios'
       ? '현재 아이폰 앱에서는 기기 푸시 알림을 지원하지 않습니다. 앱 안의 알림함은 이용할 수 있습니다.'
-      : '이 환경에서는 기기 푸시 알림을 지원하지 않습니다. 앱 안의 알림함은 이용할 수 있습니다.';
+      : '이 브라우저에서는 푸시 알림을 지원하지 않습니다. 알림함은 이용할 수 있습니다.';
   }
   function deviceId() {
     let id = localStorage.getItem(DEVICE_KEY);
@@ -247,16 +247,17 @@
     }
     function deviceControls() {
       const controls = element('div', undefined, 'pm-notify-setting-group');
+      const deviceLabel = global.Capacitor?.isNativePlatform?.() ? '앱 푸시 알림' : '브라우저 알림';
       const enabled = state.preferences.enabled;
       const turnOff = enabled && state.deviceConnected;
       const row = element('div', undefined, 'pm-notify-setting-row');
-      const text = element('div'); text.append(element('strong', '앱 푸시 알림'),
+      const text = element('div'); text.append(element('strong', deviceLabel),
         element('p', turnOff ? '이 기기에 알림이 연결되어 있어요' : getPermission() === 'denied' ? '휴대폰 설정에서 알림을 허용해 주세요' : '예약과 정비 소식을 기기 알림으로 받아요', 'pm-notify-row-description'));
       const toggle = button('', () => perform(async () => {
         if (turnOff) await disablePush(true);
         else { await subscribe(); await refresh(); status('이 기기에 알림이 연결되었어요.'); }
       }), 'pm-notify-switch');
-      toggle.setAttribute('role', 'switch'); toggle.setAttribute('aria-label', '앱 푸시 알림');
+      toggle.setAttribute('role', 'switch'); toggle.setAttribute('aria-label', deviceLabel);
       toggle.setAttribute('aria-checked', String(Boolean(turnOff))); toggle.disabled = !supported() && !turnOff;
       row.append(text, toggle); controls.append(row);
       if (enabled && !state.deviceConnected) controls.append(button('모든 기기의 알림 끄기', () => perform(() => disablePush(true)), 'pm-notify-button pm-notify-text-button'));

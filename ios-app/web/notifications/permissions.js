@@ -2,9 +2,7 @@
   'use strict';
   const SEEN = 'pm-permission-intro-v1', PENDING = 'pm-push-opt-in-v1';
   const native = window.PMNativePush;
-  const installed = window.Capacitor?.isNativePlatform?.() || navigator.standalone === true
-    || ['standalone', 'fullscreen', 'minimal-ui'].some(mode => matchMedia(`(display-mode: ${mode})`).matches)
-    || document.referrer.startsWith('android-app://');
+  const installed = window.Capacitor?.isNativePlatform?.() === true;
   let dialog;
   function node(tag, text, className) {
     const item = document.createElement(tag);
