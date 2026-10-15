@@ -2,7 +2,7 @@ import React from 'react';
 import {Alert, Text} from 'react-native';
 import TestRenderer, {act, ReactTestRenderer} from 'react-test-renderer';
 import App from '../../App';
-import {Button, Choice, Field, MenuRow} from '../../components/Controls';
+import {Button, Field, MenuRow} from '../../components/Controls';
 import {createQaEnvironment} from '../../qa/fixture-services';
 import {ManagedRun} from '../../domain/management';
 import {Role} from '../../domain/types';
