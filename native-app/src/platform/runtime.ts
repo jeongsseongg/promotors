@@ -5,8 +5,9 @@ import {sessionStorage} from './session-storage';
 import {bindingSnapshot, deviceId, nativePush, onActivityToken, onTokenRefresh, syncSchedule} from './push';
 import {createActivityTokenQueue} from './activity-tokens';
 import {photoPicker} from './photos';
+import {notificationConnectionPreferences} from './notification-preferences';
 
-export const services = createNativeServices({...publicConfig, storage: sessionStorage, push: nativePush, deviceId, photoPicker});
+export const services = createNativeServices({...publicConfig, storage: sessionStorage, push: nativePush, deviceId, photoPicker, connectionPreferences: notificationConnectionPreferences});
 let requestScheduleRefresh: () => Promise<void> = async () => {};
 let requestActivityTokenRefresh: () => Promise<void> = async () => {};
 function activityContext() {
@@ -19,7 +20,7 @@ export const push = {
   async status() {
     const value = await services.notifications.connection();
     return {permission: value.permission === 'default' ? 'notDetermined' as const : value.permission,
-      connected: value.connected, deviceId: await deviceId()};
+      connected: value.connected, automatic: value.automatic, deviceId: await deviceId()};
   },
   async connect() {await services.notifications.enable(); await requestActivityTokenRefresh(); await requestScheduleRefresh();},
   async disconnect() {await services.notifications.disable(); await requestActivityTokenRefresh();},

@@ -54,7 +54,7 @@ def save(name, source=None):
 def tap(text, source=None):
     document = ET.fromstring(source or hierarchy())
     for node in document.iter('node'):
-        if text in [node.get('text'), node.get('content-desc')]:
+        if text in [node.get('text'), node.get('content-desc'), node.get('resource-id')]:
             x1, y1, x2, y2 = map(int, re.findall(r'\d+', node.get('bounds')))
             adb('shell', 'input', 'tap', str((x1 + x2) // 2), str((y1 + y2) // 2))
             return
@@ -104,16 +104,23 @@ set_appearance('no')
 adb('install', '-r', str(root / 'android/app/build/outputs/apk/debug/app-debug.apk'))
 adb('shell', 'pm', 'revoke', 'kr.promotors.app', 'android.permission.POST_NOTIFICATIONS')
 adb('shell', 'pm', 'clear-permission-flags', 'kr.promotors.app', 'android.permission.POST_NOTIFICATIONS', 'user-set', 'user-fixed')
-adb('shell', 'am', 'start', '-n', 'kr.promotors.app/.MainActivity', '--es', 'qaScreen', 'notifications', '--ez', 'requestOsPermission', 'true')
-source = wait_for('실제 발송 없음')
-tap('앱 알림 연결', source)
+adb('shell', 'am', 'start', '-n', 'kr.promotors.app/.MainActivity', '--es', 'qaScreen', 'setup', '--ez', 'requestOsPermission', 'true')
+# A signed-in native session must request OS permission without any connect-button tap.
 source = wait_for('com.android.permissioncontroller')
 assert '프로모터스' in source, 'Native permission does not identify the app'
 assert '알림을 보내' in source or 'notifications' in source.lower(), 'Notification permission text absent'
 save('os-notification-permission', source)
-adb('shell', 'input', 'keyevent', '4')
-results = []
-for screen, label in [('booking', '정비 예약'), ('mypage', '마이페이지'), ('admin', '예약관리'), ('notifications', '앱 알림 설정'), ('updates', '새 버전이 나왔어요')]:
+allow = next(node for node in ET.fromstring(source).iter('node') if node.get('resource-id', '').endswith('/permission_allow_button'))
+tap(allow.get('resource-id'), source)
+source = wait_for('앱 알림이 연결됐어요')
+assert '알림 설정' in source and '실제 발송 없음' in source
+save('automatic-notification-connected', source)
+tap('알림 설정', source)
+source = wait_for('앱 알림 설정')
+assert '연결됨' in source and '테스트 알림 보내기' in source
+save('automatic-notification-settings', source)
+results = [{'screen': 'setup', 'systemAppearance': 'light', 'nativeViews': True, 'webViewCount': 0, 'automaticOsPermission': True, 'allowImmediatelyConnected': True, 'settingsOpened': True}]
+for screen, label in [('booking', '정비 예약'), ('mypage', '마이페이지'), ('admin', '예약관리'), ('notifications', '앱 알림 설정'), ('updates', '새 버전이 나왔어요'), ('setup-denied', '앱 알림을 켜주세요')]:
     adb('shell', 'am', 'force-stop', 'kr.promotors.app')
     adb('shell', 'am', 'start', '-n', 'kr.promotors.app/.MainActivity', '--es', 'qaScreen', screen)
     source = wait_for('실제 발송 없음')
@@ -162,5 +169,5 @@ set_appearance('no')
 logs = adb('logcat', '-d', '-s', 'ReactNativeJS').decode('utf8')
 assert 'PROMOTORS_NATIVE_QA_READY' in logs, 'Native QA readiness marker absent'
 assert not re.search(r'operationalRequests["\\: ]+[1-9]', logs), 'QA made a production network request'
-(output / 'verification.json').write_text(json.dumps({'screens': results, 'osPermissionApp': '프로모터스', 'operationalRequests': 0, 'physicalPushDelivery': 'not-tested'}, ensure_ascii=False, indent=2), encoding='utf8')
+(output / 'verification.json').write_text(json.dumps({'screens': results, 'osPermissionApp': '프로모터스', 'automaticPermissionAndConnection': True, 'operationalRequests': 0, 'physicalPushDelivery': 'not-tested'}, ensure_ascii=False, indent=2), encoding='utf8')
 print('Independent Android native UI and OS permission verified; no real push sent.')

@@ -2,7 +2,7 @@ import type { RpcClient } from './client';
 import { ApiError, requireValue } from './errors';
 import type { SessionService } from '../auth/session';
 import type { AdminBookingDetail, AdminBookingQueue, NativeBookingSnapshot, NativePushPlatform, NotificationOpenTarget,
-  NotificationPreferences, NotificationState, NotificationTarget, PushConnection } from '../domain/types';
+  NotificationConnectionPreferences, NotificationPreferences, NotificationState, NotificationTarget, PushConnection } from '../domain/types';
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const recordId = /^[A-Za-z0-9:_-]{1,128}$/;
@@ -13,6 +13,7 @@ class NotificationsService {
   private revision = -1;
   private generation = 0;
   private busy = false;
+  private restoration: Promise<void> | null = null;
   private restoreQueued = false;
   private opening = false;
   private restoredOwner = '';
@@ -23,7 +24,7 @@ class NotificationsService {
   private readonly stopNative: () => void;
   private readonly stopSession: () => void;
   private readonly stopClear: () => void;
-  constructor(private rpc: RpcClient, private session: SessionService, private push?: NativePushPlatform, private deviceId?: () => Promise<string>, private onChanged?: () => void) {
+  constructor(private rpc: RpcClient, private session: SessionService, private push?: NativePushPlatform, private deviceId?: () => Promise<string>, private onChanged?: () => void, private connectionPreferences?: NotificationConnectionPreferences) {
     this.stopNative = push?.onOpen(target => { this.queueOpen(target); void this.flushOpen(); }) || (() => {});
     this.stopSession = session.subscribe(value => {
       const token = session.credentials().token, key = `${token || ''}:${value.revision}`;
@@ -50,9 +51,14 @@ class NotificationsService {
   async connection(): Promise<PushConnection> {
     const value = await this.state(), current = this.session.credentials();
     const permission = this.push ? await this.push.permission() : 'default';
+    const automatic = await this.connectionPreferences?.allowed(this.preferenceKey()) ?? true;
     this.assertSession(current.token, current.state.revision);
-    return { supported: Boolean(this.push && this.deviceId), permission, enabled: value.preferences.enabled,
+    return { automatic, supported: Boolean(this.push && this.deviceId), permission, enabled: value.preferences.enabled,
       connected: Boolean(value.preferences.enabled && permission === 'granted' && this.binding && this.owner === current.token && this.revision === current.state.revision) };
+  }
+  private preferenceKey() {
+    const state = this.session.snapshot();
+    return JSON.stringify([state.profile?.id || '', state.role, state.branches]);
   }
   private assertSession(owner: string | null, revision: number) {
     const current = this.session.credentials();
@@ -70,11 +76,12 @@ class NotificationsService {
     this.restoreQueued = false;
     void this.restoreConnection().catch(() => {});
   }
-  private async connect(permission: 'default' | 'granted' | 'denied', enable: boolean) {
+  private async connect(permission: 'default' | 'granted' | 'denied', enable: boolean, expected: {owner: string | null; revision: number; generation: number}) {
     requireValue(this.push && this.deviceId, 'PUSH_NOT_CONFIGURED');
     if (permission !== 'granted') throw new ApiError('NOTIFICATION_PERMISSION_DENIED');
-    await this.session.ensureReady();
-    const current = this.session.credentials(), owner = current.token, revision = current.state.revision, generation = this.generation;
+    const {owner, revision, generation} = expected;
+    await this.session.ensureReady(); this.guard(owner, revision, generation);
+    const preferenceKey = this.preferenceKey();
     const id = await this.deviceId(); this.guard(owner, revision, generation);
     requireValue(uuid.test(id), 'PUSH_NOT_CONFIGURED');
     const token = await this.push.getToken(); this.guard(owner, revision, generation);
@@ -86,7 +93,11 @@ class NotificationsService {
       requireValue(typeof result.binding === 'string' && uuid.test(result.binding), 'INVALID_RESPONSE');
       await this.platformChange(async () => { this.guard(owner, revision, generation); await this.push!.bind(result.binding); });
       this.guard(owner, revision, generation);
-      if (enable) await this.rpc.call('pm_notifications', { p_action: 'preferences', p_data: { enabled: true } });
+      if (enable) {
+        await this.rpc.call('pm_notifications', { p_action: 'preferences', p_data: { enabled: true } });
+        this.guard(owner, revision, generation);
+        await this.connectionPreferences?.save(preferenceKey, true);
+      }
       this.guard(owner, revision, generation);
       this.binding = result.binding; this.owner = owner; this.revision = revision; void this.flushOpen();
     } catch (error) {
@@ -98,30 +109,48 @@ class NotificationsService {
     }
   }
   async enable() {
+    const entering = this.session.credentials();
+    while (this.restoration) {
+      await this.restoration.catch(() => {});
+      this.assertSession(entering.token, entering.state.revision);
+    }
+    this.assertSession(entering.token, entering.state.revision);
     if (this.busy || this.opening) throw new ApiError('REQUEST_IN_PROGRESS');
     requireValue(this.push && this.deviceId, 'PUSH_NOT_CONFIGURED'); this.busy = true;
     try {
-      await this.session.ensureReady();
-      const { token, state } = this.session.credentials(), generation = this.generation;
+      const generation = this.generation;
+      await this.session.ensureReady(); this.guard(entering.token, entering.state.revision, generation);
+      const { token, state } = this.session.credentials();
       requireValue(token, 'AUTH_REQUIRED');
       const permission = await this.push.requestPermission(); this.guard(token, state.revision, generation);
-      await this.connect(permission, true); return this.connection();
+      await this.connect(permission, true, {owner: token, revision: state.revision, generation}); return this.connection();
     } finally { this.busy = false; this.retryQueuedRestore(); void this.flushOpen(); }
   }
-  async restoreConnection() {
+  restoreConnection(): Promise<void> {
+    if (this.restoration) {this.restoreQueued = true; return this.restoration;}
+    const task = this.restore(); this.restoration = task;
+    void task.finally(() => {
+      if (this.restoration === task) {this.restoration = null; this.retryQueuedRestore();}
+    }).catch(() => {});
+    return task;
+  }
+  private async restore() {
     if (!this.push || !this.deviceId || !this.session.snapshot().authenticated) return;
     if (this.busy || this.opening) { this.restoreQueued = true; return; }
     this.busy = true;
     const { token, state } = this.session.credentials(), generation = this.generation;
     try {
       const value = await this.state(), permission = await this.push.permission();
+      const automatic = await this.connectionPreferences?.allowed(this.preferenceKey()) ?? true;
       this.guard(token, state.revision, generation);
-      if (value.preferences.enabled && permission === 'granted') await this.connect(permission, false);
+      if (automatic && value.preferences.enabled && permission === 'granted') await this.connect(permission, false, {owner: token, revision: state.revision, generation});
       else await this.reset(false);
-    } finally { this.busy = false; this.retryQueuedRestore(); void this.flushOpen(); }
+    } finally { this.busy = false; void this.flushOpen(); }
   }
   async disable(allDevices = false) {
     const { token, state } = this.session.credentials(), id = await this.deviceId?.();
+    this.assertSession(token, state.revision);
+    await this.connectionPreferences?.save(this.preferenceKey(), false);
     this.assertSession(token, state.revision); await this.reset(); this.assertSession(token, state.revision);
     if (allDevices) await this.rpc.call('pm_notifications', { p_action: 'preferences', p_data: { enabled: false } });
     if (id) await this.rpc.call('pm_notifications', { p_action: 'unsubscribe', p_data: { deviceId: id } });
@@ -173,7 +202,7 @@ class NotificationsService {
     this.guard(owner, revision, generation);
     const key = `${raw.binding}:${target.id}:${raw.action}`;
     if (this.actions.has(key)) return target;
-    await this.connect(await this.push.permission(), false); this.guard(owner, revision, generation);
+    await this.connect(await this.push.permission(), false, {owner, revision, generation}); this.guard(owner, revision, generation);
     if (raw.binding !== this.binding) return target;
     const id = await this.deviceId(); this.guard(owner, revision, generation);
     this.actions.add(key);
@@ -267,6 +296,6 @@ class NotificationsService {
   deliveryLog() { return this.rpc.call<Record<string, unknown>[]>('pm_notifications', { p_action: 'delivery_log', p_data: {} }); }
   dispose() { this.stopNative(); this.stopSession(); this.stopClear(); this.listeners.clear(); return this.reset(); }
 }
-export function createNotificationsService(rpc: RpcClient, session: SessionService, push?: NativePushPlatform, deviceId?: () => Promise<string>, onChanged?: () => void) {
-  return new NotificationsService(rpc, session, push, deviceId, onChanged);
+export function createNotificationsService(rpc: RpcClient, session: SessionService, push?: NativePushPlatform, deviceId?: () => Promise<string>, onChanged?: () => void, connectionPreferences?: NotificationConnectionPreferences) {
+  return new NotificationsService(rpc, session, push, deviceId, onChanged, connectionPreferences);
 }

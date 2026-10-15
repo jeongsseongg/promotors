@@ -97,8 +97,12 @@ export interface NativePushPlatform {
   onOpen(listener: (target: NotificationOpenTarget) => void): () => void;
   getInitialTarget(): Promise<NotificationOpenTarget | null>;
 }
+export interface NotificationConnectionPreferences {
+  allowed(ownerKey: string): Promise<boolean>;
+  save(ownerKey: string, allowed: boolean): Promise<void>;
+}
 export interface PushConnection {
-  supported: boolean; permission: Permission; enabled: boolean; connected: boolean;
+  supported: boolean; permission: Permission; enabled: boolean; connected: boolean; automatic: boolean;
 }
 export type DeletionStatus = 'none' | 'pending' | 'processing' | 'needs_review' | 'cancelled' | 'completed';
 export interface DeletionState {

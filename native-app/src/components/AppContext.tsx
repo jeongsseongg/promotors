@@ -2,7 +2,7 @@ import React, {createContext, useContext} from 'react';
 import type {createNativeServices} from '../api/services';
 
 export type NativeServices = ReturnType<typeof createNativeServices>;
-export type PushStatus = {permission: 'granted' | 'denied' | 'notDetermined'; connected: boolean; deviceId?: string};
+export type PushStatus = {permission: 'granted' | 'denied' | 'notDetermined'; connected: boolean; automatic?: boolean; deviceId?: string};
 export type NativePush = {status(): Promise<PushStatus>; connect(): Promise<void>; disconnect(): Promise<void>; openSettings(): Promise<void>};
 export type Tab = 'home' | 'branches' | 'cases' | 'notices' | 'my';
 export type Route =
