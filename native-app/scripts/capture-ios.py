@@ -26,9 +26,13 @@ for kind, device in selected:
     sim('bootstatus', device, '-b')
     sim('status_bar', device, 'override', '--time', '9:41', '--dataNetwork', 'wifi', '--wifiMode', 'active', '--wifiBars', '3', '--batteryState', 'charged', '--batteryLevel', '100')
     sim('install', device, str(app))
-    for screen in ['booking', 'mypage', 'admin', 'notifications', 'updates']:
+    captures = [(screen, 'light') for screen in titles] + [(screen, 'dark') for screen in ['booking', 'mypage']]
+    for screen, appearance in captures:
+        sim('ui', device, 'appearance', appearance)
+        assert sim('ui', device, 'appearance').decode().strip().lower().endswith(appearance), 'System appearance not applied'
+        name = kind + '-' + screen + ('-dark' if appearance == 'dark' else '')
         subprocess.run(['xcrun', 'simctl', 'terminate', device, 'kr.promotors.app'], capture_output=True)
-        log = output / (kind + '-' + screen + '.log')
+        log = output / (name + '.log')
         with log.open('wb') as handle:
             process = subprocess.Popen(['xcrun', 'simctl', 'launch', '--console', device, 'kr.promotors.app', '-PM_NATIVE_QA_SCREEN', screen], stdout=handle, stderr=subprocess.STDOUT)
             ready = False
@@ -43,13 +47,14 @@ for kind, device in selected:
                 process.terminate()
                 raise RuntimeError('Native iOS app not ready: ' + kind + ' ' + screen + '\n' + source[-2000:])
             time.sleep(3)
-            screenshot = output / (kind + '-' + screen + '.png')
+            screenshot = output / (name + '.png')
             sim('io', device, 'screenshot', str(screenshot))
             subprocess.run([str(checker), str(screenshot), titles[screen]], check=True)
             process.terminate()
         if '"operationalRequests":0' not in source.replace(' ', '').replace('\\"', '"'):
             raise RuntimeError('QA production-request check missing')
-        results.append({'device': kind, 'screen': screen, 'nativeQaReady': True, 'operationalRequests': 0})
+        results.append({'device': kind, 'screen': screen, 'systemAppearance': appearance, 'nativeQaReady': True, 'operationalRequests': 0})
+    sim('ui', device, 'appearance', 'light')
     sim('shutdown', device)
 (output / 'verification.json').write_text(json.dumps({'screens': results, 'physicalPushDelivery': 'not-tested'}, indent=2), encoding='utf8')
 print('Independent iOS app rendered. Screenshots require visual review; real push not tested.')
