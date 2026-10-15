@@ -1,0 +1,103 @@
+name: Promotors independent native app
+on:
+  push:
+    branches: [codex/native-app-separation-20261015]
+    paths: ['native-app/**', '.github/workflows/native-app.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: promotors-independent-native
+  cancel-in-progress: false
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.19.0
+          cache: npm
+          cache-dependency-path: native-app/package-lock.json
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+      - name: Install native toolchain
+        run: sdkmanager 'platforms;android-37' 'build-tools;37.0.0' 'ndk;27.1.12297006'
+      - name: Verify native TypeScript and component behavior
+        working-directory: native-app
+        run: |
+          npm ci --ignore-scripts
+          npm run typecheck
+          npm test -- --runInBand
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Compile and test actual Android notification components
+        working-directory: native-app/android
+        run: |
+          chmod +x gradlew
+          ./gradlew --no-daemon testDebugUnitTest
+          ./gradlew --no-daemon assembleDebug -PnativeQa=true -PreactNativeArchitectures=x86_64
+      - name: Run independent native app on Android
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          disable-animations: true
+          script: python3 native-app/scripts/capture-android.py
+      - name: Build production entry without QA fixtures
+        working-directory: native-app/android
+        run: ./gradlew --no-daemon bundleRelease -PreactNativeArchitectures=arm64-v8a,armeabi-v7a,x86_64
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: independent-android
+          path: |
+            native-app/android/app/build/reports/tests
+            native-app/android/app/build/outputs/apk/debug/*.apk
+            native-app/android/app/build/outputs/bundle/release/*.aab
+            native-app/qa-results/**
+          retention-days: 7
+  ios:
+    runs-on: macos-26
+    timeout-minutes: 55
+    defaults:
+      run:
+        working-directory: native-app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.19.0
+          cache: npm
+          cache-dependency-path: native-app/package-lock.json
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.3'
+          working-directory: native-app
+          bundler-cache: true
+      - name: Install React Native dependencies
+        run: |
+          npm ci --ignore-scripts
+          bundle exec pod install --project-directory=ios
+          bundle exec ruby scripts/configure-ios.rb
+      - name: Compile independent iOS app and booking extension
+        env:
+          ENTRY_FILE: index.qa.js
+          FORCE_BUNDLING: '1'
+        run: |
+          xcodebuild -workspace ios/Promotors.xcworkspace -scheme Promotors -configuration Debug -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' -derivedDataPath "$RUNNER_TEMP/IndependentPromotors" CODE_SIGNING_ALLOWED=NO build > "$RUNNER_TEMP/native-ios.log" 2>&1 || { tail -120 "$RUNNER_TEMP/native-ios.log"; exit 1; }
+      - name: Capture actual native iPhone and iPad screens
+        run: python3 scripts/capture-ios.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: independent-ios
+          path: |
+            native-app/qa-results/**
+            ${{ runner.temp }}/native-ios.log
+          retention-days: 7

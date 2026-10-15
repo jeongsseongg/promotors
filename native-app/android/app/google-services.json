@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "274198484245",
+    "project_id": "promotors-8ddec",
+    "storage_bucket": "promotors-8ddec.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:274198484245:android:d7823cbc98bffb7e46851c",
+        "android_client_info": {
+          "package_name": "kr.promotors.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyD5_3l2Gbq44_r1B9wdITZOt855n33B_dg"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
