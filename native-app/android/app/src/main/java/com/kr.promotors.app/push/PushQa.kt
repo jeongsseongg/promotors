@@ -23,8 +23,8 @@ object PushQa {
       .put("startsAt", now + 3600).put("bookingId", "qa-pending")
       .put("branch", "프로모터스 예시 지점").put("schedule", schedule)
       .put("customerName", "예시 고객").put("vehicleName", "예시 차량").put("vehiclePlate", "비공개")
-    val booking = JSONObject(snapshot.toString()).put("id", "qa-pending")
-      .put("pending", true).put("snapshot", snapshot)
+    // The ongoing card has its own QA scenario; its ticking clock prevents a System UI idle dump.
+    val booking = JSONObject(snapshot.toString()).put("id", "qa-pending").put("pending", true)
     return PushNotifications.receive(context, mapOf(
       "id" to UUID.randomUUID().toString(), "binding" to binding, "category" to "booking",
       "issuedAt" to "$now", "expiresAt" to "${now + 300}",
