@@ -29,8 +29,9 @@ import {ui} from './theme/styles';
 import {color} from './theme/tokens';
 import {UpdateNotice} from './features/updates/UpdateNotice';
 import type {StoreUpdates} from './platform/app-updates';
+import {NotificationPrompt, useAutomaticNotifications} from './features/notifications/NotificationPrompt';
 
-export type AppProps = {services: NativeServices; push: NativePush; initialRoute?: Route; updates?: StoreUpdates};
+export type AppProps = {services: NativeServices; push: NativePush; initialRoute?: Route; updates?: StoreUpdates; notificationDisclosure?: string};
 const tabs = new Set(['home', 'branches', 'cases', 'notices', 'my']);
 const privateRoutes = new Set(['bookings', 'booking', 'profile', 'history', 'work', 'inquiry', 'coupons', 'events', 'notifications', 'notification-settings', 'admin', 'admin-booking', 'management']);
 function Content({route}: {route: Route}) {
@@ -64,7 +65,7 @@ function Content({route}: {route: Route}) {
     case 'notification-settings': return <NotificationSettingsScreen/>;
   }
 }
-export default function App({services, push, initialRoute, updates}: AppProps) {
+export default function App({services, push, initialRoute, updates, notificationDisclosure}: AppProps) {
   const [session, setSession] = useState(services.session.snapshot());
   const [restoreError, setRestoreError] = useState('');
   const [stack, setStack] = useState<Route[]>([initialRoute || {name: 'home'}]);
@@ -84,6 +85,7 @@ export default function App({services, push, initialRoute, updates}: AppProps) {
     return () => listener.remove();
   }, [services]);
   const route = stack[stack.length - 1];
+  const automaticNotifications = useAutomaticNotifications(push, session, !restoreError && ['home', 'my', 'admin'].includes(route.name));
   const signupLegal = (route.name === 'terms' || route.name === 'privacy') && stack[stack.length - 2]?.name === 'signup' ? route.name : undefined;
   const signupFlow = route.name === 'signup' || !!signupLegal;
   const protectedRoute = privateRoutes.has(route.name) && !session.authenticated;
@@ -96,7 +98,8 @@ export default function App({services, push, initialRoute, updates}: AppProps) {
           {protectedRoute ? <AuthScreen/> : adminForbidden ? <MyScreen/> : signupFlow ? <SignupFlow legal={signupLegal}/> : <Content key={stack.length + ':' + route.name + ('id' in route ? ':' + route.id : '')} route={route}/>}
           {tabs.has(route.name) ? <TabBar active={route.name as Tab} onChange={tab => go({name: tab})}/> : null}
         </View>}
-      <UpdateNotice updates={updates} eligible={!restoreError && session.status !== 'restoring' && ['home', 'my'].includes(route.name)}/>
+      <NotificationPrompt disclosure={notificationDisclosure} setup={automaticNotifications} onSettings={() => {automaticNotifications.dismiss(); go({name: 'notification-settings'});}}/>
+      <UpdateNotice updates={updates} onNotificationSettings={session.authenticated ? () => go({name: 'notification-settings'}) : undefined} eligible={!automaticNotifications.blocking && !restoreError && session.status !== 'restoring' && ['home', 'my'].includes(route.name)}/>
     </AppContext>
   </SafeAreaProvider>;
 }

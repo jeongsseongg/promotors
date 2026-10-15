@@ -37,7 +37,7 @@ function useUpdateOffer(updates?: StoreUpdates) {
   }
   return {pending, active, dismiss, generation};
 }
-export function UpdateNotice({updates, eligible}: {updates?: StoreUpdates; eligible: boolean}) {
+export function UpdateNotice({updates, eligible, onNotificationSettings}: {updates?: StoreUpdates; eligible: boolean; onNotificationSettings?: () => void}) {
   const {pending, active, dismiss, generation} = useUpdateOffer(updates);
   const [busy, setBusy] = useState(false), [error, setError] = useState<{key: string; message: string} | null>(null);
   useEffect(() => {setBusy(false); setError(null);}, [updates]);
@@ -64,6 +64,7 @@ export function UpdateNotice({updates, eligible}: {updates?: StoreUpdates; eligi
         <Text style={styles.version}>설치된 버전 {release.version}{pending.version ? '  ·  새 버전 ' + pending.version : ''}</Text>
         {error?.key === pending.key ? <Text accessibilityRole="alert" style={styles.error}>{error.message}</Text> : null}
         <Button label="업데이트" accent busy={busy} onPress={() => void openStore()}/>
+        {onNotificationSettings ? <Button label="알림 설정" secondary disabled={busy} onPress={() => {dismiss(); onNotificationSettings();}}/> : null}
         <Button label="나중에" secondary disabled={busy} onPress={() => {dismiss(); setError(null);}}/>
       </View>
       </ScrollView>

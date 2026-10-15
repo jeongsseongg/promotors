@@ -6,7 +6,7 @@ import {createQaPush} from './fixture-push';
 import {createQaAccount, createQaDeletion} from './fixture-account';
 import {createQaNotifications} from './fixture-notifications';
 
-export type QaConfiguration = {screen: 'booking' | 'mypage' | 'admin' | 'notifications' | 'updates'; requestOsPermission?: boolean};
+export type QaConfiguration = {screen: 'booking' | 'mypage' | 'admin' | 'notifications' | 'updates' | 'setup' | 'setup-denied'; requestOsPermission?: boolean};
 export function createQaEnvironment(config: QaConfiguration, imageUri: string) {
   const admin = config.screen === 'admin' || config.screen === 'notifications';
   const data = createQaData(), auth = createQaSession(admin), calls: string[] = [];
@@ -26,7 +26,7 @@ export function createQaEnvironment(config: QaConfiguration, imageUri: string) {
     if (changed) {booking.status = reject ? '취소' : '예약'; if (reject) booking.rejectionReason = reason;}
     return {booking: clone(booking), customerContext: clone(data.customerContext), changed};
   }
-  const push = createQaPush(!!config.requestOsPermission, enabled => {data.notificationState.preferences.enabled = enabled;});
+  const push = createQaPush(!!config.requestOsPermission, enabled => {data.notificationState.preferences.enabled = enabled;}, config.screen.startsWith('setup'), config.screen === 'setup-denied');
   const services = {
     session: auth.session,
     publicContent: {load: async () => clone(data.content), assetUrl: (_key: string) => imageUri, legacyAsset: async (_key: string) => null},
@@ -46,6 +46,6 @@ export function createQaEnvironment(config: QaConfiguration, imageUri: string) {
     notifications: createQaNotifications(data, push, calls),
     deletion: createQaDeletion(calls),
   } as unknown as NativeServices;
-  const initialRoute: Route = config.screen === 'booking' ? {name: 'reserve'} : ['mypage', 'updates'].includes(config.screen) ? {name: 'my'} : config.screen === 'admin' ? {name: 'admin'} : {name: 'notification-settings'};
+  const initialRoute: Route = config.screen === 'booking' ? {name: 'reserve'} : ['mypage', 'updates', 'setup', 'setup-denied'].includes(config.screen) ? {name: 'my'} : config.screen === 'admin' ? {name: 'admin'} : {name: 'notification-settings'};
   return {services, push, initialRoute, calls, data, qaDate, updates: config.screen === 'updates' ? {check: async () => ({key: 'qa-update', version: '2.0.0 (실제 발송 없음)'}), openStore: async () => {calls.push('updates.openStore');}} : undefined};
 }

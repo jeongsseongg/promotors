@@ -6,7 +6,7 @@ import { createGuestBookingService } from './guest';
 import { createAccountService } from './account';
 import { createDeletionService } from './account-deletion';
 import { createNotificationsService } from './notifications';
-import type { NativePushPlatform, SessionStorage } from '../domain/types';
+import type { NativePushPlatform, NotificationConnectionPreferences, SessionStorage } from '../domain/types';
 import type { PhotoPicker } from '../domain/management';
 import { createRepairPhotoAccess } from './repair-photos';
 import { createAdminAccess } from './admin-access';
@@ -21,6 +21,7 @@ export interface NativeServicesOptions extends ApiClientOptions {
   storage: SessionStorage;
   push?: NativePushPlatform;
   deviceId?: () => Promise<string>;
+  connectionPreferences?: NotificationConnectionPreferences;
   idFactory?: () => string;
   photoPicker?: PhotoPicker;
 }
@@ -31,7 +32,7 @@ export function createNativeServices(options: NativeServicesOptions) {
   const photos = createRepairPhotoAccess(session), admin = createAdminAccess(rpc, session);
   const bookingListeners = new Set<() => void>();
   const bookingChanged = () => { for (const listener of bookingListeners) { try { listener(); } catch {} } };
-  const notifications = createNotificationsService(rpc, session, options.push, options.deviceId, bookingChanged);
+  const notifications = createNotificationsService(rpc, session, options.push, options.deviceId, bookingChanged, options.connectionPreferences);
   return { session, publicContent: createPublicContentService(rpc),
     bookings: createBookingService(rpc, session, id), adminBookings: createAdminBookingService(rpc, session, bookingChanged),
     guest: createGuestBookingService(rpc, id), account: createAccountService(rpc, session, id, photos),
