@@ -13,8 +13,9 @@ function setup(options={}) {
   const env={FCM_SERVICE_ACCOUNT_JSON:JSON.stringify({project_id:'promotors-8ddec',client_email:'test@promotors-8ddec.iam.gserviceaccount.com',private_key:'TEST_ONLY'}),...options.env};
   const context=vm.createContext({Deno:{env:{get:name=>env[name]}},URLSearchParams,TextEncoder,AbortSignal,Response,Date,console,
     importPKCS8:async()=> 'test-only',SignJWT:class{
+      constructor(payload){for(const [name,value] of Object.entries(payload))signed.push({name,value});}
       setProtectedHeader(){return this;}setIssuer(){return this;}setAudience(){return this;}setIssuedAt(){return this;}setExpirationTime(){return this;}
-      setClaim(name,value){signed.push({name,value});return this;}async sign(){return 'test-only';}
+      async sign(){return 'test-only';}
     },fetch:async(url,request)=>{
       const oauth=String(url).includes('oauth2.googleapis.com');
       requests.push({url:String(url),request,body:oauth?null:JSON.parse(request.body)});
