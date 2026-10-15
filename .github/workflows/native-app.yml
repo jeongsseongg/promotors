@@ -1,0 +1,198 @@
+name: Promotors independent native app
+on:
+  push:
+    branches: [codex/native-app-separation-20261015]
+    paths: ['native-app/**', '.github/workflows/native-app.yml']
+  workflow_dispatch:
+    inputs:
+      archive:
+        description: Build with the existing iOS distribution identity
+        type: boolean
+        default: false
+      upload:
+        description: Upload verified native build to App Store Connect
+        type: boolean
+        default: false
+permissions:
+  contents: read
+concurrency:
+  group: promotors-independent-native
+  cancel-in-progress: true
+jobs:
+  server:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.19.0
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - name: Verify native server privacy, registration and reservation actions
+        run: node --test scripts/test-apns-activity-lifecycle.cjs scripts/test-native-activity-feedback.cjs scripts/test-fcm-account-switch.cjs scripts/test-fcm-subscribe.cjs scripts/test-fcm-transport.cjs scripts/test-fcm-worker.cjs scripts/test-native-booking-action.cjs scripts/test-native-push.cjs scripts/test-native-subscribe.cjs native-app/server/tests/test-native-sync.cjs
+  android:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.19.0
+          cache: npm
+          cache-dependency-path: native-app/package-lock.json
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools'
+      - name: Install native toolchain
+        run: sdkmanager 'platforms;android-37.0' 'build-tools;37.0.0' 'ndk;27.1.12297006'
+      - name: Verify native TypeScript and component behavior
+        working-directory: native-app
+        run: |
+          npm ci --ignore-scripts
+          npm run typecheck
+          npm test -- --runInBand
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Compile and test actual Android notification components
+        working-directory: native-app/android
+        run: |
+          chmod +x gradlew
+          ./gradlew --no-daemon testDebugUnitTest
+          ./gradlew --no-daemon assembleDebug -PnativeQa=true -PreactNativeArchitectures=x86_64
+      - name: Enable Android emulator hardware acceleration
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+          test -r /dev/kvm && test -w /dev/kvm
+      - name: Run independent native app on Android
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          disable-animations: true
+          emulator-boot-timeout: 300
+          script: python3 native-app/scripts/capture-android.py
+      - name: Build production entry without QA fixtures
+        working-directory: native-app/android
+        run: ./gradlew --no-daemon bundleRelease -PreactNativeArchitectures=arm64-v8a,armeabi-v7a,x86_64
+      - name: Verify native production bundle and release identity
+        working-directory: native-app
+        run: |
+          curl --fail --location --silent --show-error 'https://github.com/google/bundletool/releases/download/1.18.3/bundletool-all-1.18.3.jar' --output "$RUNNER_TEMP/bundletool.jar"
+          printf '%s  %s\n' 'a099cfa1543f55593bc2ed16a70a7c67fe54b1747bb7301f37fdfd6d91028e29' "$RUNNER_TEMP/bundletool.jar" | sha256sum --check
+          mkdir -p qa-results/release
+          node scripts/check-android-release.cjs --aab android/app/build/outputs/bundle/release/app-release.aab --java "$JAVA_HOME/bin/java" --bundletool "$RUNNER_TEMP/bundletool.jar" --signature unsigned --source-map android/app/build/generated/sourcemaps/react/release/index.android.bundle.map | tee qa-results/release/android.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: independent-android
+          path: |
+            native-app/android/app/build/reports/tests
+            native-app/android/app/build/outputs/apk/debug/*.apk
+            native-app/android/app/build/outputs/bundle/release/*.aab
+            native-app/android/app/build/generated/sourcemaps/react/release/*.map
+            native-app/qa-results/**
+          retention-days: 7
+  ios:
+    runs-on: macos-26
+    timeout-minutes: 55
+    defaults:
+      run:
+        working-directory: native-app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.19.0
+          cache: npm
+          cache-dependency-path: native-app/package-lock.json
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.3'
+          working-directory: native-app
+          bundler-cache: true
+      - name: Install React Native dependencies
+        run: |
+          npm ci --ignore-scripts
+          bundle exec pod install --project-directory=ios
+          bundle exec ruby scripts/configure-ios.rb
+      - name: Compile independent iOS app and booking extension
+        env:
+          ENTRY_FILE: index.qa.js
+          FORCE_BUNDLING: '1'
+        run: |
+          xcodebuild -workspace ios/Promotors.xcworkspace -scheme Promotors -configuration Debug -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' -derivedDataPath "$RUNNER_TEMP/IndependentPromotors" CODE_SIGNING_ALLOWED=NO build > "$RUNNER_TEMP/native-ios.log" 2>&1 || { tail -120 "$RUNNER_TEMP/native-ios.log"; exit 1; }
+      - name: Capture actual native iPhone and iPad screens
+        run: python3 scripts/capture-ios.py
+      - name: Install existing distribution identity
+        if: github.event_name == 'workflow_dispatch' && inputs.archive
+        env:
+          P12_BASE64: ${{ secrets.IOS_P12_BASE64 }}
+          P12_PASSWORD: ${{ secrets.IOS_P12_PASSWORD }}
+          PROFILE_BASE64: ${{ secrets.IOS_PROFILE_BASE64 }}
+          ACTIVITY_PROFILE_BASE64: ${{ secrets.IOS_ACTIVITY_PROFILE_BASE64 }}
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_PRIVATE_KEY: ${{ secrets.ASC_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          printf '%s' "$P12_BASE64" | base64 --decode > "$RUNNER_TEMP/distribution.p12"
+          printf '%s' "$PROFILE_BASE64" | base64 --decode > "$RUNNER_TEMP/distribution.mobileprovision"
+          printf '%s' "$ACTIVITY_PROFILE_BASE64" | base64 --decode > "$RUNNER_TEMP/activity.mobileprovision"
+          KEYCHAIN_PASSWORD=$(openssl rand -base64 32)
+          echo "::add-mask::$KEYCHAIN_PASSWORD"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$RUNNER_TEMP/signing.keychain-db"
+          security set-keychain-settings -lut 21600 "$RUNNER_TEMP/signing.keychain-db"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$RUNNER_TEMP/signing.keychain-db"
+          security import "$RUNNER_TEMP/distribution.p12" -P "$P12_PASSWORD" -A -t cert -f pkcs12 -k "$RUNNER_TEMP/signing.keychain-db"
+          security set-key-partition-list -S apple-tool:,apple: -k "$KEYCHAIN_PASSWORD" "$RUNNER_TEMP/signing.keychain-db" >/dev/null
+          security list-keychains -d user -s "$RUNNER_TEMP/signing.keychain-db"
+          mkdir -p "$HOME/Library/MobileDevice/Provisioning Profiles" "$HOME/.appstoreconnect/private_keys"
+          printf '%s' "$ASC_PRIVATE_KEY" > "$HOME/.appstoreconnect/private_keys/AuthKey_${ASC_KEY_ID}.p8"
+          node scripts/configure-distribution.cjs
+      - name: Archive production native application
+        if: github.event_name == 'workflow_dispatch' && inputs.archive
+        env:
+          ENTRY_FILE: index.js
+        run: |
+          set -euo pipefail
+          xcodebuild -workspace ios/Promotors.xcworkspace -scheme Promotors -configuration Release -destination 'generic/platform=iOS' -archivePath "$RUNNER_TEMP/PromotorsNative.xcarchive" archive > "$RUNNER_TEMP/native-archive.log" 2>&1 || { tail -120 "$RUNNER_TEMP/native-archive.log"; exit 1; }
+          python3 - <<'PY'
+          import json,os,plistlib
+          profiles=json.load(open(os.environ['RUNNER_TEMP']+'/signing-profiles.json'))
+          options={'method':'app-store-connect','destination':'export','teamID':'Z8QYZ8K855','signingStyle':'manual','signingCertificate':'Apple Distribution','provisioningProfiles':profiles}
+          with open(os.environ['RUNNER_TEMP']+'/NativeExportOptions.plist','wb') as target: plistlib.dump(options,target)
+          PY
+          xcodebuild -exportArchive -archivePath "$RUNNER_TEMP/PromotorsNative.xcarchive" -exportPath "$RUNNER_TEMP/native-export" -exportOptionsPlist "$RUNNER_TEMP/NativeExportOptions.plist"
+      - name: Upload production native build
+        if: github.event_name == 'workflow_dispatch' && inputs.archive && inputs.upload
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+        run: |
+          set -euo pipefail
+          xcrun altool --upload-app --type ios --file "$RUNNER_TEMP/native-export/Promotors.ipa" --apiKey "$ASC_KEY_ID" --apiIssuer "$ASC_ISSUER_ID"
+          echo 'Native build uploaded; processing, review and release remain separate.' >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        if: always() && github.event_name == 'workflow_dispatch' && inputs.archive
+        with:
+          name: independent-ios-distribution
+          path: |
+            ${{ runner.temp }}/native-export/*.ipa
+            ${{ runner.temp }}/native-archive.log
+          retention-days: 7
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: independent-ios
+          path: |
+            native-app/qa-results/**
+            ${{ runner.temp }}/native-ios.log
+          retention-days: 7

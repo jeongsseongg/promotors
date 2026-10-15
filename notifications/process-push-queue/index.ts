@@ -12,6 +12,14 @@ async function rpc(action: string, data: Record<string, unknown> = {}) {
   if (!res.ok) throw new Error(`PUSH_RPC_${res.status}`);
   return await res.json();
 }
+async function clearActivityUpdate(ack: { id: string; leaseId: string }, expected: string) {
+  const res = await fetch(`${base}/rest/v1/rpc/pm_push_activity_clear`, {
+    method: 'POST', redirect: 'error', signal: AbortSignal.timeout(15000),
+    headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ p_id: ack.id, p_lease: ack.leaseId, p_expected_update: expected }),
+  });
+  if (!res.ok) throw new Error('ACTIVITY_FEEDBACK_FAILED');
+}
 async function equalSecret(a: string, b: string) {
   const encode = (value: string) => crypto.subtle.digest('SHA-256', new TextEncoder().encode(value));
   const [x, y] = await Promise.all([encode(a), encode(b)]);
@@ -33,6 +41,10 @@ async function deliver(row: any, config: any) {
     if (booking) row.payload.booking = booking;
     if (row.subscription.transport === 'apns') {
       const result = await sendAPNS(row.subscription, row.payload);
+      if (result.clearActivityUpdate) {
+        try { await clearActivityUpdate(ack, result.clearActivityUpdate); }
+        catch { return rpc('ack', { ...ack, result: 'failed', code: 'ACTIVITY_FEEDBACK_ERROR_ALERT_SENT' }); }
+      }
       await rpc('ack', { ...ack, result: result.ok ? 'sent' : 'failed', code: result.code });
       return;
     }

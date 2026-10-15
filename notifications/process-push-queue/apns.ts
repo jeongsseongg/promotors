@@ -14,13 +14,15 @@ async function authorization() {
   return value;
 }
 type Subscription = { token: string; activityStart?: string; activityUpdate?: string };
+type ActivityResult = { code: string; clearActivityUpdate?: string };
+export type APNSResult = ActivityResult & { ok: boolean };
 type Payload = { id: string; binding: string; category: string; alertDelivered?: boolean; booking?: { id?: string; pending: boolean; branch: string; schedule: string; customerName?: string; vehicleName?: string; vehiclePlate?: string; snapshot: { pendingCount: number; upcomingCount: number; [key: string]: unknown } } };
-async function sendActivity(subscription: Subscription, payload: Payload, bearer: string) {
-  if (!payload.booking) return 'SKIPPED';
+async function sendActivity(subscription: Subscription, payload: Payload, bearer: string): Promise<ActivityResult> {
+  if (!payload.booking) return { code: 'SKIPPED' };
   const state = payload.booking.snapshot;
   const ended = state.pendingCount + state.upcomingCount === 0;
   const token = subscription.activityUpdate || (!ended ? subscription.activityStart : undefined);
-  if (!token || !/^[a-f0-9]{64,256}$/.test(token)) return 'NO_ACTIVITY_TOKEN';
+  if (!token || !/^[a-f0-9]{64,256}$/.test(token)) return { code: 'NO_ACTIVITY_TOKEN' };
   const event = subscription.activityUpdate ? ended ? 'end' : 'update' : 'start';
   const timestamp = Math.floor(Date.now() / 1000);
   const aps: Record<string, unknown> = { timestamp, event, 'content-state': state, 'stale-date': timestamp + 300 };
@@ -36,9 +38,12 @@ async function sendActivity(subscription: Subscription, payload: Payload, bearer
       'apns-push-type': 'liveactivity', 'apns-priority': '10', 'apns-expiration': String(timestamp + 300), 'content-type': 'application/json' },
     body: JSON.stringify({ aps })
   });
-  return response.ok ? '200' : `ACTIVITY_${response.status}`;
+  const reason = response.status === 400 ? (await response.json().catch(() => ({}))).reason : undefined;
+  const expired = response.status === 410 || response.status === 400 && ['BadDeviceToken', 'DeviceTokenNotForTopic'].includes(reason);
+  const clear = subscription.activityUpdate === token && (event === 'end' && response.ok || expired);
+  return { code: response.ok ? '200' : `ACTIVITY_${response.status}`, ...(clear ? { clearActivityUpdate: token } : {}) };
 }
-export async function sendAPNS(subscription: Subscription, payload: Payload) {
+export async function sendAPNS(subscription: Subscription, payload: Payload): Promise<APNSResult> {
   if (!/^[a-f0-9]{64}$/.test(subscription.token)) return { ok: false, code: '410' };
   const bearer = await authorization();
   const booking = payload.booking;
@@ -55,8 +60,9 @@ export async function sendAPNS(subscription: Subscription, payload: Payload) {
       id: payload.id, binding: payload.binding, ...(booking?.id ? { bookingId: booking.id } : {}) })
   });
   const reason = response.ok ? '' : (await response.json().catch(() => ({}))).reason;
-  const activityCode = response.ok ? await sendActivity(subscription, payload, bearer).catch(() => 'ACTIVITY_TRANSPORT_ERROR') : 'SKIPPED';
-  if (activityCode.startsWith('ACTIVITY_')) return { ok: false, code: `${activityCode}_ALERT_SENT` };
+  const activity: ActivityResult = response.ok ? await sendActivity(subscription, payload, bearer).catch(() => ({ code: 'ACTIVITY_TRANSPORT_ERROR' })) : { code: 'SKIPPED' };
+  const feedback = activity.clearActivityUpdate ? { clearActivityUpdate: activity.clearActivityUpdate } : {};
+  if (activity.code.startsWith('ACTIVITY_')) return { ok: false, code: `${activity.code}_ALERT_SENT`, ...feedback };
   return { ok: response.ok, code: ['Unregistered', 'BadDeviceToken', 'DeviceTokenNotForTopic'].includes(reason)
-    ? '410' : response.ok ? activityCode === 'NO_ACTIVITY_TOKEN' ? '200_NO_ACTIVITY_TOKEN' : '200' : `APNS_${response.status}_${String(reason || 'ERROR').slice(0,40)}` };
+    ? '410' : response.ok ? activity.code === 'NO_ACTIVITY_TOKEN' ? '200_NO_ACTIVITY_TOKEN' : '200' : `APNS_${response.status}_${String(reason || 'ERROR').slice(0,40)}`, ...feedback };
 }
