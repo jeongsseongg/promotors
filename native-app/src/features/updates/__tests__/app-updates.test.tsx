@@ -4,8 +4,12 @@ import TestRenderer, {act, ReactTestRenderer} from 'react-test-renderer';
 import {UpdateNotice} from '../UpdateNotice';
 import {Button} from '../../../components/Controls';
 import {createStoreUpdates, readAppleRelease, StoreUpdates} from '../../../platform/app-updates';
+import App from '../../../App';
+import {NativeServices, Route} from '../../../components/AppContext';
+import {createQaEnvironment} from '../../../qa/fixture-services';
+import {createQaSession} from '../../../qa/fixture-session';
 
-jest.mock('react-native-safe-area-context', () => ({SafeAreaView: require('react-native').View}));
+jest.mock('react-native-safe-area-context', () => ({SafeAreaView: require('react-native').View, SafeAreaProvider: ({children}: {children: React.ReactNode}) => children}));
 Object.assign(globalThis, {IS_REACT_ACT_ENVIRONMENT: true});
 const trees: ReactTestRenderer[] = [];
 let foreground: ((state: string) => void) | undefined;
@@ -98,4 +102,14 @@ test('조회가 지연되면 제한 시간 뒤 끝내고 다음 확인을 막지
   const result = expect(updater.check()).rejects.toThrow();
   await jest.advanceTimersByTimeAsync(11000);
   await result;
+});
+test.each(['admin', 'notifications', 'notification-settings', 'signed-out-admin'])('%s 입력 화면에서는 실제 앱의 자동 안내를 보류한다', async name => {
+  const environment = createQaEnvironment({screen: 'admin'}, 'data:image/png;base64,qa');
+  const auth = createQaSession(true, name === 'signed-out-admin');
+  const services = {...environment.services, session: auth.session} as unknown as NativeServices;
+  const route: Route = {name: name === 'signed-out-admin' ? 'admin' : name as 'admin' | 'notifications' | 'notification-settings'};
+  let tree!: ReactTestRenderer;
+  await act(async () => {tree = TestRenderer.create(<App services={services} push={environment.push} initialRoute={route} updates={client()}/>);});
+  trees.push(tree);
+  expect(visible(tree)).toBe(false);
 });
