@@ -113,6 +113,9 @@ for screen, label in [('booking', '정비 예약'), ('mypage', '마이페이지'
     source = wait_for(label)
     save(screen, source)
     results.append({'screen': screen, 'nativeViews': True, 'webViewCount': 0})
+    if screen == 'booking':
+        tap('프로모터스 안산점', source)
+        save('booking-calendar', wait_for('다음 달'))
     if screen == 'admin':
         adb('shell', 'pm', 'grant', 'kr.promotors.app', 'android.permission.POST_NOTIFICATIONS')
         tap('상시알림 예시', source)
