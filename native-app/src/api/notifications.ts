@@ -110,7 +110,10 @@ class NotificationsService {
   }
   async enable() {
     const entering = this.session.credentials();
-    await this.restoration?.catch(() => {});
+    while (this.restoration) {
+      await this.restoration.catch(() => {});
+      this.assertSession(entering.token, entering.state.revision);
+    }
     this.assertSession(entering.token, entering.state.revision);
     if (this.busy || this.opening) throw new ApiError('REQUEST_IN_PROGRESS');
     requireValue(this.push && this.deviceId, 'PUSH_NOT_CONFIGURED'); this.busy = true;
@@ -124,9 +127,11 @@ class NotificationsService {
     } finally { this.busy = false; this.retryQueuedRestore(); void this.flushOpen(); }
   }
   restoreConnection(): Promise<void> {
-    if (this.restoration) return this.restoration;
+    if (this.restoration) {this.restoreQueued = true; return this.restoration;}
     const task = this.restore(); this.restoration = task;
-    void task.finally(() => {if (this.restoration === task) this.restoration = null;}).catch(() => {});
+    void task.finally(() => {
+      if (this.restoration === task) {this.restoration = null; this.retryQueuedRestore();}
+    }).catch(() => {});
     return task;
   }
   private async restore() {
@@ -140,7 +145,7 @@ class NotificationsService {
       this.guard(token, state.revision, generation);
       if (automatic && value.preferences.enabled && permission === 'granted') await this.connect(permission, false, {owner: token, revision: state.revision, generation});
       else await this.reset(false);
-    } finally { this.busy = false; this.retryQueuedRestore(); void this.flushOpen(); }
+    } finally { this.busy = false; void this.flushOpen(); }
   }
   async disable(allDevices = false) {
     const { token, state } = this.session.credentials(), id = await this.deviceId?.();
