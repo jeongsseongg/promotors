@@ -7,6 +7,6 @@ import com.facebook.react.uimanager.ViewManager
 
 class PromotorsPushPackage : ReactPackage {
   override fun createNativeModules(context: ReactApplicationContext): List<NativeModule> =
-    listOf(PromotorsPushModule(context))
+    listOf(PromotorsPushModule(context), PromotorsUpdateModule(context))
   override fun createViewManagers(context: ReactApplicationContext): List<ViewManager<*, *>> = emptyList()
 }

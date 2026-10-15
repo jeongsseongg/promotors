@@ -27,8 +27,10 @@ import {NotificationsScreen, routeForNotification} from './features/notification
 import {NotificationSettingsScreen} from './features/notifications/NotificationSettingsScreen';
 import {ui} from './theme/styles';
 import {color} from './theme/tokens';
+import {UpdateNotice} from './features/updates/UpdateNotice';
+import type {StoreUpdates} from './platform/app-updates';
 
-export type AppProps = {services: NativeServices; push: NativePush; initialRoute?: Route};
+export type AppProps = {services: NativeServices; push: NativePush; initialRoute?: Route; updates?: StoreUpdates};
 const tabs = new Set(['home', 'branches', 'cases', 'notices', 'my']);
 const privateRoutes = new Set(['bookings', 'booking', 'profile', 'history', 'work', 'inquiry', 'coupons', 'events', 'notifications', 'notification-settings', 'admin', 'admin-booking', 'management']);
 function Content({route}: {route: Route}) {
@@ -62,7 +64,7 @@ function Content({route}: {route: Route}) {
     case 'notification-settings': return <NotificationSettingsScreen/>;
   }
 }
-export default function App({services, push, initialRoute}: AppProps) {
+export default function App({services, push, initialRoute, updates}: AppProps) {
   const [session, setSession] = useState(services.session.snapshot());
   const [restoreError, setRestoreError] = useState('');
   const [stack, setStack] = useState<Route[]>([initialRoute || {name: 'home'}]);
@@ -94,6 +96,7 @@ export default function App({services, push, initialRoute}: AppProps) {
           {protectedRoute ? <AuthScreen/> : adminForbidden ? <MyScreen/> : signupFlow ? <SignupFlow legal={signupLegal}/> : <Content key={stack.length + ':' + route.name + ('id' in route ? ':' + route.id : '')} route={route}/>}
           {tabs.has(route.name) ? <TabBar active={route.name as Tab} onChange={tab => go({name: tab})}/> : null}
         </View>}
+      <UpdateNotice updates={updates} eligible={!restoreError && session.status !== 'restoring' && ['home', 'my', 'admin', 'notifications', 'notification-settings'].includes(route.name)}/>
     </AppContext>
   </SafeAreaProvider>;
 }
