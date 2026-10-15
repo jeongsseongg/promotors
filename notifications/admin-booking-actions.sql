@@ -130,6 +130,7 @@ returns jsonb language plpgsql security definer set search_path = public, extens
 declare
   account public.pm_accounts%rowtype;
   bookings jsonb; booking jsonb; result jsonb; upcoming jsonb; branch text; reason text;
+  native_action boolean:=coalesce(p_data ? 'nativeDeviceId' or p_data ? 'nativeBinding',false);
 begin
   perform pg_advisory_xact_lock_shared(hashtextextended('pm-privacy',0));
   perform public.pm_notifications(p_token, 'state', '{}'::jsonb);
@@ -140,6 +141,24 @@ begin
   end if;
   if p_action not in ('pending','get','accept','reject') or p_action is null then raise exception 'INVALID_ACTION'; end if;
   if p_action in ('accept','reject') then
+    if native_action then
+      if jsonb_typeof(p_data->'nativeDeviceId') is distinct from 'string'
+        or jsonb_typeof(p_data->'nativeBinding') is distinct from 'string'
+        or coalesce(p_data->>'nativeDeviceId','') !~* '^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$'
+        or coalesce(p_data->>'nativeBinding','') !~* '^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$' then
+        raise exception 'DEVICE_BINDING_REQUIRED' using errcode='P0001';
+      end if;
+      -- Hold the exact session, current account scope and device binding until booking commit.
+      -- Sending leases end at delivery acknowledgement; OS actions use the current session lease.
+      select ac.* into account from public.pm_sessions s join public.pm_accounts ac using(login_id)
+        join public.pm_push_devices d on d.login_id=ac.login_id and d.session_hash=s.token_hash
+      where s.token_hash=public.pm_token_hash(p_token) and s.expires_at>clock_timestamp() and ac.active
+        and ac.role in ('main','general','developer') and d.device_id=(p_data->>'nativeDeviceId')::uuid
+        and d.binding=(p_data->>'nativeBinding')::uuid and d.revoked_at is null
+        and d.subscription->>'transport' in ('apns','fcm')
+      for share of s,ac for update of d;
+      if account.login_id is null then raise exception 'DEVICE_BINDING_REQUIRED' using errcode='P0001'; end if;
+    end if;
     perform pm_privacy.before_write(p_token);
     select payload into bookings from public.site_data where data_key='pm-bookings' for update;
   else
@@ -165,6 +184,11 @@ begin
   end if;
   if p_action='get' then return jsonb_build_object('ok',true,'booking',booking - 'guestLookupHash' - 'trackingSessionId' - 'acquisition',
     'customerContext',pm_push_private.booking_customer_context(booking,account.role,account.branches)); end if;
+  -- Time can pass while waiting for the reservation row; do not use transaction-start now().
+  if native_action and not exists(select 1 from public.pm_sessions where token_hash=public.pm_token_hash(p_token)
+    and login_id=account.login_id and expires_at>clock_timestamp()) then
+    raise exception 'DEVICE_BINDING_REQUIRED' using errcode='P0001';
+  end if;
   if booking->>'status' not in ('신규','승인대기') or booking->>'status' is null then
     return jsonb_build_object('ok',true,'changed',false,'booking',booking - 'guestLookupHash' - 'trackingSessionId' - 'acquisition');
   end if;

@@ -1,4 +1,5 @@
 import { sendAPNS } from './apns.ts';
+import { sendFCM } from './fcm.ts';
 import webpush from 'npm:web-push@3.6.7';
 
 const base = Deno.env.get('SUPABASE_URL')!;
@@ -35,6 +36,11 @@ async function deliver(row: any, config: any) {
       await rpc('ack', { ...ack, result: result.ok ? 'sent' : 'failed', code: result.code });
       return;
     }
+    if (row.subscription.transport === 'fcm') {
+      const result = await sendFCM(row.subscription, row.payload, { beforeSend: async () => (await rpc('validate', ack)).valid });
+      await rpc('ack', { ...ack, result: result.cancelled ? 'cancelled' : result.ok ? 'sent' : 'failed', code: result.code });
+      return;
+    }
     const request = webpush.generateRequestDetails(row.subscription, JSON.stringify(row.payload), {
       vapidDetails: { subject: config.subject, publicKey: config.public_key, privateKey: config.private_key },
       TTL: 300, urgency: 'normal', topic: row.payload.id.replaceAll('-', '').slice(0, 32),
@@ -44,7 +50,7 @@ async function deliver(row: any, config: any) {
       redirect: 'error', signal: AbortSignal.timeout(15000) });
     await rpc('ack', { ...ack, result: res.ok ? 'sent' : 'failed', code: String(res.status) });
   } catch (error) {
-    const code = error instanceof Error && ['APNS_NOT_CONFIGURED', 'BOOKING_CONTEXT_FAILED'].includes(error.message)
+    const code = error instanceof Error && (['APNS_NOT_CONFIGURED', 'BOOKING_CONTEXT_FAILED'].includes(error.message) || /^FCM_[A-Z0-9_]+$/.test(error.message))
       ? error.message : error instanceof Error && error.name === 'TimeoutError' ? 'TIMEOUT' : 'PUSH_TRANSPORT_ERROR';
     console.error(JSON.stringify({ deliveryId: row.id, code }));
     await rpc('ack', { ...ack, result: 'failed', code });
