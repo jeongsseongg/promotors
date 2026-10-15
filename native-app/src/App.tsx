@@ -96,7 +96,7 @@ export default function App({services, push, initialRoute, updates}: AppProps) {
           {protectedRoute ? <AuthScreen/> : adminForbidden ? <MyScreen/> : signupFlow ? <SignupFlow legal={signupLegal}/> : <Content key={stack.length + ':' + route.name + ('id' in route ? ':' + route.id : '')} route={route}/>}
           {tabs.has(route.name) ? <TabBar active={route.name as Tab} onChange={tab => go({name: tab})}/> : null}
         </View>}
-      <UpdateNotice updates={updates} eligible={!restoreError && session.status !== 'restoring' && ['home', 'my', 'admin', 'notifications', 'notification-settings'].includes(route.name)}/>
+      <UpdateNotice updates={updates} eligible={!restoreError && session.status !== 'restoring' && ['home', 'my'].includes(route.name)}/>
     </AppContext>
   </SafeAreaProvider>;
 }
