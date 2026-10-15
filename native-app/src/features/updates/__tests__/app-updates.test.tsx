@@ -67,6 +67,17 @@ test('스토어 열기에 실패하면 재시도할 수 있고 완료로 숨기�
   await act(async () => {await button(tree, '업데이트').props.onPress();});
   expect(visible(tree)).toBe(false);
 });
+test('이전 버전의 스토어 열기 오류를 다음 새 버전 안내에 표시하지 않는다', async () => {
+  jest.useFakeTimers();
+  const updater = client(); updater.openStore.mockRejectedValueOnce(new Error('unavailable'));
+  const tree = await mount(updater);
+  await act(async () => {await button(tree, '업데이트').props.onPress();});
+  await act(async () => {tree.root.findByType(Modal).props.onRequestClose();});
+  updater.check.mockResolvedValueOnce({key: '2.1.0', version: '2.1.0'});
+  await act(async () => {jest.advanceTimersByTime(6 * 60 * 1000); foreground?.('active');});
+  expect(visible(tree)).toBe(true);
+  expect(tree.root.findAllByType(Text).some(node => String(node.props.children).includes('스토어를 열지 못했어요'))).toBe(false);
+});
 const apple = (version: string, minimumOsVersion = '15.1') => ({results: [{trackId: 6810716100, bundleId: 'kr.promotors.app', version, minimumOsVersion}]});
 test('아이폰 버전은 숫자로 비교하고 같은 버전·낮은 버전·지원되지 않는 OS는 제외한다', () => {
   expect(readAppleRelease(apple('1.10.0'), '1.9.0', '18.0')?.version).toBe('1.10.0');
