@@ -48,7 +48,7 @@ class PromotorsPushModule(private val context: ReactApplicationContext) : ReactC
   @ReactMethod fun getQaConfiguration(promise: Promise) {
     if (!BuildConfig.DEBUG || !BuildConfig.QA_BUNDLED) { promise.resolve(null); return }
     val screen = context.currentActivity?.intent?.getStringExtra("qaScreen")
-    val allowed = setOf("booking", "mypage", "admin", "notifications")
+    val allowed = setOf("booking", "mypage", "admin", "notifications", "updates")
     // Bundled synthetic QA never requests an FCM token; allow only local card rendering.
     if (screen == "admin") PushState.allowRegistration(context)
     promise.resolve(screen?.takeIf { it in allowed }?.let {

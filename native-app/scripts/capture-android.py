@@ -106,13 +106,18 @@ assert '알림을 보내' in source or 'notifications' in source.lower(), 'Notif
 save('os-notification-permission', source)
 adb('shell', 'input', 'keyevent', '4')
 results = []
-for screen, label in [('booking', '정비 예약'), ('mypage', '마이페이지'), ('admin', '예약관리'), ('notifications', '앱 알림 설정')]:
+for screen, label in [('booking', '정비 예약'), ('mypage', '마이페이지'), ('admin', '예약관리'), ('notifications', '앱 알림 설정'), ('updates', '새 버전이 나왔어요')]:
     adb('shell', 'am', 'force-stop', 'kr.promotors.app')
     adb('shell', 'am', 'start', '-n', 'kr.promotors.app/.MainActivity', '--es', 'qaScreen', screen)
     source = wait_for('실제 발송 없음')
     source = wait_for(label)
     save(screen, source)
     results.append({'screen': screen, 'nativeViews': True, 'webViewCount': 0})
+    if screen == 'updates':
+        assert '업데이트' in source and '나중에' in source, 'Update choices absent'
+        tap('나중에', source)
+        dismissed = wait_for('마이페이지')
+        assert '새 버전이 나왔어요' not in dismissed, 'Dismissed update still blocks the app'
     if screen == 'booking':
         tap('프로모터스 안산점', source)
         save('booking-calendar', wait_for('다음 달'))
