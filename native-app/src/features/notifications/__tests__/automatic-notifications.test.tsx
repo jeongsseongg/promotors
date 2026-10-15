@@ -225,3 +225,25 @@ test('업데이트 안내에서도 알림 설정 화면을 바로 열 수 있다
   expect(tree.root.findAllByType(Screen).some(node => node.props.title === '앱 알림 설정')).toBe(true);
   expect(visibleModals(tree)).toHaveLength(0);
 });
+test('업데이트 안내의 설정 화면에서 휴대폰 설정을 열어도 복귀 시 자동 연결한다', async () => {
+  const value = fixture(); value.setStatus({permission: 'denied'});
+  const updates = {check: async () => ({key: 'synthetic-settings-release', version: '2.0.0'}), openStore: jest.fn(async () => {})};
+  const tree = await mount(value, {name: 'my'}, updates);
+  expect(modalText(tree)).toContain('앱 알림을 켜주세요');
+  await press(tree, '나중에');
+  expect(modalText(tree)).toContain('새 버전이 나왔어요');
+  await press(tree, '알림 설정');
+  expect(tree.root.findAllByType(Screen).some(node => node.props.title === '앱 알림 설정')).toBe(true);
+  expect(value.push.connect).not.toHaveBeenCalled();
+  await press(tree, '휴대폰 설정');
+  expect(value.push.openSettings).toHaveBeenCalledTimes(1);
+  await foreground('background');
+  value.setStatus({permission: 'granted', connected: false});
+  await foreground('active');
+  expect(value.push.connect).toHaveBeenCalledTimes(1);
+  expect(modalText(tree)).toContain('앱 알림이 연결됐어요');
+  await press(tree, '확인');
+  expect(visibleModals(tree)).toHaveLength(0);
+  expect(tree.root.findAllByType(Button).some(node => node.props.label === '테스트 알림 보내기')).toBe(true);
+  expect(value.calls).not.toContain('notification:test-fixture-only');
+});
