@@ -24,9 +24,17 @@ def failed(kind, error, traceback):
 
 sys.excepthook = failed
 
+dump_number = 0
 def hierarchy():
-    adb('shell', 'uiautomator', 'dump', '/sdcard/pm-ui.xml')
-    return adb('shell', 'cat', '/sdcard/pm-ui.xml').decode('utf8')
+    global dump_number
+    dump_number += 1
+    remote = '/sdcard/pm-ui-' + str(dump_number) + '.xml'
+    try:
+        adb('shell', 'uiautomator', 'dump', remote)
+        source = adb('shell', 'cat', remote).decode('utf8')
+        return source if '<hierarchy' in source else ''
+    except subprocess.CalledProcessError:
+        return ''
 
 def wait_for(label):
     for _ in range(35):
@@ -52,7 +60,35 @@ def tap(text, source=None):
             return
     raise RuntimeError('Native control unavailable: ' + text)
 
+def expand_card(source, title):
+    document = ET.fromstring(source)
+    parents = {child: parent for parent in document.iter() for child in parent}
+    anchor = next((node for node in document.iter('node') if title in node.get('text', '')), None)
+    candidates = []
+    while anchor is not None:
+        candidates = [node for node in anchor.iter('node') if node.get('resource-id', '').endswith('/expand_button')]
+        if candidates:
+            break
+        anchor = parents.get(anchor)
+    for node in candidates:
+        if node.get('resource-id', '').endswith('/expand_button'):
+            x1, y1, x2, y2 = map(int, re.findall(r'\d+', node.get('bounds')))
+            adb('shell', 'input', 'tap', str((x1 + x2) // 2), str((y1 + y2) // 2))
+            time.sleep(1)
+            return hierarchy()
+    return source
+
 adb('install', '-r', str(root / 'android/app/build/outputs/apk/debug/app-debug.apk'))
+adb('shell', 'pm', 'revoke', 'kr.promotors.app', 'android.permission.POST_NOTIFICATIONS')
+adb('shell', 'pm', 'clear-permission-flags', 'kr.promotors.app', 'android.permission.POST_NOTIFICATIONS', 'user-set', 'user-fixed')
+adb('shell', 'am', 'start', '-n', 'kr.promotors.app/.MainActivity', '--es', 'qaScreen', 'notifications', '--ez', 'requestOsPermission', 'true')
+source = wait_for('실제 발송 없음')
+tap('앱 알림 연결', source)
+source = wait_for('com.android.permissioncontroller')
+assert '프로모터스' in source, 'Native permission does not identify the app'
+assert '알림을 보내' in source or 'notifications' in source.lower(), 'Notification permission text absent'
+save('os-notification-permission', source)
+adb('shell', 'input', 'keyevent', '4')
 results = []
 for screen, label in [('booking', '정비 예약'), ('mypage', '마이페이지'), ('admin', '예약관리'), ('notifications', '앱 알림 설정')]:
     adb('shell', 'am', 'force-stop', 'kr.promotors.app')
@@ -64,22 +100,24 @@ for screen, label in [('booking', '정비 예약'), ('mypage', '마이페이지'
     if screen == 'admin':
         adb('shell', 'pm', 'grant', 'kr.promotors.app', 'android.permission.POST_NOTIFICATIONS')
         tap('상시알림 예시', source)
-        time.sleep(2)
+        wait_for('예시 상시알림 표시 요청')
         adb('shell', 'cmd', 'statusbar', 'expand-notifications')
-        time.sleep(2)
-        save('booking-ongoing-notification')
+        source = wait_for('처리 대기 1건')
+        save('booking-ongoing-notification', expand_card(source, '처리 대기 1건'))
         adb('shell', 'cmd', 'statusbar', 'collapse')
-
-adb('shell', 'pm', 'revoke', 'kr.promotors.app', 'android.permission.POST_NOTIFICATIONS')
-adb('shell', 'pm', 'clear-permission-flags', 'kr.promotors.app', 'android.permission.POST_NOTIFICATIONS', 'user-set', 'user-fixed')
-adb('shell', 'am', 'force-stop', 'kr.promotors.app')
-adb('shell', 'am', 'start', '-n', 'kr.promotors.app/.MainActivity', '--es', 'qaScreen', 'notifications', '--ez', 'requestOsPermission', 'true')
-source = wait_for('실제 발송 없음')
-tap('앱 알림 연결', source)
-source = wait_for('com.android.permissioncontroller')
-assert 'com.android.permissioncontroller' in source, 'Native Android permission dialog absent'
-assert '알림을 보내' in source or 'notifications' in source.lower(), 'Notification permission text absent'
-save('os-notification-permission', source)
+        tap('새 예약 알림 예시', wait_for('새 예약 알림 예시'))
+        wait_for('새 예약 예시 알림 표시 요청')
+        adb('shell', 'cmd', 'statusbar', 'expand-notifications')
+        source = wait_for('새 예약이 들어왔어요')
+        if '예약 승인' not in source:
+            source = expand_card(source, '새 예약이 들어왔어요')
+        assert '예시 고객' in source and '예시 차량' in source and '비공개' in source
+        assert '예약 승인' in source and '예약 거절' in source, 'Native reservation actions missing'
+        save('new-booking-notification', source)
+        tap('새 예약이 들어왔어요 · 예시', source)
+        source = wait_for('예약 상세')
+        assert '예시 고객' in source and 'BMW 520d' in source
+        save('notification-open-detail', source)
 logs = adb('logcat', '-d', '-s', 'ReactNativeJS').decode('utf8')
 assert 'PROMOTORS_NATIVE_QA_READY' in logs, 'Native QA readiness marker absent'
 assert not re.search(r'operationalRequests["\\: ]+[1-9]', logs), 'QA made a production network request'

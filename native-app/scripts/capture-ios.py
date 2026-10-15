@@ -8,6 +8,9 @@ root = pathlib.Path(__file__).resolve().parents[1]
 output = root / 'qa-results' / 'ios'
 output.mkdir(parents=True, exist_ok=True)
 app = pathlib.Path(os.environ['RUNNER_TEMP']) / 'IndependentPromotors/Build/Products/Debug-iphonesimulator/Promotors.app'
+checker = pathlib.Path(os.environ['RUNNER_TEMP']) / 'verify-native-screen'
+subprocess.run(['swiftc', str(root / 'scripts/verify-native-screen.swift'), '-o', str(checker)], check=True)
+titles = {'booking': '정비 예약', 'mypage': '마이페이지', 'admin': '예약관리', 'notifications': '앱 알림 설정'}
 
 def sim(*args):
     return subprocess.check_output(['xcrun', 'simctl', *args])
@@ -36,10 +39,13 @@ for kind, device in selected:
                     ready = True
                     break
             if not ready:
+                sim('io', device, 'screenshot', str(output / (kind + '-' + screen + '-failure.png')))
                 process.terminate()
                 raise RuntimeError('Native iOS app not ready: ' + kind + ' ' + screen + '\n' + source[-2000:])
             time.sleep(3)
-            sim('io', device, 'screenshot', str(output / (kind + '-' + screen + '.png')))
+            screenshot = output / (kind + '-' + screen + '.png')
+            sim('io', device, 'screenshot', str(screenshot))
+            subprocess.run([str(checker), str(screenshot), titles[screen]], check=True)
             process.terminate()
         if '"operationalRequests":0' not in source.replace(' ', '').replace('\\"', '"'):
             raise RuntimeError('QA production-request check missing')
