@@ -10,7 +10,7 @@ output.mkdir(parents=True, exist_ok=True)
 app = pathlib.Path(os.environ['RUNNER_TEMP']) / 'IndependentPromotors/Build/Products/Debug-iphonesimulator/Promotors.app'
 checker = pathlib.Path(os.environ['RUNNER_TEMP']) / 'verify-native-screen'
 subprocess.run(['swiftc', str(root / 'scripts/verify-native-screen.swift'), '-o', str(checker)], check=True)
-titles = {'booking': '정비 예약', 'mypage': '마이페이지', 'admin': '예약관리', 'notifications': '앱 알림 설정'}
+titles = {'booking': '정비 예약', 'mypage': '마이페이지', 'admin': '예약관리', 'notifications': '앱 알림 설정', 'updates': '새 버전이 나왔어요'}
 
 def sim(*args):
     return subprocess.check_output(['xcrun', 'simctl', *args])
@@ -26,7 +26,7 @@ for kind, device in selected:
     sim('bootstatus', device, '-b')
     sim('status_bar', device, 'override', '--time', '9:41', '--dataNetwork', 'wifi', '--wifiMode', 'active', '--wifiBars', '3', '--batteryState', 'charged', '--batteryLevel', '100')
     sim('install', device, str(app))
-    for screen in ['booking', 'mypage', 'admin', 'notifications']:
+    for screen in ['booking', 'mypage', 'admin', 'notifications', 'updates']:
         subprocess.run(['xcrun', 'simctl', 'terminate', device, 'kr.promotors.app'], capture_output=True)
         log = output / (kind + '-' + screen + '.log')
         with log.open('wb') as handle:

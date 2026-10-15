@@ -6,7 +6,7 @@ import {createQaPush} from './fixture-push';
 import {createQaAccount, createQaDeletion} from './fixture-account';
 import {createQaNotifications} from './fixture-notifications';
 
-export type QaConfiguration = {screen: 'booking' | 'mypage' | 'admin' | 'notifications'; requestOsPermission?: boolean};
+export type QaConfiguration = {screen: 'booking' | 'mypage' | 'admin' | 'notifications' | 'updates'; requestOsPermission?: boolean};
 export function createQaEnvironment(config: QaConfiguration, imageUri: string) {
   const admin = config.screen === 'admin' || config.screen === 'notifications';
   const data = createQaData(), auth = createQaSession(admin), calls: string[] = [];
@@ -46,6 +46,6 @@ export function createQaEnvironment(config: QaConfiguration, imageUri: string) {
     notifications: createQaNotifications(data, push, calls),
     deletion: createQaDeletion(calls),
   } as unknown as NativeServices;
-  const initialRoute: Route = config.screen === 'booking' ? {name: 'reserve'} : config.screen === 'mypage' ? {name: 'my'} : config.screen === 'admin' ? {name: 'admin'} : {name: 'notification-settings'};
-  return {services, push, initialRoute, calls, data, qaDate};
+  const initialRoute: Route = config.screen === 'booking' ? {name: 'reserve'} : ['mypage', 'updates'].includes(config.screen) ? {name: 'my'} : config.screen === 'admin' ? {name: 'admin'} : {name: 'notification-settings'};
+  return {services, push, initialRoute, calls, data, qaDate, updates: config.screen === 'updates' ? {check: async () => ({key: 'qa-update', version: '2.0.0 (실제 발송 없음)'}), openStore: async () => {calls.push('updates.openStore');}} : undefined};
 }
