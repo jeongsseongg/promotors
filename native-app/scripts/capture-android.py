@@ -94,6 +94,13 @@ def save_ongoing_notification():
         time.sleep(1)
     raise RuntimeError('Actual ongoing reservation notification not posted')
 
+def set_appearance(mode):
+    adb('shell', 'cmd', 'uimode', 'night', mode)
+    observed = adb('shell', 'cmd', 'uimode', 'night').decode('utf8').strip().lower()
+    assert observed.endswith(mode), 'System night mode not applied: ' + observed
+
+
+set_appearance('no')
 adb('install', '-r', str(root / 'android/app/build/outputs/apk/debug/app-debug.apk'))
 adb('shell', 'pm', 'revoke', 'kr.promotors.app', 'android.permission.POST_NOTIFICATIONS')
 adb('shell', 'pm', 'clear-permission-flags', 'kr.promotors.app', 'android.permission.POST_NOTIFICATIONS', 'user-set', 'user-fixed')
@@ -112,7 +119,7 @@ for screen, label in [('booking', '정비 예약'), ('mypage', '마이페이지'
     source = wait_for('실제 발송 없음')
     source = wait_for(label)
     save(screen, source)
-    results.append({'screen': screen, 'nativeViews': True, 'webViewCount': 0})
+    results.append({'screen': screen, 'systemAppearance': 'light', 'nativeViews': True, 'webViewCount': 0})
     if screen == 'updates':
         assert '업데이트' in source and '나중에' in source, 'Update choices absent'
         tap('나중에', source)
@@ -143,6 +150,15 @@ for screen, label in [('booking', '정비 예약'), ('mypage', '마이페이지'
         source = wait_for('예약 상세')
         assert '예시 고객' in source and 'BMW 520d' in source
         save('notification-open-detail', source)
+set_appearance('yes')
+for screen, label in [('booking', '정비 예약'), ('mypage', '마이페이지')]:
+    adb('shell', 'am', 'force-stop', 'kr.promotors.app')
+    adb('shell', 'am', 'start', '-n', 'kr.promotors.app/.MainActivity', '--es', 'qaScreen', screen)
+    source = wait_for(label)
+    assert '실제 발송 없음' in source, 'Dark-mode QA disclosure absent'
+    save(screen + '-dark', source)
+    results.append({'screen': screen, 'systemAppearance': 'dark', 'nativeViews': True, 'webViewCount': 0})
+set_appearance('no')
 logs = adb('logcat', '-d', '-s', 'ReactNativeJS').decode('utf8')
 assert 'PROMOTORS_NATIVE_QA_READY' in logs, 'Native QA readiness marker absent'
 assert not re.search(r'operationalRequests["\\: ]+[1-9]', logs), 'QA made a production network request'
