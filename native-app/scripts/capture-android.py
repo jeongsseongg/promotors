@@ -43,10 +43,11 @@ def tap(text, source=None):
 
 adb('install', '-r', str(root / 'android/app/build/outputs/apk/debug/app-debug.apk'))
 results = []
-for screen, label in [('booking', '정비 예약'), ('mypage', '마이페이지'), ('admin', '예약 관리'), ('notifications', '앱 알림 설정')]:
+for screen, label in [('booking', '정비 예약'), ('mypage', '마이페이지'), ('admin', '예약관리'), ('notifications', '앱 알림 설정')]:
     adb('shell', 'am', 'force-stop', 'kr.promotors.app')
     adb('shell', 'am', 'start', '-n', 'kr.promotors.app/.MainActivity', '--es', 'qaScreen', screen)
     source = wait_for('실제 발송 없음')
+    source = wait_for(label)
     save(screen, source)
     results.append({'screen': screen, 'nativeViews': True, 'webViewCount': 0})
     if screen == 'admin':
@@ -64,7 +65,7 @@ adb('shell', 'am', 'force-stop', 'kr.promotors.app')
 adb('shell', 'am', 'start', '-n', 'kr.promotors.app/.MainActivity', '--es', 'qaScreen', 'notifications', '--ez', 'requestOsPermission', 'true')
 source = wait_for('실제 발송 없음')
 tap('앱 알림 연결', source)
-source = wait_for('프로모터스')
+source = wait_for('com.android.permissioncontroller')
 assert 'com.android.permissioncontroller' in source, 'Native Android permission dialog absent'
 assert '알림을 보내' in source or 'notifications' in source.lower(), 'Notification permission text absent'
 save('os-notification-permission', source)
