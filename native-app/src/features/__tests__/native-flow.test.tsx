@@ -124,3 +124,47 @@ it('로그아웃하면 이전 고객의 차량과 정비 정보를 화면에서 
   expect(texts(tree)).not.toContain('BMW 520d');
   expect(tree.root.findAllByType(HomeScreen)).toHaveLength(1);
 });
+
+it('실제 세션처럼 지점 배열의 객체가 바뀌어도 관리자 조회를 반복하지 않는다', async () => {
+  const environment = createQaEnvironment({screen: 'admin'}, 'data:image/png;base64,qa');
+  const snapshot = environment.services.session.snapshot.bind(environment.services.session);
+  jest.spyOn(environment.services.session, 'snapshot').mockImplementation(() => {const current = snapshot(); return {...current, branches: [...current.branches]};});
+  const list = jest.spyOn(environment.services.adminBookings, 'list');
+  const tree = await render(environment);
+  expect(list).toHaveBeenCalledTimes(1);
+  await choose(tree, '전체 일정');
+  expect(list).toHaveBeenCalledTimes(1);
+  expect(texts(tree)).toContain('매장 예약 일정');
+});
+
+it('OS 알림의 예약 처리 실패를 상세에 알리고 임의로 성공 처리하지 않는다', async () => {
+  const environment = createQaEnvironment({screen: 'admin'}, 'data:image/png;base64,qa');
+  let listener: ((target: NotificationTarget) => void) | undefined;
+  environment.services.notifications.subscribeOpen = callback => {listener = callback; return () => {};};
+  const tree = await render(environment);
+  await act(async () => {listener!({kind: 'booking', id: 'qa-pending', actionFailed: true});});
+  expect(texts(tree)).toContain('알림에서 예약 처리를 완료하지 못했습니다.');
+  expect(environment.data.bookings.find(row => row.id === 'qa-pending')?.status).toBe('신규');
+  expect(tree.root.findAllByType(Button).some(row => row.props.label === '예약 승인')).toBe(true);
+});
+
+it('로그인 복구 네트워크 장애를 잡고 재시도할 수 있는 오류 화면을 표시한다', async () => {
+  const environment = createQaEnvironment({screen: 'mypage'}, 'data:image/png;base64,qa');
+  const restore = jest.spyOn(environment.services.session, 'restore').mockRejectedValueOnce(new Error('연결 확인 실패 (검증용)'));
+  const tree = await render(environment);
+  expect(texts(tree)).toContain('연결 확인 실패 (검증용)');
+  expect(texts(tree)).not.toContain('예시 고객');
+  await press(tree, '다시 시도');
+  expect(restore).toHaveBeenCalledTimes(2);
+  expect(texts(tree)).toContain('예시 고객');
+});
+
+it('잘못된 공개 사진 키가 전체 네이티브 화면을 중단시키지 않는다', async () => {
+  const environment = createQaEnvironment({screen: 'mypage'}, 'data:image/png;base64,qa');
+  environment.initialRoute = {name: 'home'};
+  jest.spyOn(environment.services.publicContent, 'assetUrl').mockImplementation(() => {throw new Error('사진 접근 불가 (검증용)');});
+  const tree = await render(environment);
+  expect(texts(tree)).toContain('사진을 불러오지 못했어요.');
+  expect(texts(tree)).toContain('눌러서 다시 불러오기');
+  expect(tree.root.findAllByType(Button).some(row => row.props.label === '정비 예약')).toBe(true);
+});
