@@ -130,8 +130,7 @@ for screen, label in [('booking', '정비 예약'), ('mypage', '마이페이지'
         wait_for('새 예약 예시 알림 표시 요청')
         adb('shell', 'cmd', 'statusbar', 'expand-notifications')
         source = wait_for('새 예약이 들어왔어요')
-        if '예약 승인' not in source:
-            source = expand_card(source, '새 예약이 들어왔어요')
+        source = expand_card(source, '새 예약이 들어왔어요')
         assert '예시 고객' in source and '예시 차량' in source and '비공개' in source
         assert '예약 승인' in source and '예약 거절' in source, 'Native reservation actions missing'
         save('new-booking-notification', source)
