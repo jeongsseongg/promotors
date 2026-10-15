@@ -154,3 +154,27 @@ test('enable의 첫 준비 대기 중에도 이전 계정이 새 계정 연결 �
   expect(subscriptions(value)).toHaveLength(0);
   expect(value.flags.get('account-B')).toBe(false);
 });
+test('기존 토큰 등록 중 갱신 요청이 오면 후속 복구에서 새 토큰을 등록한다', async () => {
+  const value = fixture(), gate = deferred<void>(), registered: string[] = [];
+  const oldToken = 'synthetic-old-device-token-00000000', newToken = 'synthetic-new-device-token-00000000';
+  let nativeToken = oldToken;
+  value.push.getToken.mockImplementation(async () => nativeToken);
+  const implementation = value.rpc.call.getMockImplementation()!;
+  value.rpc.call.mockImplementation(async (name, input) => {
+    if (name === 'pm_native_push_subscribe') {
+      const data = input.p_data as unknown as {token: string};
+      registered.push(data.token);
+      if (registered.length === 1) await gate.promise;
+    }
+    return implementation(name, input);
+  });
+  const first = value.service.restoreConnection();
+  await settleUntil(() => registered.length === 1);
+  nativeToken = newToken;
+  const refreshed = value.service.restoreConnection();
+  gate.resolve(); await Promise.all([first, refreshed]);
+  await settleUntil(() => value.push.bind.mock.calls.length >= 2);
+  expect(registered[0]).toBe(oldToken);
+  expect(registered).toContain(newToken);
+  expect(await value.service.connection()).toMatchObject({connected: true, automatic: true});
+});
