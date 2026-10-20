@@ -76,3 +76,27 @@ it('고객 알림함에는 서버 표시와 무관하게 관리자 처리 버튼
   expect(list).not.toHaveBeenCalled();
   expect(tree.root.findAllByType(Button).filter(node => ['예약 승인', '예약 거절'].includes(node.props.label))).toHaveLength(0);
 });
+
+it('모두 읽음 이후에도 미처리 예약의 승인 버튼과 고객 차량 정보가 유지된다', async () => {
+  const environment = createQaEnvironment({screen: 'admin'}, 'data:image/png;base64,qa');
+  const tree = await render(environment);
+  await press(tree, '알림');
+  await press(tree, '모두 읽음');
+  expect(environment.data.notificationState.items.every(row => !!row.read_at)).toBe(true);
+  expect(text(tree)).toContain('예시 고객');
+  expect(text(tree)).toContain('BMW 520d');
+  expect(text(tree)).toContain('차량번호 비공개');
+  expect(tree.root.findAllByType(Button).some(node => node.props.label === '예약 승인')).toBe(true);
+  expect(environment.data.bookings.find(row => row.id === 'qa-pending')?.status).toBe('신규');
+});
+
+it('알림을 열면 전체 예약과 기존 고객 기록을 보여주고 열기만으로 승인하지 않는다', async () => {
+  const environment = createQaEnvironment({screen: 'admin'}, 'data:image/png;base64,qa');
+  const tree = await render(environment);
+  await press(tree, '알림');
+  const row = tree.root.findAll(node => node.props.testID === 'notification-open-qa-alert' && typeof node.props.onPress === 'function')[0];
+  await act(async () => {await row.props.onPress();});
+  for (const value of ['예약 전체 정보', '예시 고객', 'BMW 520d', '차량번호 비공개', '10:00', '엔진오일 교환', '정비 전 점검도 함께 부탁드립니다.', '기존 고객 기록', '고객 처리 로그']) expect(text(tree)).toContain(value);
+  expect(tree.root.findAllByType(Button).some(node => node.props.label === '예약 승인')).toBe(true);
+  expect(environment.data.bookings.find(booking => booking.id === 'qa-pending')?.status).toBe('신규');
+});
