@@ -5,7 +5,8 @@ import {Button} from '../../components/Controls';
 import {Route, useNav, useServices} from '../../components/AppContext';
 import {DataState, useForegroundRefresh, useResource} from '../../components/DataState';
 import {NotificationTarget} from '../../domain/types';
-import {BookingDecisionControls} from '../admin/BookingDecisionControls';
+import {BookingCard} from '../admin/BookingCard';
+import {inboxStyles as n} from './inboxStyles';
 import {ui} from '../../theme/styles';
 
 export function routeForNotification(target: NotificationTarget, admin: boolean): Route {
@@ -45,21 +46,25 @@ export function NotificationsScreen() {
     catch (e) {setError(e instanceof Error ? e.message : '읽음 처리를 완료하지 못했습니다.');}
     finally {setBusy('');}
   }
+  const items = resource.data?.items || [], unread = items.filter(row => !row.read_at).length;
   return <Screen title="알림" onBack={nav.back} refreshing={resource.loading} onRefresh={resource.reload}
-    action={<Button secondary label="설정" onPress={() => nav.go({name: 'notification-settings'})}/>} testID="notification-inbox">
-    <Text style={ui.title}>프로모터스 알림</Text><Text style={ui.muted}>{admin ? '대기 예약은 여기서 승인·거절하세요. 알림을 누르면 전체 예약정보와 고객 기록이 열립니다.' : '예약과 정비 소식을 확인하세요.'}</Text>
-    <DataState loading={resource.loading && !resource.data} error={resource.error} empty={!resource.loading && !resource.data?.items.length ? '아직 도착한 알림이 없습니다.' : ''} onRetry={resource.reload}/>
+    action={<Pressable accessibilityRole="button" onPress={() => nav.go({name: 'notification-settings'})} style={n.read}><Text style={n.readText}>설정</Text></Pressable>} testID="notification-inbox">
+    <View style={n.top}><View><Text style={n.heading}>프로모터스 알림</Text><Text style={n.caption}>새 알림 {unread}개</Text></View>
+      {items.length ? <Button secondary label="모두 읽음" busy={busy === 'all'} onPress={() => void readAll()}/> : null}</View>
+    <DataState loading={resource.loading && !resource.data} error={resource.error} empty={!resource.loading && !items.length ? '아직 도착한 알림이 없습니다.' : ''} onRetry={resource.reload}/>
     {error ? <Text accessibilityRole="alert" style={ui.error}>{error}</Text> : null}{message ? <Text accessibilityRole="alert" style={ui.body}>{message}</Text> : null}
-    {resource.data?.items.length ? <Button secondary label="모두 읽음" busy={busy === 'all'} onPress={() => void readAll()}/> : null}
-    {resource.data?.items.map(row => {
+    {items.map(row => {
       const pending = admin && row.target?.kind === 'booking' ? resource.data?.pending.find(booking => booking.id === row.target?.id) : undefined;
-      return <View key={row.id} style={ui.card}><Pressable accessibilityRole="button" disabled={!!busy} testID={'notification-open-' + row.id} onPress={() => void open(row.id)} style={ui.stack}>
-        <View style={ui.spread}><Text style={ui.pillText}>{row.category === 'booking' ? '예약' : row.category === 'repair' ? '정비' : row.category === 'reminders' ? '일정' : '소식'}</Text>
-          <Text style={ui.muted}>{row.read_at ? '읽음' : '새 알림'}</Text></View>
-        <Text style={ui.heading}>{row.title}</Text><Text style={ui.body}>{row.body}</Text>
-        <Text style={ui.muted}>{new Date(row.created_at).toLocaleString('ko-KR')}</Text><Text style={ui.pillText}>상세 확인 ›</Text>
-      </Pressable>{pending ? <BookingDecisionControls key={pending.id + ':' + pending.status} id={pending.id} busy={!!busy}
-        onAccept={() => void decide(pending.id)} onReject={reason => void decide(pending.id, reason)}/> : null}</View>;
+      const stamp = new Date(row.created_at).toLocaleString('ko-KR', {month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit'});
+      const category = row.category === 'booking' ? '예약' : row.category === 'repair' ? '정비' : row.category === 'reminders' ? '일정' : '소식';
+      return pending ? <View key={row.id} style={n.pending}><View style={[n.row, n.meta]}><Text style={n.category}>확인할 예약</Text><Text style={n.caption}>{stamp}</Text></View>
+        <BookingCard booking={pending} busy={!!busy} openTestID={'notification-open-' + row.id} onOpen={() => void open(row.id)}
+          onAccept={() => void decide(pending.id)} onReject={reason => void decide(pending.id, reason)}/></View>
+        : <Pressable key={row.id} accessibilityRole="button" disabled={!!busy} testID={'notification-open-' + row.id} onPress={() => void open(row.id)}
+          style={[n.list, n.item, !row.read_at && n.unread]}><View style={n.row}><Text style={n.category}>{category}</Text><Text style={n.caption}>{stamp}</Text></View>
+          <View style={n.titleRow}>{!row.read_at ? <View accessibilityLabel="새 알림" style={n.dot}/> : null}<Text style={[n.title, n.flex]}>{row.title}</Text><Text style={n.readText}>›</Text></View>
+          <Text style={n.body}>{row.body}</Text>
+        </Pressable>;
     })}
   </Screen>;
 }

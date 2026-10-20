@@ -21,6 +21,8 @@ end
 add_file(project, app, 'Promotors/BookingActivityAttributes.swift')
 add_file(project, widget, 'Promotors/BookingActivityAttributes.swift')
 add_file(project, widget, 'BookingActivity/BookingActivityWidget.swift')
+add_file(project, widget, 'BookingActivity/BookingActivityCard.swift')
+add_file(project, app, 'BookingActivity/BookingActivityCard.swift')
 add_file(project, app, 'Promotors/02-precision-check.wav', true)
 Dir.glob(File.join(root, 'assets/fonts/*.otf')).each do |file|
   add_file(project, app, '../assets/fonts/' + File.basename(file), true)

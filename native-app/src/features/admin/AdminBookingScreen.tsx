@@ -4,7 +4,8 @@ import {Screen} from '../../components/Screen';
 import {Button, Field} from '../../components/Controls';
 import {useNav, useServices} from '../../components/AppContext';
 import {DataState, useResource} from '../../components/DataState';
-import {BookingInfo} from '../booking/BookingScreens';
+import {BookingOverview} from './BookingOverview';
+import {bookingStyles as s} from './bookingStyles';
 import {CustomerHistory} from './CustomerHistory';
 import {ui} from '../../theme/styles';
 
@@ -33,12 +34,16 @@ export function AdminBookingScreen({id, notice}: {id: string; notice?: string}) 
     footer={pending ? <View style={ui.row}><View style={ui.flex}><Button secondary label={rejecting ? '거절 취소' : '예약 거절'} disabled={busy} onPress={() => setRejecting(!rejecting)}/></View>
       <View style={ui.flex}><Button label={rejecting ? '거절 확정' : '예약 승인'} danger={rejecting} busy={busy} onPress={() => void decide(rejecting)} testID="booking-decision"/></View></View> : undefined}>
     <DataState loading={resource.loading && !resource.data} error={resource.error} onRetry={resource.reload}/>
-    {row ? <><View style={ui.card}><Text style={ui.pillText}>{pending ? '처리 대기' : row.status}</Text><Text style={ui.title}>{row.name || '예약 고객'}</Text><Text style={ui.heading}>{row.model || '차량명 미등록'}</Text><Text style={ui.body}>{row.car || '차량번호 미등록'}</Text></View>
+    {row ? <><View style={s.hero}>
+        <View style={s.row}><Text style={s.date}>{row.date}</Text><View style={s.status}><Text style={s.statusText}>{pending ? '처리 대기' : row.status}</Text></View></View>
+        <View style={s.row}><Text style={s.time}>{row.time}</Text><Text style={s.caption}>{row.branch}</Text></View><View style={s.divider}/>
+        <Text style={s.name}>{row.name || '예약 고객'}</Text><View style={s.vehicle}><Text style={s.body}>{row.model || '차량명 미등록'}</Text><Text style={s.body}>{row.car || '차량번호 미등록'}</Text></View>
+      </View>
       {message || notice ? <Text accessibilityRole="alert" style={ui.body}>{message || notice}</Text> : null}
       {rejecting ? <View style={ui.card}><Text style={ui.heading}>예약 거절 사유</Text><Field label="거절 사유" multiline value={reason} onChangeText={setReason} maxLength={200} placeholder="예약을 받을 수 없는 이유를 입력해 주세요."/>
         <Text style={ui.muted}>확정하면 이 예약이 취소 처리됩니다.</Text></View> : null}
       {error ? <Text accessibilityRole="alert" style={ui.error}>{error}</Text> : null}
-      <BookingInfo booking={row}/>{String(row.rejectionReason || '') ? <View style={ui.card}><Text style={ui.label}>거절 사유</Text><Text style={ui.body}>{String(row.rejectionReason)}</Text></View> : null}
+      <BookingOverview booking={row}/>{String(row.rejectionReason || '') ? <View style={ui.card}><Text style={ui.label}>거절 사유</Text><Text style={ui.body}>{String(row.rejectionReason)}</Text></View> : null}
       {row.phone ? <Button secondary label="고객에게 전화" onPress={() => void callCustomer()}/> : null}
       <CustomerHistory context={resource.data?.customerContext}/></> : null}
   </Screen>;

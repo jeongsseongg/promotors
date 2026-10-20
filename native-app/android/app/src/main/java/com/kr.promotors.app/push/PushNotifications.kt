@@ -113,13 +113,12 @@ object PushNotifications {
       .filter { it.isNotBlank() }.joinToString("\n")
     val builder = base(context, SCHEDULE_CHANNEL)
       .setContentTitle("처리 대기 ${pending}건 · 방문 예정 ${upcoming}건")
-      .setContentText(line).setStyle(NotificationCompat.BigTextStyle().bigText("$line\n눌러서 예약 정보 확인"))
+      .setContentText(line).setStyle(NotificationCompat.DecoratedCustomViewStyle())
+      .setLargeIcon(null as android.graphics.Bitmap?).setShowWhen(false)
+      .setCustomContentView(BookingScheduleViews.create(context, snapshot, false))
+      .setCustomBigContentView(BookingScheduleViews.create(context, snapshot, true))
       .setContentIntent(intent.pendingIntent).setOngoing(true).setOnlyAlertOnce(true)
       .setSilent(true).setPriority(NotificationCompat.PRIORITY_LOW).setTimeoutAfter(86400000)
-    val startsAt = snapshot.optLong("startsAt", 0) * 1000
-    if (startsAt > System.currentTimeMillis()) {
-      builder.setWhen(startsAt).setUsesChronometer(true).setChronometerCountDown(true)
-    } else builder.setShowWhen(false)
     try { NotificationManagerCompat.from(context).notify(SCHEDULE_TAG, 0, builder.build()) }
     catch (_: SecurityException) { return@synchronized }
   }
