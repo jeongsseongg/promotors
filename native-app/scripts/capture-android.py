@@ -60,39 +60,46 @@ def tap(text, source=None):
             return
     raise RuntimeError('Native control unavailable: ' + text)
 
-def expand_card(source, title):
+def expand_card(source, title, expanded=True):
     document = ET.fromstring(source)
     parents = {child: parent for parent in document.iter() for child in parent}
     anchor = next((node for node in document.iter('node') if title in node.get('text', '')), None)
-    candidates = []
     while anchor is not None:
         candidates = [node for node in anchor.iter('node') if node.get('resource-id', '').endswith('/expand_button')]
         if candidates:
-            break
+            control = candidates[0]
+            label = control.get('content-desc', '').lower()
+            is_expanded = '접' in label or 'collapse' in label
+            is_collapsed = '펼' in label or 'expand' in label
+            if (expanded and is_collapsed) or (not expanded and is_expanded):
+                x1, y1, x2, y2 = map(int, re.findall(r'\d+', control.get('bounds')))
+                adb('shell', 'input', 'tap', str((x1 + x2) // 2), str((y1 + y2) // 2))
+                time.sleep(1)
+                return hierarchy()
+            return source
         anchor = parents.get(anchor)
-    for node in candidates:
-        if node.get('resource-id', '').endswith('/expand_button'):
-            x1, y1, x2, y2 = map(int, re.findall(r'\d+', node.get('bounds')))
-            adb('shell', 'input', 'tap', str((x1 + x2) // 2), str((y1 + y2) // 2))
-            time.sleep(1)
-            return hierarchy()
     return source
 
+
 def save_ongoing_notification():
-    # A ticking system Chronometer never becomes idle for uiautomator's dump.
-    # Verify the actual posted OS record and screenshot without stopping its clock.
-    for _ in range(15):
-        records = adb('shell', 'dumpsys', 'notification', '--noredact').decode('utf8')
-        own = [record for record in re.split(r'(?=NotificationRecord\()', records)
-               if 'pkg=kr.promotors.app' in record and '처리 대기 1건' in record]
-        if own:
-            record = own[0]
-            assert 'BMW 520d' in record and '예시 고객' in record and '비공개' in record
-            (output / 'booking-ongoing-notification.txt').write_text(record, encoding='utf8')
-            (output / 'booking-ongoing-notification.png').write_bytes(adb('exec-out', 'screencap', '-p'))
-            return
-        time.sleep(1)
-    raise RuntimeError('Actual ongoing reservation notification not posted')
+    records = adb('shell', 'dumpsys', 'notification', '--noredact').decode('utf8')
+    own = [record for record in re.split(r'(?=NotificationRecord\()', records)
+           if 'pkg=kr.promotors.app' in record and 'tag=promotors_booking_schedule' in record]
+    assert own, 'Actual ongoing reservation notification not posted'
+    assert all(value in own[0] for value in ['BMW 520d', '예시 고객', '비공개'])
+    (output / 'booking-ongoing-notification.txt').write_text(own[0], encoding='utf8')
+    source = wait_for('BMW 520d')
+    source = expand_card(source, 'BMW 520d', False)
+    save('booking-ongoing-compact', source)
+    source = expand_card(source, 'BMW 520d', True)
+    for value in ['처리 대기 1건', '방문 예정 1건', '예시 고객', 'BMW 520d', '비공개', '예약 정보 확인']:
+        assert value in source, 'Ongoing notification content absent: ' + value
+    save('booking-ongoing-notification', source)
+    tap('예시 고객', source)
+    source = wait_for('예약 상세')
+    assert 'BMW 520d' in source and '예약 승인' in source and '예약 거절' in source
+    save('ongoing-open-detail', source)
+
 
 def set_appearance(mode):
     adb('shell', 'cmd', 'uimode', 'night', mode)
@@ -120,7 +127,7 @@ source = wait_for('앱 알림 설정')
 assert '연결됨' in source and '테스트 알림 보내기' in source
 save('automatic-notification-settings', source)
 results = [{'screen': 'setup', 'systemAppearance': 'light', 'nativeViews': True, 'webViewCount': 0, 'automaticOsPermission': True, 'allowImmediatelyConnected': True, 'settingsOpened': True}]
-for screen, label in [('booking', '정비 예약'), ('mypage', '마이페이지'), ('admin', '예약관리'), ('notifications', '앱 알림 설정'), ('updates', '새 버전이 나왔어요'), ('setup-denied', '앱 알림을 켜주세요')]:
+for screen, label in [('booking', '정비 예약'), ('mypage', '마이페이지'), ('admin', '예약관리'), ('notifications', '앱 알림 설정'), ('updates', '새 버전이 나왔어요'), ('setup-denied', '앱 알림을 켜주세요'), ('inbox', '프로모터스 알림'), ('detail', '예약 상세')]:
     adb('shell', 'am', 'force-stop', 'kr.promotors.app')
     adb('shell', 'am', 'start', '-n', 'kr.promotors.app/.MainActivity', '--es', 'qaScreen', screen)
     source = wait_for('실제 발송 없음')

@@ -1,6 +1,7 @@
 import json
 import os
 import pathlib
+import shutil
 import subprocess
 import time
 
@@ -10,7 +11,7 @@ output.mkdir(parents=True, exist_ok=True)
 app = pathlib.Path(os.environ['RUNNER_TEMP']) / 'IndependentPromotors/Build/Products/Debug-iphonesimulator/Promotors.app'
 checker = pathlib.Path(os.environ['RUNNER_TEMP']) / 'verify-native-screen'
 subprocess.run(['swiftc', str(root / 'scripts/verify-native-screen.swift'), '-o', str(checker)], check=True)
-titles = {'booking': '정비 예약', 'mypage': '마이페이지', 'admin': '예약관리', 'notifications': '앱 알림 설정', 'updates': '새 버전이 나왔어요', 'setup': '앱 알림이 연결됐어요', 'setup-denied': '앱 알림을 켜주세요'}
+titles = {'booking': '정비 예약', 'mypage': '마이페이지', 'admin': '예약관리', 'notifications': '앱 알림 설정', 'updates': '새 버전이 나왔어요', 'setup': '앱 알림이 연결됐어요', 'setup-denied': '앱 알림을 켜주세요', 'inbox': '프로모터스 알림', 'detail': '예약 상세'}
 
 def sim(*args):
     return subprocess.check_output(['xcrun', 'simctl', *args])
@@ -53,6 +54,17 @@ for kind, device in selected:
             process.terminate()
         if '"operationalRequests":0' not in source.replace(' ', '').replace('\\"', '"'):
             raise RuntimeError('QA production-request check missing')
+        if screen == 'admin':
+            container = pathlib.Path(sim('get_app_container', device, 'kr.promotors.app', 'data').decode().strip())
+            for presentation in ['lock', 'island']:
+                rendered = container / 'Documents' / ('qa-activity-' + presentation + '.png')
+                for _ in range(10):
+                    if rendered.exists():
+                        break
+                    time.sleep(1)
+                target = output / (kind + '-live-activity-' + presentation + '.png')
+                shutil.copyfile(rendered, target)
+                subprocess.run([str(checker), str(target), 'BMW 520d'], check=True)
         results.append({'device': kind, 'screen': screen, 'systemAppearance': appearance, 'nativeQaReady': True, 'operationalRequests': 0})
     sim('ui', device, 'appearance', 'light')
     sim('shutdown', device)
