@@ -54,6 +54,21 @@ class CustomerNotificationsTest {
     assertEquals(0, n.flags and Notification.FLAG_ONGOING_EVENT)
     assertTrue(n.timeoutAfter in 1..7200000)
   }
+  @Test fun collapsedCustomerCardFitsTheSystemSlotAndKeepsItsTimerVisible() {
+    val parent = FrameLayout(context)
+    val source = snapshot("visit").put("startsAt", System.currentTimeMillis() / 1000 + 2700)
+    val root = CustomerScheduleViews.create(context, source, false).apply(context, parent)
+    parent.addView(root)
+    val density = context.resources.displayMetrics.density
+    parent.measure(View.MeasureSpec.makeMeasureSpec((360*density).toInt(), View.MeasureSpec.EXACTLY),
+      View.MeasureSpec.makeMeasureSpec((240*density).toInt(), View.MeasureSpec.AT_MOST))
+    parent.layout(0, 0, parent.measuredWidth, parent.measuredHeight)
+    assertTrue("Collapsed Android custom content must fit 48dp", root.measuredHeight <= (48*density).toInt())
+    val timerId = context.resources.getIdentifier("customer_countdown", "id", context.packageName)
+    val timer = root.findViewById<View>(timerId)
+    assertEquals(View.VISIBLE, timer.visibility)
+    assertTrue(timer.bottom <= (timer.parent as View).height)
+  }
   @Test fun repairViewShowsFourStagesAndNeverARepairCountdown() {
     val root = CustomerScheduleViews.create(context, snapshot("repair"), true).apply(context, FrameLayout(context))
     val texts = (0 until (root as android.view.ViewGroup).childCount).mapNotNull { (root.getChildAt(it) as? TextView)?.text?.toString() }.joinToString(" ")

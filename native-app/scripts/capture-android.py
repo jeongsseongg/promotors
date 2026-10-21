@@ -26,6 +26,7 @@ sys.excepthook = failed
 
 dump_number = 0
 live_capture = False
+launcher_recoveries = 0
 def hierarchy():
     global dump_number
     if live_capture:
@@ -42,8 +43,15 @@ def hierarchy():
         return ''
 
 def wait_for(label):
+    global launcher_recoveries
     for _ in range(35):
         source = hierarchy()
+        if "Pixel Launcher isn&apos;t responding" in source or "Pixel Launcher isn't responding" in source:
+            if launcher_recoveries >= 1: raise RuntimeError('Emulator launcher repeatedly failed')
+            launcher_recoveries += 1
+            save('emulator-launcher-anr', source)
+            tap('android:id/aerr_close', source)
+            continue
         if label in source and 'com.facebook.react.devsupport' not in source:
             return source
         time.sleep(2)
@@ -164,6 +172,10 @@ for screen, label in [('booking', '정비 예약'), ('mypage', '마이페이지'
             adb('shell', 'cmd', 'statusbar', 'expand-notifications')
             live_capture = True
             source = wait_for(title)
+            source = expand_card(source, title, False, exact=True)
+            save('customer-' + phase + '-compact', source)
+            if phase == 'visit':
+                assert any(node.get('class') == 'android.widget.Chronometer' and node.get('resource-id', '').endswith('/customer_countdown') for node in ET.fromstring(source).iter('node'))
             source = expand_card(source, title, True, exact=True)
             assert '예약 승인' not in source and '예약 거절' not in source
             assert '정비 진행' in source and 'BMW 520d' in source
@@ -251,5 +263,5 @@ set_appearance('no')
 logs = adb('logcat', '-d', '-s', 'ReactNativeJS').decode('utf8')
 assert 'PROMOTORS_NATIVE_QA_READY' in logs, 'Native QA readiness marker absent'
 assert not re.search(r'operationalRequests["\\: ]+[1-9]', logs), 'QA made a production network request'
-(output / 'verification.json').write_text(json.dumps({'screens': results, 'osPermissionApp': '프로모터스', 'automaticPermissionAndConnection': True, 'operationalRequests': 0, 'physicalPushDelivery': 'not-tested'}, ensure_ascii=False, indent=2), encoding='utf8')
+(output / 'verification.json').write_text(json.dumps({'screens': results, 'osPermissionApp': '프로모터스', 'automaticPermissionAndConnection': True, 'operationalRequests': 0, 'physicalPushDelivery': 'not-tested', 'emulatorLauncherRecoveries': launcher_recoveries}, ensure_ascii=False, indent=2), encoding='utf8')
 print('Independent Android native UI and OS permission verified; no real push sent.')

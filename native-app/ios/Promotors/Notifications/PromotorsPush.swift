@@ -183,10 +183,15 @@ final class PromotorsPush: RCTEventEmitter {
         if values["screen"] as? String == "admin" {
             Task { @MainActor in
                 if #available(iOS 16.2, *) {
-                    do { try NativeQaActivityRenderer.capture() }
-                    catch { NSLog("PROMOTORS_NATIVE_QA_ACTIVITY_FAILED %@", error.localizedDescription) }
+                    do {
+                        try await NativeQaActivityRenderer.capture()
+                        NSLog("PROMOTORS_NATIVE_QA_READY %@", message); resolve(true)
+                    } catch {
+                        NSLog("PROMOTORS_NATIVE_QA_ACTIVITY_FAILED %@", error.localizedDescription); resolve(false)
+                    }
                 }
             }
+            return
         }
 #endif
         NSLog("PROMOTORS_NATIVE_QA_READY %@", message)
