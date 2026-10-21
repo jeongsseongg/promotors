@@ -5,7 +5,7 @@ const uuid = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
 type Subscription = { transport: string; token: string };
 type Booking = { id?: string; pending?: boolean; branch?: string; schedule?: string; customerName?: string;
   vehicleName?: string; vehiclePlate?: string; snapshot?: Record<string, unknown> };
-type Payload = { id: string; binding: string; category: string; booking?: Booking };
+type Payload = { id: string; binding: string; category: string; booking?: Booking; customer?: unknown };
 type Options = { validateOnly?: boolean; beforeSend?: () => Promise<boolean> };
 let cached: { source: string; value: string; expires: number } | undefined;
 let pending: { source: string; value: Promise<string> } | undefined;
@@ -72,20 +72,35 @@ function authorizedBooking(value: Booking) {
         ? Math.max(0, Math.min(snapshot.startsAt, 4102444800)) : 0 } };
 }
 
+export function cleanCustomer(value: unknown) {
+  const raw = value as {title?: unknown; body?: unknown; snapshot?: Record<string, unknown>};
+  const s = raw?.snapshot;
+  if (!s || s.audience !== 'customer' || !['confirmed', 'visit', 'repair', 'completed', 'cancelled'].includes(String(s.phase)) ||
+    typeof s.active !== 'boolean' || typeof s.progress !== 'number' || !Number.isFinite(s.progress)) throw new Error('INVALID_CUSTOMER_CONTEXT');
+  const record = (v: unknown) => {try {return bookingId(v);} catch {throw new Error('INVALID_CUSTOMER_CONTEXT');}};
+  const snapshot = {audience: 'customer', active: s.active, phase: s.phase, bookingId: record(s.bookingId), runId: record(s.runId),
+    ...bookingFields(s), customerName: '', pendingCount: 0, upcomingCount: 0, startsAt: typeof s.startsAt === 'number' && Number.isFinite(s.startsAt) ? Math.max(0, s.startsAt) : 0,
+    stageLabel: clean(s.stageLabel, 50), progress: Math.min(100, Math.max(0, Math.floor(s.progress))),
+    expiresAt: typeof s.expiresAt === 'number' && Number.isFinite(s.expiresAt) ? Math.max(0, s.expiresAt) : 0};
+  return {title: clean(raw.title, 80), body: clean(raw.body, 240), snapshot};
+}
+
 function messageData(payload: Payload) {
   if (!payload || payload.id?.length !== 36 || payload.binding?.length !== 36 || !uuid.test(payload.id) || !uuid.test(payload.binding)
     || !['booking', 'repair', 'reminders', 'marketing', 'test'].includes(payload.category)) throw new Error('FCM_INVALID_PAYLOAD');
   const booking = payload.booking ? authorizedBooking(payload.booking) : null;
+  const customer = payload.customer ? cleanCustomer(payload.customer) : null;
   const title = payload.category === 'marketing' ? '(광고) 프로모터스' : booking?.pending ? '새 예약이 들어왔어요'
-    : booking ? '예약 일정을 확인하세요' : '프로모터스 알림';
+    : booking ? '예약 일정을 확인하세요' : customer?.title || '프로모터스 알림';
   const vehicle = booking ? [booking.customerName, booking.vehicleName, booking.vehiclePlate].filter(Boolean).join(' · ') : '';
   const body = payload.category === 'marketing' ? '이벤트 안내가 있습니다. 수신거부: 앱 알림 설정'
     : booking ? [booking.branch + ' · ' + booking.schedule, vehicle, '눌러서 예약 일정 확인'].filter(Boolean).join('\n')
-    : '새로운 안내가 도착했습니다. 앱에서 확인해 주세요.';
+    : customer?.body || '새로운 안내가 도착했습니다. 앱에서 확인해 주세요.';
   const issuedAt = Math.floor(Date.now() / 1000);
   const data: Record<string, string> = { id: payload.id, binding: payload.binding, category: payload.category,
     issuedAt: String(issuedAt), expiresAt: String(issuedAt + TTL), title, body: Array.from(body).slice(0, 240).join('') };
   if (booking) data.booking = JSON.stringify(booking);
+  if (customer) data.customer = JSON.stringify(customer);
   if (new TextEncoder().encode(JSON.stringify(data)).length > 4096) data.body = Array.from(body).slice(0, 120).join('');
   if (new TextEncoder().encode(JSON.stringify(data)).length > 4096) throw new Error('FCM_PAYLOAD_TOO_LARGE');
   return data;

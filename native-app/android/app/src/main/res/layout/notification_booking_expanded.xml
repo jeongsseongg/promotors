@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:paddingBottom="4dp">
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:gravity="center_vertical" android:paddingBottom="10dp">
+        <TextView style="@style/TextAppearance.Compat.Notification.Title" android:id="@+id/booking_primary_status" android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content" android:textSize="22sp" android:textStyle="bold"/>
+        <TextView style="@style/TextAppearance.Compat.Notification.Line2" android:id="@+id/booking_counts" android:layout_width="wrap_content" android:layout_height="wrap_content" android:textSize="12sp" android:textStyle="bold"/>
+    </LinearLayout>
+    <TextView style="@style/TextAppearance.Compat.Notification.Line2" android:id="@+id/booking_live_status" android:layout_width="match_parent" android:layout_height="wrap_content" android:textSize="12sp"/>
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center_vertical" android:orientation="horizontal">
+        <Chronometer style="@style/TextAppearance.Compat.Notification.Title" android:id="@+id/booking_countdown" android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content" android:textSize="26sp" android:textStyle="bold" android:fontFamily="sans-serif-medium" android:singleLine="true"/>
+        <LinearLayout android:layout_width="wrap_content" android:layout_height="wrap_content" android:gravity="end" android:orientation="vertical">
+            <TextView style="@style/TextAppearance.Compat.Notification.Title" android:id="@+id/booking_time" android:layout_width="wrap_content" android:layout_height="wrap_content" android:textSize="18sp" android:textStyle="bold" android:singleLine="true"/>
+            <TextView style="@style/TextAppearance.Compat.Notification.Line2" android:id="@+id/booking_date" android:layout_width="wrap_content" android:layout_height="wrap_content" android:textSize="11sp" android:singleLine="true"/>
+        </LinearLayout>
+    </LinearLayout>
+    <ProgressBar style="?android:attr/progressBarStyleHorizontal" android:id="@+id/booking_progress" android:layout_width="match_parent" android:layout_height="4dp" android:layout_marginTop="8dp" android:progressTint="#E8B514" android:progressBackgroundTint="#DDE2EA"/>
+    <TextView style="@style/TextAppearance.Compat.Notification.Line2" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="4dp" android:text="예약 1시간 전부터의 시간 진행" android:textSize="10sp"/>
+    <TextView style="@style/TextAppearance.Compat.Notification.Title" android:id="@+id/booking_customer" android:layout_width="match_parent" android:layout_height="wrap_content" android:textSize="16sp" android:textStyle="bold" android:paddingTop="10dp" android:maxLines="1" android:ellipsize="end"/>
+    <TextView style="@style/TextAppearance.Compat.Notification.Line2" android:id="@+id/booking_vehicle" android:layout_width="match_parent" android:layout_height="wrap_content" android:textSize="14sp" android:paddingTop="2dp" android:maxLines="2" android:ellipsize="end"/>
+    <TextView style="@style/TextAppearance.Compat.Notification.Line2" android:id="@+id/booking_branch" android:layout_width="match_parent" android:layout_height="wrap_content" android:textSize="12sp" android:paddingTop="4dp" android:maxLines="1" android:ellipsize="end"/>
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center_vertical" android:orientation="horizontal" android:paddingTop="12dp">
+        <TextView android:layout_width="0dp" android:layout_weight="1" android:layout_height="1dp"/>
+        <TextView style="@style/TextAppearance.Compat.Notification.Title" android:id="@+id/booking_link" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="예약 정보 확인  ›" android:textSize="13sp" android:textStyle="bold"/>
+    </LinearLayout>
+</LinearLayout>

@@ -1,5 +1,5 @@
 import { sendAPNS } from './apns.ts';
-import { sendFCM } from './fcm.ts';
+import { sendFCM, cleanCustomer } from './fcm.ts';
 import webpush from 'npm:web-push@3.6.7';
 
 const base = Deno.env.get('SUPABASE_URL')!;
@@ -38,14 +38,15 @@ async function deliver(row: any, config: any) {
     });
     if (!context.ok) throw new Error('BOOKING_CONTEXT_FAILED');
     const booking = await context.json();
-    if (booking) row.payload.booking = booking;
+    if (booking?.customer) row.payload.customer = cleanCustomer(booking.customer);
+    else if (booking) row.payload.booking = booking;
     if (row.subscription.transport === 'apns') {
-      const result = await sendAPNS(row.subscription, row.payload);
+      const result = await sendAPNS(row.subscription, row.payload, { beforeSend: async () => (await rpc('validate', ack)).valid });
       if (result.clearActivityUpdate) {
         try { await clearActivityUpdate(ack, result.clearActivityUpdate); }
         catch { return rpc('ack', { ...ack, result: 'failed', code: 'ACTIVITY_FEEDBACK_ERROR_ALERT_SENT' }); }
       }
-      await rpc('ack', { ...ack, result: result.ok ? 'sent' : 'failed', code: result.code });
+      await rpc('ack', { ...ack, result: result.cancelled ? 'cancelled' : result.ok ? 'sent' : 'failed', code: result.code });
       return;
     }
     if (row.subscription.transport === 'fcm') {
@@ -62,7 +63,7 @@ async function deliver(row: any, config: any) {
       redirect: 'error', signal: AbortSignal.timeout(15000) });
     await rpc('ack', { ...ack, result: res.ok ? 'sent' : 'failed', code: String(res.status) });
   } catch (error) {
-    const code = error instanceof Error && (['APNS_NOT_CONFIGURED', 'BOOKING_CONTEXT_FAILED'].includes(error.message) || /^FCM_[A-Z0-9_]+$/.test(error.message))
+    const code = error instanceof Error && (['APNS_NOT_CONFIGURED', 'BOOKING_CONTEXT_FAILED', 'INVALID_CUSTOMER_CONTEXT'].includes(error.message) || /^FCM_[A-Z0-9_]+$/.test(error.message))
       ? error.message : error instanceof Error && error.name === 'TimeoutError' ? 'TIMEOUT' : 'PUSH_TRANSPORT_ERROR';
     console.error(JSON.stringify({ deliveryId: row.id, code }));
     await rpc('ack', { ...ack, result: 'failed', code });

@@ -31,10 +31,11 @@ function target(value: unknown): NotificationOpenTarget | null {
   const raw = value as NotificationOpenTarget;
   if (typeof raw.binding !== 'string' || !uuid.test(raw.binding) ||
     raw.notificationId !== undefined && (typeof raw.notificationId !== 'string' || !id.test(raw.notificationId)) ||
-    raw.bookingId !== undefined && (typeof raw.bookingId !== 'string' || !id.test(raw.bookingId))) return null;
+    raw.bookingId !== undefined && (typeof raw.bookingId !== 'string' || !id.test(raw.bookingId)) ||
+    raw.runId !== undefined && (typeof raw.runId !== 'string' || !id.test(raw.runId))) return null;
   const action = raw.action === 'accept' || raw.action === 'reject' ? raw.action : undefined;
   return {binding: raw.binding, notificationId: raw.notificationId, bookingId: raw.bookingId,
-    action, trustedAction: Boolean(action && raw.trustedAction === true)};
+    ...(raw.runId ? {runId: raw.runId} : {}), action, trustedAction: Boolean(action && raw.trustedAction === true)};
 }
 async function verifiedTarget(value: unknown) {
   const result = target(value);

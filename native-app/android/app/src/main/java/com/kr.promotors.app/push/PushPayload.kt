@@ -6,7 +6,7 @@ import java.time.ZoneId
 
 data class PushPayload(
   val id: String, val binding: String, val category: String, val issuedAt: Long,
-  val title: String, val body: String, val booking: JSONObject?,
+  val title: String, val body: String, val booking: JSONObject?, val customer: JSONObject? = null,
 ) {
   companion object {
     fun text(value: String, limit: Int): String {
@@ -33,7 +33,14 @@ data class PushPayload(
       val booking = parseBooking(data["booking"]) ?: return null
       val title = text(data["title"].orEmpty(), 80).ifEmpty { "프로모터스" }
       val body = text(data["body"].orEmpty(), 240).ifEmpty { "앱에서 새 알림을 확인해 주세요." }
-      return PushPayload(id, binding, category, issued, title, body, booking.takeIf { it.length() > 0 })
+      val customer = data["customer"]?.let { raw ->
+        if (raw.length > 4096) return null
+        try { BookingSchedule.clean(JSONObject(raw).getJSONObject("snapshot")) ?: return null }
+        catch (_: Exception) { return null }
+      }
+      if (customer != null && customer.optString("audience") != "customer") return null
+      if (customer != null && booking.length() > 0) return null
+      return PushPayload(id, binding, category, issued, title, body, booking.takeIf { it.length() > 0 }, customer)
     }
 
     private fun parseBooking(raw: String?): JSONObject? {

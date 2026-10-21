@@ -18,10 +18,12 @@ export function createQaNotifications(data: ReturnType<typeof createQaData>, pus
       let active = true;
       const open = (raw: unknown) => {
         if (!active || !raw || typeof raw !== 'object') return;
-        const target = raw as {binding?: unknown; bookingId?: unknown; notificationId?: unknown};
+        const target = raw as {binding?: unknown; bookingId?: unknown; notificationId?: unknown; runId?: unknown};
         if (target.binding !== '00000000-0000-4000-8000-000000000015') return;
         // Synthetic OS actions only open a fixture; they never approve or reject a booking.
-        if (target.bookingId === 'qa-pending' || target.notificationId === 'qa-notification') {
+        if (target.runId === 'qa-run' || target.notificationId === '44444444-4444-4444-8444-444444444444') {
+          listener({kind: 'repair', id: 'qa-run'});
+        } else if (target.bookingId === 'qa-pending' || target.notificationId === 'qa-notification') {
           listener({kind: 'booking', id: 'qa-pending', branch: '프로모터스 안산점'});
         } else if (target.bookingId === undefined && target.notificationId === undefined) {
           listener({kind: 'bookingSchedule'});

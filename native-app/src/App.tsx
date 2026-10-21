@@ -33,7 +33,7 @@ import {NotificationPrompt, useAutomaticNotifications} from './features/notifica
 
 export type AppProps = {services: NativeServices; push: NativePush; initialRoute?: Route; updates?: StoreUpdates; notificationDisclosure?: string};
 const tabs = new Set(['home', 'branches', 'cases', 'notices', 'my']);
-const privateRoutes = new Set(['bookings', 'booking', 'profile', 'history', 'work', 'inquiry', 'coupons', 'events', 'notifications', 'notification-settings', 'admin', 'admin-booking', 'management']);
+const privateRoutes = new Set(['bookings', 'booking', 'profile', 'history', 'work', 'work-detail', 'inquiry', 'coupons', 'events', 'notifications', 'notification-settings', 'admin', 'admin-booking', 'management']);
 function Content({route}: {route: Route}) {
   switch (route.name) {
     case 'home': return <HomeScreen/>;
@@ -52,6 +52,7 @@ function Content({route}: {route: Route}) {
     case 'profile': return <ProfileScreen/>;
     case 'history': return <WorkScreen history/>;
     case 'work': return <WorkScreen/>;
+    case 'work-detail': return <WorkScreen id={route.id} history/>;
     case 'inquiry': return <InquiryScreen/>;
     case 'coupons': return <PromotionsScreen/>;
     case 'events': return <PromotionsScreen events/>;

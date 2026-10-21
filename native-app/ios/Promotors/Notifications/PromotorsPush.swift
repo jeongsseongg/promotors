@@ -179,6 +179,21 @@ final class PromotorsPush: RCTEventEmitter {
         guard let report = NativeQaConfiguration.readyReport(values),
               let data = try? JSONSerialization.data(withJSONObject: report, options: [.sortedKeys]),
               let message = String(data: data, encoding: .utf8) else { resolve(false); return }
+#if DEBUG
+        if values["screen"] as? String == "admin" {
+            Task { @MainActor in
+                if #available(iOS 16.2, *) {
+                    do {
+                        try await NativeQaActivityRenderer.capture()
+                        NSLog("PROMOTORS_NATIVE_QA_READY %@", message); resolve(true)
+                    } catch {
+                        NSLog("PROMOTORS_NATIVE_QA_ACTIVITY_FAILED %@", error.localizedDescription); resolve(false)
+                    }
+                }
+            }
+            return
+        }
+#endif
         NSLog("PROMOTORS_NATIVE_QA_READY %@", message)
         resolve(true)
     }

@@ -10,7 +10,7 @@ export function runSteps(run: ServiceRun): RunStep[] {
 export function runName(run: ServiceRun) {return String(run.serviceName || run.service || '정비');}
 export function runStage(run?: ServiceRun) {
   if (!run) return -1;
-  if (run.completedAt || /완료/.test(String(run.status || ''))) return 4;
+  if (run.completedAt || ['완료', '출고 완료'].includes(String(run.status || ''))) return 4;
   const step = runSteps(run)[Number(run.currentStep || 0)];
   return step?.submitted && !step.approved ? 3 : 2;
 }

@@ -5,6 +5,22 @@ on:
     paths: ['native-app/**', '.github/workflows/native-app.yml']
   workflow_dispatch:
     inputs:
+      confirm_exempt_version:
+        description: 기존 면제 신고와 동일함을 확인한 정확한 버전/빌드 (평소에는 비움)
+        type: string
+        default: ""
+      testflight_only:
+        description: 이미 업로드한 빌드를 기존 내부 테스트 그룹에만 배정
+        type: boolean
+        default: false
+      ongoing_only:
+        description: 상시알림 수정 검증 시 iOS 캡처 범위만 좁힘 (컴파일·Android·서버 검사 유지)
+        type: boolean
+        default: false
+      android_only:
+        description: 안드로이드 검증만 실행 (iOS 빌드와 업로드 제외)
+        type: boolean
+        default: false
       archive:
         description: Build with the existing iOS distribution identity
         type: boolean
@@ -20,6 +36,7 @@ concurrency:
   cancel-in-progress: true
 jobs:
   server:
+    if: ${{ inputs.testflight_only != true }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -30,8 +47,9 @@ jobs:
           cache: npm
       - run: npm ci --ignore-scripts
       - name: Verify native server privacy, registration and reservation actions
-        run: node --test scripts/test-apns-activity-lifecycle.cjs scripts/test-native-activity-feedback.cjs scripts/test-fcm-account-switch.cjs scripts/test-fcm-subscribe.cjs scripts/test-fcm-transport.cjs scripts/test-fcm-worker.cjs scripts/test-native-booking-action.cjs scripts/test-native-push.cjs scripts/test-native-subscribe.cjs native-app/server/tests/test-native-sync.cjs
+        run: node --test scripts/test-existing-testflight.cjs scripts/test-customer-activity-sql.cjs scripts/test-customer-push.cjs scripts/test-apns-activity-lifecycle.cjs scripts/test-native-activity-feedback.cjs scripts/test-fcm-account-switch.cjs scripts/test-fcm-subscribe.cjs scripts/test-fcm-transport.cjs scripts/test-fcm-worker.cjs scripts/test-native-booking-action.cjs scripts/test-native-push.cjs scripts/test-native-subscribe.cjs native-app/server/tests/test-native-sync.cjs
   android:
+    if: ${{ inputs.testflight_only != true }}
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
@@ -62,13 +80,20 @@ jobs:
         run: |
           chmod +x gradlew
           ./gradlew --no-daemon testDebugUnitTest
-          ./gradlew --no-daemon assembleDebug -PnativeQa=true -PreactNativeArchitectures=x86_64
+          ./gradlew --no-daemon assembleDebug assembleDebugAndroidTest -PnativeQa=true -PreactNativeArchitectures=x86_64
       - name: Enable Android emulator hardware acceleration
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
-          test -r /dev/kvm && test -w /dev/kvm
+          sudo modprobe kvm || true
+          sudo modprobe kvm_intel || sudo modprobe kvm_amd || true
+          if [ -e /dev/kvm ]; then sudo chmod 666 /dev/kvm; fi
+          if [ -r /dev/kvm ] && [ -w /dev/kvm ]; then
+            echo 'Android VM acceleration is available.'
+          else
+            echo '::notice::KVM is unavailable; the emulator must pass the same capture checks using software emulation.'
+          fi
       - name: Run independent native app on Android
         uses: reactivecircus/android-emulator-runner@v2
         with:
@@ -77,7 +102,8 @@ jobs:
           arch: x86_64
           profile: pixel_6
           disable-animations: true
-          emulator-boot-timeout: 300
+          disable-linux-hw-accel: auto
+          emulator-boot-timeout: 900
           script: python3 native-app/scripts/capture-android.py
       - name: Build production entry without QA fixtures
         working-directory: native-app/android
@@ -101,6 +127,7 @@ jobs:
             native-app/qa-results/**
           retention-days: 7
   ios:
+    if: ${{ inputs.android_only != true && inputs.testflight_only != true }}
     runs-on: macos-26
     timeout-minutes: 55
     defaults:
@@ -130,6 +157,8 @@ jobs:
         run: |
           xcodebuild -workspace ios/Promotors.xcworkspace -scheme Promotors -configuration Debug -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' -derivedDataPath "$RUNNER_TEMP/IndependentPromotors" CODE_SIGNING_ALLOWED=NO build > "$RUNNER_TEMP/native-ios.log" 2>&1 || { tail -120 "$RUNNER_TEMP/native-ios.log"; exit 1; }
       - name: Capture actual native iPhone and iPad screens
+        env:
+          PM_CAPTURE_SCOPE: ${{ inputs.ongoing_only && 'ongoing' || 'all' }}
         run: python3 scripts/capture-ios.py
       - name: Install existing distribution identity
         if: github.event_name == 'workflow_dispatch' && inputs.archive
@@ -179,7 +208,8 @@ jobs:
         run: |
           set -euo pipefail
           xcrun altool --upload-app --type ios --file "$RUNNER_TEMP/native-export/Promotors.ipa" --apiKey "$ASC_KEY_ID" --apiIssuer "$ASC_ISSUER_ID"
-          echo 'Native build uploaded; processing, review and release remain separate.' >> "$GITHUB_STEP_SUMMARY"
+          node scripts/assign-existing-testflight.cjs
+          echo 'Native build uploaded and assigned to the existing internal group; public review and release remain separate.' >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v4
         if: always() && github.event_name == 'workflow_dispatch' && inputs.archive
         with:
@@ -187,6 +217,7 @@ jobs:
           path: |
             ${{ runner.temp }}/native-export/*.ipa
             ${{ runner.temp }}/native-archive.log
+            ${{ runner.temp }}/testflight-assignment.json
           retention-days: 7
       - uses: actions/upload-artifact@v4
         if: always()
@@ -195,4 +226,33 @@ jobs:
           path: |
             native-app/qa-results/**
             ${{ runner.temp }}/native-ios.log
+          retention-days: 7
+
+  testflight:
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.testflight_only }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.19.0
+      - run: node --test scripts/test-existing-testflight.cjs
+      - name: Assign uploaded build to existing internal group
+        env:
+          PM_CONFIRM_EXEMPT_VERSION: ${{ inputs.confirm_exempt_version }}
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_PRIVATE_KEY: ${{ secrets.ASC_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          mkdir -p "$HOME/.appstoreconnect/private_keys"
+          printf '%s' "$ASC_PRIVATE_KEY" > "$HOME/.appstoreconnect/private_keys/AuthKey_${ASC_KEY_ID}.p8"
+          node native-app/scripts/assign-existing-testflight.cjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: existing-internal-testflight
+          path: ${{ runner.temp }}/testflight-assignment.json
           retention-days: 7

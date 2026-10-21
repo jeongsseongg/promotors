@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:paddingBottom="4dp">
+<TextView style="@style/TextAppearance.Compat.Notification.Title" android:id="@+id/customer_title" android:layout_width="match_parent" android:layout_height="wrap_content" android:textSize="21sp" android:textStyle="bold" android:maxLines="1" android:ellipsize="end"/>
+<TextView style="@style/TextAppearance.Compat.Notification.Line2" android:id="@+id/customer_vehicle" android:layout_width="match_parent" android:layout_height="wrap_content" android:textSize="13sp" android:maxLines="1" android:ellipsize="end"/>
+<TextView style="@style/TextAppearance.Compat.Notification.Line2" android:id="@+id/customer_stage" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:textSize="13sp"/>
+<Chronometer style="@style/TextAppearance.Compat.Notification.Title" android:id="@+id/customer_countdown" android:layout_width="match_parent" android:layout_height="wrap_content" android:textSize="20sp" android:textStyle="bold" android:singleLine="true"/>
+<ProgressBar style="?android:attr/progressBarStyleHorizontal" android:id="@+id/customer_progress" android:layout_width="match_parent" android:layout_height="4dp" android:layout_marginTop="10dp" android:progressTint="#E8B514" android:progressBackgroundTint="#DDE2EA"/>
+<TextView style="@style/TextAppearance.Compat.Notification.Line2" android:id="@+id/customer_steps" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="4dp" android:textSize="10sp"/>
+<TextView style="@style/TextAppearance.Compat.Notification.Line2" android:id="@+id/customer_branch" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="10dp" android:textSize="12sp" android:maxLines="1" android:ellipsize="end"/>
+<TextView style="@style/TextAppearance.Compat.Notification.Title" android:id="@+id/customer_link" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="10dp" android:textSize="13sp" android:textStyle="bold" android:gravity="end"/>
+</LinearLayout>

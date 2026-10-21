@@ -1,6 +1,8 @@
 package kr.promotors.app.push
 
 import android.Manifest
+import android.app.Activity
+import android.content.Intent
 import android.app.Application
 import android.app.NotificationManager
 import android.app.PendingIntent
@@ -10,6 +12,7 @@ import org.junit.Assert.*
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
+import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
@@ -41,6 +44,35 @@ class PushTargetLifetimeTest {
 
   private fun scheduleIntent(): PendingIntent = manager.activeNotifications
     .single { it.tag == "promotors_booking_schedule" }.notification.contentIntent
+
+  @Test fun unresolvedOngoingNotificationHasNoAutomaticTimeoutAndStillOpensAfterOneDay() {
+    val now = System.currentTimeMillis() / 1000
+    assertTrue(BookingSchedule.sync(context, snapshot()))
+    assertEquals(0L, manager.activeNotifications.single().notification.timeoutAfter)
+    val target = PushTargets.consumeNonce(context, nonce(scheduleIntent()), now + 86401)
+    assertEquals("synthetic-booking", target?.optString("bookingId"))
+    assertFalse(target!!.optBoolean("trustedAction"))
+    assertFalse(target.has("action"))
+  }
+
+  @Test fun actualOngoingTapRotatesTheSingleUseTargetSoTheVisibleCardCanOpenAgain() {
+    val activity = Robolectric.buildActivity(Activity::class.java).setup().get()
+    assertTrue(BookingSchedule.sync(context, snapshot()))
+    val first = nonce(scheduleIntent())
+    repeat(2) {
+      val pending = scheduleIntent()
+      val consumed = nonce(pending)
+      PushTargets.handleOpen(activity, Intent(shadowOf(pending).savedIntent))
+      val target = PushTargets.takeInitial(context)
+      assertEquals("synthetic-booking", target?.optString("bookingId"))
+      assertFalse(target!!.optBoolean("trustedAction"))
+      assertNull(PushTargets.consumeNonce(context, consumed, System.currentTimeMillis() / 1000))
+      assertNotEquals(consumed, nonce(scheduleIntent()))
+    }
+    assertNotEquals(first, nonce(scheduleIntent()))
+    PushState.clear(context)
+    assertEquals(0, manager.activeNotifications.size)
+  }
 
   @Test fun unchangedScheduleRefreshDoesNotEvictVisibleOrdinaryNotificationActions() {
     val now = System.currentTimeMillis() / 1000

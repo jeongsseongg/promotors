@@ -81,4 +81,21 @@ class PushDisplayTest {
     assertTrue(BookingSchedule.sync(context, source))
     assertEquals(0, manager.activeNotifications.size)
   }
+
+  @Test fun ongoingUsesCompactAndExpandedNativeViewsWithoutHeaderClockOrLargeLogo() {
+    val snapshot = JSONObject().put("binding", binding).put("active", true)
+      .put("pendingCount", 1).put("upcomingCount", 1)
+      .put("startsAt", System.currentTimeMillis() / 1000 + 3600)
+      .put("schedule", "2026.10.22 · 10:00").put("branch", "프로모터스 안산점")
+      .put("bookingId", "example").put("customerName", "예시 고객")
+      .put("vehicleName", "BMW 520d").put("vehiclePlate", "비공개")
+    assertTrue(BookingSchedule.sync(context, snapshot))
+    val notification = manager.activeNotifications.single().notification
+    assertNotNull(notification.contentView)
+    assertNotNull(notification.bigContentView)
+    assertFalse(notification.extras.getBoolean(Notification.EXTRA_SHOW_CHRONOMETER))
+    assertNull(notification.getLargeIcon())
+    assertTrue(notification.extras.getString(Notification.EXTRA_TEXT)!!.contains("BMW 520d"))
+    assertFalse(notification.publicVersion.extras.toString().contains("예시 고객"))
+  }
 }

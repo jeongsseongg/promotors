@@ -10,6 +10,28 @@ import java.util.TimeZone
 import java.util.UUID
 
 object PushQa {
+  fun showCustomer(context: Context, phase: String): Boolean {
+    if (!BuildConfig.DEBUG || !BuildConfig.QA_BUNDLED || phase !in setOf("confirmed", "visit", "repair", "completed")) return false
+    val binding = PushState.binding(context) ?: return false
+    val now = System.currentTimeMillis() / 1000
+    context.getSystemService(android.app.NotificationManager::class.java).cancelAll()
+    PushState.preferences(context).edit().remove("delivered_ids").commit()
+    val snapshot = JSONObject().put("audience", "customer").put("active", true).put("phase", phase)
+      .put("progress", when (phase) { "confirmed" -> 0; "visit" -> 33; "repair" -> 77; else -> 100 })
+      .put("stageLabel", "입고 점검 확인 완료").put("bookingId", "qa-pending")
+      .put("runId", if (phase in setOf("repair", "completed")) "qa-run" else "")
+      .put("startsAt", if (phase in setOf("confirmed", "visit")) now + 2700 else 0)
+      .put("expiresAt", if (phase == "completed") now + 7200 else 0)
+      .put("branch", "프로모터스 안산점").put("schedule", "방문 일정 예시")
+      .put("vehicleName", "BMW 520d").put("vehiclePlate", "차량번호 비공개")
+      .put("pendingCount", 0).put("upcomingCount", 0)
+    val customer = JSONObject().put("title", "예시 · " + CustomerScheduleViews.title(snapshot))
+      .put("body", "테스트 알림 · 실제 발송 없음 · 본인 정비 내역으로 이동").put("snapshot", snapshot)
+    return PushNotifications.receive(context, mapOf("id" to "44444444-4444-4444-8444-444444444444",
+      "binding" to binding, "category" to "repair", "issuedAt" to "$now", "expiresAt" to "${now+300}",
+      "title" to customer.getString("title"), "body" to customer.getString("body"), "customer" to customer.toString()), now)
+  }
+
   fun showNotification(context: Context): Boolean {
     if (!BuildConfig.DEBUG || !BuildConfig.QA_BUNDLED || !PushNotifications.permitted(context)) return false
     PushState.allowRegistration(context)

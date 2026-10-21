@@ -81,6 +81,7 @@ object PushNotifications {
       for (index in (delivered.length() - 100).coerceAtLeast(0) until delivered.length()) recent.put(delivered.get(index))
       PushState.preferences(context).edit().putString("delivered_ids", recent.toString()).commit()
       payload.booking?.optJSONObject("snapshot")?.let { showSchedule(context, it, payload.binding) }
+      payload.customer?.let { showSchedule(context, it, payload.binding) }
       true
     }
 
@@ -102,25 +103,40 @@ object PushNotifications {
     if (binding != PushState.binding(context) || !PushState.consented(context)) return@synchronized
     val pending = snapshot.optInt("pendingCount", 0).coerceIn(0, 100000)
     val upcoming = snapshot.optInt("upcomingCount", 0).coerceIn(0, 100000)
-    if (pending + upcoming == 0) { clearSchedule(context); return@synchronized }
+    val customer = snapshot.optString("audience") == "customer"
+    if (customer && (!snapshot.optBoolean("active") || snapshot.optString("phase") == "cancelled") || !customer && pending + upcoming == 0) { clearSchedule(context); return@synchronized }
     if (!permitted(context)) return@synchronized
     channels(context)
     val booking = snapshot.optString("bookingId").takeIf { it.isNotBlank() }
-    val intent = PushTargets.schedule(context, booking, binding)
+    val intent = PushTargets.schedule(context, booking, binding, runId = snapshot.optString("runId").takeIf { customer && it.isNotBlank() })
     val identity = listOf("customerName", "vehicleName", "vehiclePlate")
       .map { snapshot.optString(it) }.filter { it.isNotBlank() }.joinToString(" · ")
     val line = listOf(snapshot.optString("branch"), snapshot.optString("schedule"), identity)
       .filter { it.isNotBlank() }.joinToString("\n")
     val builder = base(context, SCHEDULE_CHANNEL)
-      .setContentTitle("처리 대기 ${pending}건 · 방문 예정 ${upcoming}건")
-      .setContentText(line).setStyle(NotificationCompat.BigTextStyle().bigText("$line\n눌러서 예약 정보 확인"))
-      .setContentIntent(intent.pendingIntent).setOngoing(true).setOnlyAlertOnce(true)
-      .setSilent(true).setPriority(NotificationCompat.PRIORITY_LOW).setTimeoutAfter(86400000)
-    val startsAt = snapshot.optLong("startsAt", 0) * 1000
-    if (startsAt > System.currentTimeMillis()) {
-      builder.setWhen(startsAt).setUsesChronometer(true).setChronometerCountDown(true)
-    } else builder.setShowWhen(false)
+      .setContentTitle(if (customer) CustomerScheduleViews.title(snapshot) else "처리 대기 ${pending}건 · 방문 예정 ${upcoming}건")
+      .setContentText(line).setStyle(NotificationCompat.DecoratedCustomViewStyle())
+      .setLargeIcon(null as android.graphics.Bitmap?).setShowWhen(false)
+      .setCustomContentView(if (customer) CustomerScheduleViews.create(context, snapshot, false) else BookingScheduleViews.create(context, snapshot, false))
+      .setCustomBigContentView(if (customer) CustomerScheduleViews.create(context, snapshot, true) else BookingScheduleViews.create(context, snapshot, true))
+      .setContentIntent(intent.pendingIntent).setOngoing(!customer || snapshot.optString("phase") != "completed").setOnlyAlertOnce(true)
+      .setSilent(true).setPriority(NotificationCompat.PRIORITY_LOW)
+    if (customer && snapshot.optLong("expiresAt") > 0) {
+      val remaining = snapshot.optLong("expiresAt") * 1000 - System.currentTimeMillis()
+      if (remaining <= 0) { clearSchedule(context); return@synchronized }
+      builder.setTimeoutAfter(remaining.coerceAtMost(7200000))
+    }
     try { NotificationManagerCompat.from(context).notify(SCHEDULE_TAG, 0, builder.build()) }
+    catch (_: SecurityException) { return@synchronized }
+  }
+
+  fun rearmScheduleTarget(context: Context, bookingId: String, binding: String, runId: String = "") = synchronized(PushState.lock) {
+    if (binding != PushState.binding(context) || !PushState.consented(context) || !permitted(context)) return@synchronized
+    val manager = context.getSystemService(NotificationManager::class.java)
+    val visible = manager.activeNotifications.firstOrNull { it.tag == SCHEDULE_TAG && it.id == 0 } ?: return@synchronized
+    val next = PushTargets.schedule(context, bookingId, binding, runId = runId.takeIf { it.isNotBlank() })
+    visible.notification.contentIntent = next.pendingIntent
+    try { NotificationManagerCompat.from(context).notify(SCHEDULE_TAG, 0, visible.notification) }
     catch (_: SecurityException) { return@synchronized }
   }
 

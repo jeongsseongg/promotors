@@ -1,6 +1,7 @@
 import json
 import os
 import pathlib
+import shutil
 import subprocess
 import time
 
@@ -10,7 +11,9 @@ output.mkdir(parents=True, exist_ok=True)
 app = pathlib.Path(os.environ['RUNNER_TEMP']) / 'IndependentPromotors/Build/Products/Debug-iphonesimulator/Promotors.app'
 checker = pathlib.Path(os.environ['RUNNER_TEMP']) / 'verify-native-screen'
 subprocess.run(['swiftc', str(root / 'scripts/verify-native-screen.swift'), '-o', str(checker)], check=True)
-titles = {'booking': '정비 예약', 'mypage': '마이페이지', 'admin': '예약관리', 'notifications': '앱 알림 설정', 'updates': '새 버전이 나왔어요', 'setup': '앱 알림이 연결됐어요', 'setup-denied': '앱 알림을 켜주세요'}
+ongoing_only = os.environ.get('PM_CAPTURE_SCOPE') == 'ongoing'
+
+titles = {'booking': '정비 예약', 'mypage': '마이페이지', 'admin': '예약관리', 'notifications': '앱 알림 설정', 'updates': '새 버전이 나왔어요', 'setup': '앱 알림이 연결됐어요', 'setup-denied': '앱 알림을 켜주세요', 'inbox': '프로모터스 알림', 'detail': '예약 상세', 'customer': '마이페이지'}
 
 def sim(*args):
     return subprocess.check_output(['xcrun', 'simctl', *args])
@@ -18,7 +21,7 @@ def sim(*args):
 devices = json.loads(sim('list', 'devices', 'available', '-j'))
 available = [device for group in devices['devices'].values() for device in group]
 selected = []
-for kind, needle in [('iphone', 'iPhone'), ('ipad', 'iPad Pro 13')]:
+for kind, needle in ([('iphone', 'iPhone')] if ongoing_only else [('iphone', 'iPhone'), ('ipad', 'iPad Pro 13')]):
     selected.append((kind, next(device['udid'] for device in available if needle in device['name'])))
 results = []
 for kind, device in selected:
@@ -26,7 +29,7 @@ for kind, device in selected:
     sim('bootstatus', device, '-b')
     sim('status_bar', device, 'override', '--time', '9:41', '--dataNetwork', 'wifi', '--wifiMode', 'active', '--wifiBars', '3', '--batteryState', 'charged', '--batteryLevel', '100')
     sim('install', device, str(app))
-    captures = [(screen, 'light') for screen in titles] + [(screen, 'dark') for screen in ['booking', 'mypage']]
+    captures = [('admin', 'light'), ('customer', 'light')] if ongoing_only else [(screen, 'light') for screen in titles] + [(screen, 'dark') for screen in ['booking', 'mypage']]
     for screen, appearance in captures:
         sim('ui', device, 'appearance', appearance)
         assert sim('ui', device, 'appearance').decode().strip().lower().endswith(appearance), 'System appearance not applied'
@@ -53,6 +56,23 @@ for kind, device in selected:
             process.terminate()
         if '"operationalRequests":0' not in source.replace(' ', '').replace('\\"', '"'):
             raise RuntimeError('QA production-request check missing')
+        if screen == 'admin':
+            container = pathlib.Path(sim('get_app_container', device, 'kr.promotors.app', 'data').decode().strip())
+            for presentation in ['lock', 'island']:
+                rendered = container / 'Documents' / ('qa-activity-' + presentation + '.png')
+                for _ in range(10):
+                    if rendered.exists():
+                        break
+                    time.sleep(1)
+                target = output / (kind + '-live-activity-' + presentation + '.png')
+                shutil.copyfile(rendered, target)
+                subprocess.run([str(checker), str(target), 'BMW 520d'], check=True)
+            for phase in ['confirmed', 'visit', 'repair', 'completed']:
+                for presentation in ['lock', 'island']:
+                    rendered = container / 'Documents' / ('qa-customer-' + phase + '-' + presentation + '.png')
+                    target = output / (kind + '-customer-' + phase + '-' + presentation + '.png')
+                    shutil.copyfile(rendered, target)
+                    subprocess.run([str(checker), str(target), '정비 진행'], check=True)
         results.append({'device': kind, 'screen': screen, 'systemAppearance': appearance, 'nativeQaReady': True, 'operationalRequests': 0})
     sim('ui', device, 'appearance', 'light')
     sim('shutdown', device)

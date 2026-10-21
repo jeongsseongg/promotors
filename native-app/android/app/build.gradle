@@ -93,6 +93,7 @@ android {
     namespace "kr.promotors.app"
     defaultConfig {
         applicationId "kr.promotors.app"
+        testInstrumentationRunner "kr.promotors.app.qa.CaptureInstrumentation"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode releaseConfig.androidCode as Integer
