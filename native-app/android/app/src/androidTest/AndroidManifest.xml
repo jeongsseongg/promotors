@@ -1,0 +1,4 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" xmlns:tools="http://schemas.android.com/tools">
+    <instrumentation android:name="kr.promotors.app.qa.CaptureInstrumentation"
+        android:targetPackage="kr.promotors.app.test" tools:replace="android:targetPackage"/>
+</manifest>

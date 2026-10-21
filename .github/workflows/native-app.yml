@@ -5,6 +5,10 @@ on:
     paths: ['native-app/**', '.github/workflows/native-app.yml']
   workflow_dispatch:
     inputs:
+      ongoing_only:
+        description: 상시알림 수정 검증 시 iOS 캡처 범위만 좁힘 (컴파일·Android·서버 검사 유지)
+        type: boolean
+        default: false
       android_only:
         description: 안드로이드 검증만 실행 (iOS 빌드와 업로드 제외)
         type: boolean
@@ -66,7 +70,7 @@ jobs:
         run: |
           chmod +x gradlew
           ./gradlew --no-daemon testDebugUnitTest
-          ./gradlew --no-daemon assembleDebug -PnativeQa=true -PreactNativeArchitectures=x86_64
+          ./gradlew --no-daemon assembleDebug assembleDebugAndroidTest -PnativeQa=true -PreactNativeArchitectures=x86_64
       - name: Enable Android emulator hardware acceleration
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
@@ -143,6 +147,8 @@ jobs:
         run: |
           xcodebuild -workspace ios/Promotors.xcworkspace -scheme Promotors -configuration Debug -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' -derivedDataPath "$RUNNER_TEMP/IndependentPromotors" CODE_SIGNING_ALLOWED=NO build > "$RUNNER_TEMP/native-ios.log" 2>&1 || { tail -120 "$RUNNER_TEMP/native-ios.log"; exit 1; }
       - name: Capture actual native iPhone and iPad screens
+        env:
+          PM_CAPTURE_SCOPE: ${{ inputs.ongoing_only && 'ongoing' || 'all' }}
         run: python3 scripts/capture-ios.py
       - name: Install existing distribution identity
         if: github.event_name == 'workflow_dispatch' && inputs.archive

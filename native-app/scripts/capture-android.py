@@ -25,8 +25,13 @@ def failed(kind, error, traceback):
 sys.excepthook = failed
 
 dump_number = 0
+live_capture = False
 def hierarchy():
     global dump_number
+    if live_capture:
+        result = adb('shell', 'am', 'instrument', '-w', 'kr.promotors.app.test/kr.promotors.app.qa.CaptureInstrumentation').decode('utf8')
+        assert 'PM_XML_BEGIN' in result and 'PM_XML_END' in result, result
+        return result.split('PM_XML_BEGIN', 1)[1].split('PM_XML_END', 1)[0].strip()
     dump_number += 1
     remote = '/sdcard/pm-ui-' + str(dump_number) + '.xml'
     try:
@@ -82,6 +87,8 @@ def expand_card(source, title, expanded=True):
 
 
 def save_ongoing_notification():
+    global live_capture
+    live_capture = True
     records = adb('shell', 'dumpsys', 'notification', '--noredact').decode('utf8')
     own = [record for record in re.split(r'(?=NotificationRecord\()', records)
            if 'pkg=kr.promotors.app' in record and 'tag=promotors_booking_schedule' in record]
@@ -95,7 +102,21 @@ def save_ongoing_notification():
     for value in ['처리 대기 1건', '방문 예정 1건', '예시 고객', 'BMW 520d', '비공개', '예약 정보 확인']:
         assert value in source, 'Ongoing notification content absent: ' + value
     save('booking-ongoing-notification', source)
-    tap('예시 고객', source)
+    def remaining(xml):
+        timers = [node for node in ET.fromstring(xml).iter('node') if node.get('class') == 'android.widget.Chronometer']
+        assert timers, 'Actual system-managed body timer absent'
+        value = timers[0].get('text')
+        fields = [int(part) for part in value.split(':')]
+        return sum(part * 60 ** index for index, part in enumerate(reversed(fields)))
+    before = remaining(source)
+    time.sleep(3)
+    after_source = hierarchy()
+    after = remaining(after_source)
+    assert 0 < after < before <= 2700, f'Countdown did not advance in OS drawer: {before} -> {after}'
+    (output / 'ongoing-live-countdown.json').write_text(json.dumps({'beforeSeconds': before, 'afterSeconds': after, 'systemManagedTimerAdvanced': True}), encoding='utf8')
+    save('booking-ongoing-after', after_source)
+    tap('예시 고객', after_source)
+    live_capture = False
     source = wait_for('예약 상세')
     assert 'BMW 520d' in source and '예약 승인' in source and '예약 거절' in source
     save('ongoing-open-detail', source)
@@ -109,6 +130,7 @@ def set_appearance(mode):
 
 set_appearance('no')
 adb('install', '-r', str(root / 'android/app/build/outputs/apk/debug/app-debug.apk'))
+adb('install', '-r', str(root / 'android/app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk'))
 adb('shell', 'pm', 'revoke', 'kr.promotors.app', 'android.permission.POST_NOTIFICATIONS')
 adb('shell', 'pm', 'clear-permission-flags', 'kr.promotors.app', 'android.permission.POST_NOTIFICATIONS', 'user-set', 'user-fixed')
 adb('shell', 'am', 'start', '-n', 'kr.promotors.app/.MainActivity', '--es', 'qaScreen', 'setup', '--ez', 'requestOsPermission', 'true')
@@ -146,6 +168,7 @@ for screen, label in [('booking', '정비 예약'), ('mypage', '마이페이지'
         adb('shell', 'pm', 'grant', 'kr.promotors.app', 'android.permission.POST_NOTIFICATIONS')
         tap('상시알림 예시', source)
         wait_for('예시 상시알림 표시 요청')
+        adb('shell', 'input', 'keyevent', 'KEYCODE_HOME')
         adb('shell', 'cmd', 'statusbar', 'expand-notifications')
         time.sleep(2)
         save_ongoing_notification()
