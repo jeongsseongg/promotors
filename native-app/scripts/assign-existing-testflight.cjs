@@ -22,7 +22,16 @@ async function assignExistingGroup({request,release,wait}) {
   check(version.data?.attributes?.version===release.version,'BUILD_VERSION_MISMATCH');
   const relationship=`/v1/betaGroups/${matching[0].id}/relationships/builds`;
   const before=await request(relationship+'?limit=200');
-  if(!before.data?.some(b=>b.id===build.id))await request(relationship,'POST',{data:[{type:'builds',id:build.id}]});
+  if(!before.data?.some(b=>b.id===build.id)) {
+    try{await request(relationship,'POST',{data:[{type:'builds',id:build.id}]});}
+    catch(error){
+      const beta=await request(`/v1/builds/${build.id}/buildBetaDetail`);
+      const previousQuery=new URLSearchParams({'filter[app]':APP,'filter[version]':String(Number(release.iosBuild)-1),limit:'10'});
+      const previous=await request(`/v1/builds?${previousQuery}`);
+      console.error(JSON.stringify({build:build.attributes,testing:beta.data?.attributes,previous:previous.data?.map(b=>({id:b.id,version:b.attributes?.version,usesNonExemptEncryption:b.attributes?.usesNonExemptEncryption}))}));
+      throw error;
+    }
+  }
   const after=await request(relationship+'?limit=200');
   check(after.data?.some(b=>b.id===build.id),'GROUP_ASSIGNMENT_NOT_VERIFIED');
   return {verified:true,app:APP,version:release.version,build:String(release.iosBuild),group:GROUP,buildId:build.id};
