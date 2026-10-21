@@ -5,6 +5,10 @@ on:
     paths: ['native-app/**', '.github/workflows/native-app.yml']
   workflow_dispatch:
     inputs:
+      confirm_exempt_version:
+        description: 기존 면제 신고와 동일함을 확인한 정확한 버전/빌드 (평소에는 비움)
+        type: string
+        default: ""
       testflight_only:
         description: 이미 업로드한 빌드를 기존 내부 테스트 그룹에만 배정
         type: boolean
@@ -236,6 +240,7 @@ jobs:
       - run: node --test scripts/test-existing-testflight.cjs
       - name: Assign uploaded build to existing internal group
         env:
+          PM_CONFIRM_EXEMPT_VERSION: ${{ inputs.confirm_exempt_version }}
           ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
           ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
           ASC_PRIVATE_KEY: ${{ secrets.ASC_PRIVATE_KEY }}

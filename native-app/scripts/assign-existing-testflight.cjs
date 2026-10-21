@@ -1,7 +1,25 @@
 const fs=require('node:fs'),path=require('node:path'),os=require('node:os'),crypto=require('node:crypto');
 const APP='6810716100',GROUP='Owner Device Testing';
 function check(value,code){if(!value)throw Error(code);}
-async function assignExistingGroup({request,release,wait}) {
+async function applyConfirmedExemption({request,release,wait,build,confirmation}) {
+  if(!confirmation)return;
+  check(confirmation===`${release.version}/${release.iosBuild}`,'EXPLICIT_BUILD_CONFIRMATION_REQUIRED');
+  if(build.attributes.usesNonExemptEncryption===false)return;
+  check(build.attributes.usesNonExemptEncryption==null,'NON_EXEMPT_DECLARATION_PRESENT');
+  const query=new URLSearchParams({'filter[app]':APP,'filter[version]':String(Number(release.iosBuild)-1),limit:'10'});
+  const previous=await request(`/v1/builds?${query}`);
+  check(previous.data?.length===1&&previous.data[0].attributes?.usesNonExemptEncryption===false,'PREVIOUS_EXEMPT_DECLARATION_REQUIRED');
+  await request(`/v1/builds/${build.id}`,'PATCH',{data:{type:'builds',id:build.id,attributes:{usesNonExemptEncryption:false}}});
+  const updated=await request(`/v1/builds/${build.id}`);
+  check(updated.data?.attributes?.usesNonExemptEncryption===false,'EXEMPT_DECLARATION_NOT_VERIFIED');
+  for(let attempt=0;attempt<24;attempt++) {
+    const detail=await request(`/v1/builds/${build.id}/buildBetaDetail`);
+    if(['READY_FOR_BETA_TESTING','IN_BETA_TESTING'].includes(detail.data?.attributes?.internalBuildState))return;
+    await wait(5000);
+  }
+  throw Error('BUILD_TESTABILITY_TIMEOUT');
+}
+async function assignExistingGroup({request,release,wait,confirmation=''}) {
   const app=await request(`/v1/apps/${APP}`);
   check(app.data?.attributes?.bundleId==='kr.promotors.app','APP_IDENTITY_MISMATCH');
   const groups=await request(`/v1/apps/${APP}/betaGroups?limit=200`);
@@ -20,6 +38,7 @@ async function assignExistingGroup({request,release,wait}) {
   check(build,'BUILD_PROCESSING_TIMEOUT');
   const version=await request(`/v1/builds/${build.id}/preReleaseVersion`);
   check(version.data?.attributes?.version===release.version,'BUILD_VERSION_MISMATCH');
+  await applyConfirmedExemption({request,release,wait,build,confirmation});
   const relationship=`/v1/betaGroups/${matching[0].id}/relationships/builds`;
   const before=await request(relationship+'?limit=200');
   if(!before.data?.some(b=>b.id===build.id)) {
@@ -28,7 +47,7 @@ async function assignExistingGroup({request,release,wait}) {
       const beta=await request(`/v1/builds/${build.id}/buildBetaDetail`);
       const previousQuery=new URLSearchParams({'filter[app]':APP,'filter[version]':String(Number(release.iosBuild)-1),limit:'10'});
       const previous=await request(`/v1/builds?${previousQuery}`);
-      console.error(JSON.stringify({build:build.attributes,testing:beta.data?.attributes,previous:previous.data?.map(b=>({id:b.id,version:b.attributes?.version,usesNonExemptEncryption:b.attributes?.usesNonExemptEncryption}))}));
+      console.error(JSON.stringify({build:{version:build.attributes.version,usesNonExemptEncryption:build.attributes.usesNonExemptEncryption},testing:beta.data?.attributes,previous:previous.data?.map(b=>({id:b.id,version:b.attributes?.version,usesNonExemptEncryption:b.attributes?.usesNonExemptEncryption}))}));
       throw error;
     }
   }
@@ -54,7 +73,7 @@ async function request(endpoint,method='GET',body) {
   }
   return response.status===204?{}:response.json();
 }
-module.exports={assignExistingGroup};
-if(require.main===module)assignExistingGroup({request,release:require('../release.json'),wait:ms=>new Promise(resolve=>setTimeout(resolve,ms))})
+module.exports={assignExistingGroup,applyConfirmedExemption};
+if(require.main===module)assignExistingGroup({request,release:require('../release.json'),confirmation:process.env.PM_CONFIRM_EXEMPT_VERSION||'',wait:ms=>new Promise(resolve=>setTimeout(resolve,ms))})
   .then(value=>{const output=JSON.stringify(value);console.log(output);if(process.env.RUNNER_TEMP)fs.writeFileSync(path.join(process.env.RUNNER_TEMP,'testflight-assignment.json'),output);})
   .catch(error=>{console.error(/^[A-Z0-9_]+$/.test(error.message)?error.message:'TESTFLIGHT_ASSIGNMENT_FAILED');process.exitCode=1;});
