@@ -17,6 +17,10 @@ enum NativeQaActivityRenderer {
             customerName: "예시 고객", vehicleName: "BMW 520d", vehiclePlate: "차량번호 비공개")
         let directory = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
         for (name, island) in [("lock", false), ("island", true)] {
+            let card = BookingActivityCard(state: state, binding: "00000000-0000-4000-8000-000000000015", island: island)
+            let bounds = ImageRenderer(content: card.frame(width: 360)).uiImage?.size
+            guard let bounds, bounds.height <= 160 else { throw CocoaError(.coderInvalidValue) }
+            NSLog("PROMOTORS_NATIVE_QA_ACTIVITY_HEIGHT %@ %.1f", name, bounds.height)
             let view = VStack(spacing: 0) {
                 BookingActivityCard(state: state, binding: "00000000-0000-4000-8000-000000000015", island: island)
                     .padding(island ? 16 : 0)

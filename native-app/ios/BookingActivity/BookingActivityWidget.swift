@@ -16,7 +16,7 @@ struct BookingActivityWidget: Widget {
                     Label("프로모터스", systemImage: "wrench.adjustable").font(.system(size: 13, weight: .semibold))
                 }
                 DynamicIslandExpandedRegion(.trailing) {
-                    Text("대기 \(context.state.pendingCount) · 방문 \(context.state.upcomingCount)")
+                    Text("예약 처리 현황")
                         .font(.system(size: 12, weight: .medium)).foregroundStyle(.white.opacity(0.72))
                 }
                 DynamicIslandExpandedRegion(.bottom) {
@@ -25,7 +25,9 @@ struct BookingActivityWidget: Widget {
             } compactLeading: {
                 Image(systemName: "car.fill").foregroundStyle(.yellow)
             } compactTrailing: {
-                if context.state.startsAt > Date().timeIntervalSince1970 {
+                if context.state.pendingCount > 0 {
+                    Text("대기 \(context.state.pendingCount)").font(.system(size: 12, weight: .bold))
+                } else if context.state.startsAt > Date().timeIntervalSince1970 {
                     Text(timerInterval: Date()...Date(timeIntervalSince1970: context.state.startsAt), countsDown: true, showsHours: false)
                         .font(.system(size: 12, weight: .bold)).monospacedDigit().frame(width: 56)
                 } else {

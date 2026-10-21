@@ -29,11 +29,13 @@ object BookingScheduleViews {
       !running -> "예약 시간 도착"
       else -> "예약 시간까지"
     })
+    views.setTextViewText(R.id.booking_primary_status, if (pending > 0) "승인 대기 ${pending}건" else "승인 대기 없음")
     views.setTextViewText(R.id.booking_time, time)
     views.setTextViewText(R.id.booking_customer, customer)
     views.setTextViewText(R.id.booking_vehicle, vehicle)
     if (expanded) {
-      views.setTextViewText(R.id.booking_counts, "처리 대기 ${pending}건  ·  방문 예정 ${upcoming}건")
+      views.setTextViewText(R.id.booking_counts, "방문 예정 ${upcoming}건")
+      views.setTextViewText(R.id.booking_link, if (pending > 0) "승인·거절하기  ›" else "예약 정보 확인  ›")
       views.setTextViewText(R.id.booking_date, schedule.substringBeforeLast("·", "").trim())
       views.setTextViewText(R.id.booking_branch, snapshot.optString("branch"))
       views.setViewVisibility(R.id.booking_progress, if (target > 0) View.VISIBLE else View.GONE)
