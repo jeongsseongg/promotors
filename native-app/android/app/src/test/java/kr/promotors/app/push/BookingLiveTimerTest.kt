@@ -40,6 +40,17 @@ class BookingLiveTimerTest {
     }
   }
 
+  @Test fun pendingApprovalRemainsPrimaryWhileUpcomingVisitsStayVisible() {
+    val root = view(snapshot(System.currentTimeMillis() / 1000 + 2700), true)
+    assertEquals("승인 대기 1건", root.findViewById<TextView>(id("booking_primary_status"))?.text?.toString())
+    assertEquals("방문 예정 1건", root.findViewById<TextView>(id("booking_counts"))?.text?.toString())
+    assertEquals("승인·거절하기  ›", root.findViewById<TextView>(id("booking_link"))?.text?.toString())
+    val accepted = view(snapshot(System.currentTimeMillis() / 1000 + 2700).put("pendingCount", 0), true)
+    assertEquals("승인 대기 없음", accepted.findViewById<TextView>(id("booking_primary_status"))?.text?.toString())
+    assertEquals("방문 예정 1건", accepted.findViewById<TextView>(id("booking_counts"))?.text?.toString())
+    assertEquals("예약 정보 확인  ›", accepted.findViewById<TextView>(id("booking_link"))?.text?.toString())
+  }
+
   @Test fun alreadyDueOrMissingTimestampDoesNotStartANegativeCountdown() {
     for (target in listOf(0L, System.currentTimeMillis() / 1000 - 10)) {
       val root = view(snapshot(target), true)
