@@ -149,7 +149,7 @@ source = wait_for('앱 알림 설정')
 assert '연결됨' in source and '테스트 알림 보내기' in source
 save('automatic-notification-settings', source)
 results = [{'screen': 'setup', 'systemAppearance': 'light', 'nativeViews': True, 'webViewCount': 0, 'automaticOsPermission': True, 'allowImmediatelyConnected': True, 'settingsOpened': True}]
-for screen, label in [('booking', '정비 예약'), ('mypage', '마이페이지'), ('admin', '예약관리'), ('notifications', '앱 알림 설정'), ('updates', '새 버전이 나왔어요'), ('setup-denied', '앱 알림을 켜주세요'), ('inbox', '프로모터스 알림'), ('detail', '예약 상세'), ('customer', '정비 상세')]:
+for screen, label in [('booking', '정비 예약'), ('mypage', '마이페이지'), ('admin', '예약관리'), ('notifications', '앱 알림 설정'), ('updates', '새 버전이 나왔어요'), ('setup-denied', '앱 알림을 켜주세요'), ('inbox', '프로모터스 알림'), ('detail', '예약 상세'), ('customer', '마이페이지')]:
     adb('shell', 'am', 'force-stop', 'kr.promotors.app')
     adb('shell', 'am', 'start', '-n', 'kr.promotors.app/.MainActivity', '--es', 'qaScreen', screen)
     source = wait_for('실제 발송 없음')
@@ -168,11 +168,22 @@ for screen, label in [('booking', '정비 예약'), ('mypage', '마이페이지'
             assert '예약 승인' not in source and '예약 거절' not in source
             assert '정비 진행' in source and 'BMW 520d' in source
             save('customer-' + phase + '-ongoing', source)
+            if phase == 'visit':
+                def customer_remaining(xml):
+                    timer = next(node for node in ET.fromstring(xml).iter('node') if node.get('class') == 'android.widget.Chronometer' and node.get('resource-id', '').endswith('/customer_countdown'))
+                    return sum(int(part) * 60 ** index for index, part in enumerate(reversed(timer.get('text').split(':'))))
+                before = customer_remaining(source)
+                time.sleep(3)
+                after = customer_remaining(hierarchy())
+                assert 0 < after < before <= 2700
+                (output / 'customer-live-countdown.json').write_text(json.dumps({'beforeSeconds': before, 'afterSeconds': after, 'systemManagedTimerAdvanced': True}), encoding='utf8')
             adb('shell', 'cmd', 'statusbar', 'collapse')
             adb('shell', 'am', 'start', '-n', 'kr.promotors.app/.MainActivity')
             live_capture = False
         tap('정비 예시', wait_for('정비 예시'))
         wait_for('고객 상시알림 예시 표시')
+        adb('shell', 'input', 'keyevent', 'KEYCODE_HOME')
+        adb('shell', 'am', 'kill', 'kr.promotors.app')
         adb('shell', 'cmd', 'statusbar', 'expand-notifications')
         live_capture = True
         source = wait_for('예시 · 내 차 정비 중')
@@ -181,6 +192,8 @@ for screen, label in [('booking', '정비 예약'), ('mypage', '마이페이지'
         source = wait_for('정비 상세')
         assert '예약 정보 보기' in source and '차량 상태를 점검했습니다.' in source
         save('customer-notification-open-detail', source)
+        tap('예약 정보 보기', source)
+        wait_for('예약 상세')
         tap('정비 예시', wait_for('정비 예시'))
         wait_for('고객 상시알림 예시 표시')
         adb('shell', 'cmd', 'statusbar', 'expand-notifications')

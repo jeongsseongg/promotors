@@ -47,6 +47,6 @@ export function createQaEnvironment(config: QaConfiguration, imageUri: string) {
     notifications: createQaNotifications(data, push, calls),
     deletion: createQaDeletion(calls),
   } as unknown as NativeServices;
-  const initialRoute: Route = config.screen === 'customer' ? {name: 'work-detail', id: 'qa-run'} : config.screen === 'booking' ? {name: 'reserve'} : ['mypage', 'updates', 'setup', 'setup-denied'].includes(config.screen) ? {name: 'my'} : config.screen === 'admin' ? {name: 'admin'} : config.screen === 'inbox' ? {name: 'notifications'} : config.screen === 'detail' ? {name: 'admin-booking', id: 'qa-pending'} : {name: 'notification-settings'};
+  const initialRoute: Route = config.screen === 'customer' ? {name: 'my'} : config.screen === 'booking' ? {name: 'reserve'} : ['mypage', 'updates', 'setup', 'setup-denied'].includes(config.screen) ? {name: 'my'} : config.screen === 'admin' ? {name: 'admin'} : config.screen === 'inbox' ? {name: 'notifications'} : config.screen === 'detail' ? {name: 'admin-booking', id: 'qa-pending'} : {name: 'notification-settings'};
   return {services, push, initialRoute, calls, data, qaDate, updates: config.screen === 'updates' ? {check: async () => ({key: 'qa-update', version: '2.0.0 (실제 발송 없음)'}), openStore: async () => {calls.push('updates.openStore');}} : undefined};
 }
