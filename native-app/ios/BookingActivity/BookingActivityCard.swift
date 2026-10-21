@@ -10,6 +10,7 @@ struct BookingActivityCard: View {
     private var secondary: Color { island ? .white.opacity(0.72) : Color(red: 0.40, green: 0.46, blue: 0.53) }
     private var pending: Bool { state.pendingCount > 0 }
     private var time: String { state.schedule.split(separator: "·").last.map { String($0).trimmingCharacters(in: .whitespaces) } ?? "예약 일정" }
+    private var day: String { state.schedule.split(separator: "·").first.map { String($0).trimmingCharacters(in: .whitespaces) } ?? "" }
     private var appointment: Date { Date(timeIntervalSince1970: state.startsAt) }
     static func url(_ id: String, binding: String) -> URL? {
         var url = URLComponents(string: "promotors://booking")
@@ -62,7 +63,7 @@ struct BookingActivityCard: View {
                 Text(state.startsAt > 0 ? "시간 도착" : time).font(.system(size: 17, weight: .bold))
             }
             Spacer(minLength: 0)
-            Text(time).font(.system(size: 13, weight: .semibold)).monospacedDigit()
+            Text("\(day) \(time)").font(.system(size: 11, weight: .semibold)).monospacedDigit()
         }
     }
 }
