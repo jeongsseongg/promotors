@@ -5,7 +5,8 @@
         <TextView style="@style/TextAppearance.Compat.Notification.Title" android:id="@+id/booking_primary_status" android:layout_width="wrap_content" android:layout_height="wrap_content" android:textSize="15sp" android:textStyle="bold" android:singleLine="true"/>
         <TextView android:id="@+id/booking_live_status" android:visibility="gone" android:layout_width="wrap_content" android:layout_height="wrap_content" android:textSize="12sp" android:singleLine="true"/>
         <Chronometer style="@style/TextAppearance.Compat.Notification.Title" android:id="@+id/booking_countdown" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginStart="8dp" android:textSize="17sp" android:textStyle="bold" android:fontFamily="sans-serif-medium" android:singleLine="true"/>
-        <TextView style="@style/TextAppearance.Compat.Notification.Line2" android:id="@+id/booking_time" android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content" android:gravity="end" android:textSize="12sp" android:singleLine="true"/>
+        <TextView android:id="@+id/booking_time" android:visibility="gone" android:layout_width="wrap_content" android:layout_height="wrap_content"/>
+        <TextView style="@style/TextAppearance.Compat.Notification.Line2" android:id="@+id/booking_counts" android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content" android:gravity="end" android:textSize="11sp" android:singleLine="true"/>
     </LinearLayout>
     <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal">
         <TextView style="@style/TextAppearance.Compat.Notification.Title" android:id="@+id/booking_customer" android:layout_width="wrap_content" android:layout_height="wrap_content" android:textSize="13sp" android:textStyle="bold" android:singleLine="true" android:maxWidth="100dp" android:ellipsize="end"/>
