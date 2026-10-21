@@ -1,5 +1,8 @@
 package kr.promotors.app.push
 
+import android.Manifest
+import android.app.Notification
+import android.app.NotificationManager
 import android.app.Application
 import android.os.SystemClock
 import android.view.View
@@ -11,6 +14,7 @@ import org.json.JSONObject
 import org.junit.Assert.*
 import org.junit.Test
 import org.junit.runner.RunWith
+import org.robolectric.Shadows.shadowOf
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
@@ -49,6 +53,23 @@ class BookingLiveTimerTest {
     assertEquals("승인 대기 없음", accepted.findViewById<TextView>(id("booking_primary_status"))?.text?.toString())
     assertEquals("방문 예정 1건", accepted.findViewById<TextView>(id("booking_counts"))?.text?.toString())
     assertEquals("예약 정보 확인  ›", accepted.findViewById<TextView>(id("booking_link"))?.text?.toString())
+  }
+
+  @Test fun appointmentTimePassingDoesNotDismissAnUnprocessedReservation() {
+    val binding = "11111111-1111-4111-8111-111111111111"
+    context.getSharedPreferences("promotors_push", 0).edit().clear().commit()
+    shadowOf(context).grantPermissions(Manifest.permission.POST_NOTIFICATIONS)
+    PushState.allowRegistration(context)
+    PushState.bind(context, binding)
+    val manager = context.getSystemService(NotificationManager::class.java)
+    manager.cancelAll()
+    val pending = snapshot(System.currentTimeMillis() / 1000 - 60)
+      .put("binding", binding).put("active", true).put("upcomingCount", 0)
+    assertTrue(BookingSchedule.sync(context, pending))
+    assertEquals(1, manager.activeNotifications.size)
+    assertTrue(manager.activeNotifications.single().notification.flags and Notification.FLAG_ONGOING_EVENT != 0)
+    assertTrue(BookingSchedule.sync(context, pending.put("pendingCount", 0)))
+    assertEquals(0, manager.activeNotifications.size)
   }
 
   @Test fun alreadyDueOrMissingTimestampDoesNotStartANegativeCountdown() {
