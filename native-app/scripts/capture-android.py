@@ -172,11 +172,11 @@ for screen, label in [('booking', '정비 예약'), ('mypage', '마이페이지'
             adb('shell', 'cmd', 'statusbar', 'expand-notifications')
             live_capture = True
             source = wait_for(title)
-            source = expand_card(source, title, False, exact=True)
+            source = expand_card(source, 'BMW 520d', False)
             save('customer-' + phase + '-compact', source)
             if phase == 'visit':
                 assert any(node.get('class') == 'android.widget.Chronometer' and node.get('resource-id', '').endswith('/customer_countdown') for node in ET.fromstring(source).iter('node'))
-            source = expand_card(source, title, True, exact=True)
+            source = expand_card(source, 'BMW 520d', True)
             assert '예약 승인' not in source and '예약 거절' not in source
             assert '정비 진행' in source and 'BMW 520d' in source
             save('customer-' + phase + '-ongoing', source)
@@ -210,7 +210,7 @@ for screen, label in [('booking', '정비 예약'), ('mypage', '마이페이지'
         wait_for('고객 상시알림 예시 표시')
         adb('shell', 'cmd', 'statusbar', 'expand-notifications')
         live_capture = True
-        source = expand_card(wait_for('내 차 정비 중'), '내 차 정비 중', True, exact=True)
+        source = expand_card(wait_for('BMW 520d'), 'BMW 520d', True)
         tap('kr.promotors.app:id/customer_link', source)
         live_capture = False
         source = wait_for('정비 상세')
