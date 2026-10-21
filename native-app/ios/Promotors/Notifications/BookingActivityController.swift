@@ -61,6 +61,7 @@ final class BookingActivityController {
             runId: Self.text(values["runId"], limit: 128), stageLabel: Self.text(values["stageLabel"], limit: 50),
             progress: max(0, min(100, (values["progress"] as? NSNumber)?.intValue ?? 0)),
             expiresAt: Self.timestamp(values["expiresAt"]))
+        let completed = state.audience == "customer" && state.phase == "completed"
         let active = values["active"] as? Bool == true && (state.audience == "customer" ? state.phase != "cancelled" : state.pendingCount + state.upcomingCount > 0)
         return try await enqueue(context) { ticket in
             guard ActivityAuthorizationInfo().areActivitiesEnabled else { return ["supported": true, "enabled": false] }
@@ -69,11 +70,16 @@ final class BookingActivityController {
                 guard self.current(context, ticket: ticket) else { return ["stale": true] }
             }
             if active {
-                let content = ActivityContent(state: state, staleDate: Date().addingTimeInterval(300))
+                let content = ActivityContent(state: state, staleDate: completed ? nil : Date().addingTimeInterval(300))
                 if let activity = Activity<BookingActivityAttributes>.activities.first(where: { $0.attributes.binding == binding }) {
-                    await activity.update(content)
-                    self.observe(activity, context: context)
-                } else {
+                    if completed {
+                        let end = max(Date().timeIntervalSince1970, min(state.expiresAt ?? 0, Date().addingTimeInterval(7200).timeIntervalSince1970))
+                        await activity.end(content, dismissalPolicy: .after(Date(timeIntervalSince1970: end)))
+                    } else {
+                        await activity.update(content)
+                        self.observe(activity, context: context)
+                    }
+                } else if !completed {
                     let activity = try Activity.request(attributes: BookingActivityAttributes(binding: binding), content: content, pushType: NativeQaConfiguration.isAllowed ? nil : .token)
                     self.observe(activity, context: context)
                 }

@@ -18,7 +18,8 @@ object CustomerScheduleViews {
   }
   fun create(context: Context, s: JSONObject, expanded: Boolean): RemoteViews {
     val v = RemoteViews(context.packageName, if (expanded) R.layout.notification_customer_expanded else R.layout.notification_customer_compact)
-    v.setTextViewText(R.id.customer_title, title(s))
+    val compactTitle = when (s.optString("phase")) { "confirmed" -> "예약 확정"; "visit" -> "방문 예정"; "repair" -> "정비 진행"; else -> "정비 완료" }
+    v.setTextViewText(R.id.customer_title, if (expanded) title(s) else compactTitle)
     val vehicle = listOf(s.optString("vehicleName"), s.optString("vehiclePlate")).filter { it.isNotBlank() }.joinToString(" · ")
     v.setTextViewText(R.id.customer_vehicle, vehicle)
     val stage = phases.indexOf(s.optString("phase")).coerceAtLeast(0)

@@ -11,9 +11,9 @@ struct CustomerActivityCard: View {
     private var stage: Int { ["confirmed", "visit", "repair", "completed"].firstIndex(of: state.phase ?? "") ?? 0 }
     private var title: String { ["예약이 확정되었어요", "방문을 기다리고 있어요", "내 차 정비 중", "정비가 완료되었어요"][stage] }
     var body: some View {
-        VStack(alignment: .leading, spacing: 9) {
+        VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Text(title).font(.system(size: 21, weight: .bold))
+                Text(title).font(.system(size: 20, weight: .bold))
                 Spacer(minLength: 4)
                 Image(systemName: stage == 3 ? "checkmark.circle.fill" : "car.fill")
                     .font(.system(size: 24)).foregroundStyle(stage == 3 ? Color.green : Color.yellow)
