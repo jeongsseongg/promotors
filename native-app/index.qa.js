@@ -39,10 +39,10 @@ function QaApp() {
     const method = NativeModules.PromotorsPush?.getQaConfiguration;
     if (!method) {setError('승인된 네이티브 테스트 환경이 아닙니다.'); return;}
     Promise.resolve(method()).then(config => {
-      if (!config || !['booking', 'mypage', 'admin', 'notifications', 'updates', 'setup', 'setup-denied', 'inbox', 'detail'].includes(config.screen)) throw new Error('Debug QA 설정을 확인해 주세요.');
+      if (!config || !['booking', 'mypage', 'admin', 'notifications', 'updates', 'setup', 'setup-denied', 'inbox', 'detail', 'customer'].includes(config.screen)) throw new Error('Debug QA 설정을 확인해 주세요.');
       const imageUri = Image.resolveAssetSource(require('./assets/qa/workshop.png')).uri;
       if (active) {
-        setEnvironment({...createQaEnvironment(config, imageUri), screen: config.screen, showNativeControls: config.screen === 'admin'});
+        setEnvironment({...createQaEnvironment(config, imageUri), screen: config.screen, showNativeControls: ['admin', 'customer'].includes(config.screen)});
       }
     }).catch(failure => {if (active) setError(failure instanceof Error ? failure.message : '테스트 화면을 열지 못했습니다.');});
     return () => {active = false;};
@@ -51,7 +51,7 @@ function QaApp() {
   if (!environment) return <View style={styles.loading}><ActivityIndicator/><Text>네이티브 테스트 화면 준비 중</Text></View>;
   return <SafeAreaProvider style={styles.root} onLayout={() => setRendered(true)}><App services={environment.services} push={environment.push} initialRoute={environment.initialRoute} updates={environment.updates} notificationDisclosure="테스트 화면 · 예시 정보 · 실제 발송 없음"/>
     <SafeAreaView edges={['bottom']} style={styles.footer}>
-      {environment.showNativeControls ? <QaNativeControls/> : null}
+      {environment.showNativeControls ? <QaNativeControls customer={environment.screen === 'customer'}/> : null}
       <View pointerEvents="none" style={styles.qa}><Text style={styles.qaText}>테스트 화면 · 예시 정보·이미지 · 실제 발송 없음</Text></View>
     </SafeAreaView>
   </SafeAreaProvider>;

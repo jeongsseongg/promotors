@@ -45,15 +45,16 @@ class PromotorsPushModule(private val context: ReactApplicationContext) : ReactC
   @ReactMethod fun addListener(eventName: String) { PushEvents.add(eventName) }
   @ReactMethod fun removeListeners(count: Int) { PushEvents.remove(count) }
   @ReactMethod fun showQaNotification(promise: Promise) { promise.resolve(PushQa.showNotification(context)) }
+  @ReactMethod fun showQaCustomerNotification(phase: String, promise: Promise) { promise.resolve(PushQa.showCustomer(context, phase)) }
   @ReactMethod fun getQaConfiguration(promise: Promise) {
     if (!BuildConfig.DEBUG || !BuildConfig.QA_BUNDLED) { promise.resolve(null); return }
     val supplied = context.currentActivity?.intent?.getStringExtra("qaScreen")
-    val allowed = setOf("booking", "mypage", "admin", "notifications", "updates", "setup", "setup-denied", "inbox", "detail")
+    val allowed = setOf("booking", "mypage", "admin", "notifications", "updates", "setup", "setup-denied", "inbox", "detail", "customer")
     val preferences = context.getSharedPreferences("promotors_native_qa", 0)
     val screen = if (supplied == null) preferences.getString("screen", null)
       else supplied.takeIf { it in allowed }?.also { preferences.edit().putString("screen", it).apply() }
     // Bundled synthetic QA never requests an FCM token; allow only local card rendering.
-    if (screen == "admin") PushState.allowRegistration(context)
+    if (screen == "admin" || screen == "customer") PushState.allowRegistration(context)
     promise.resolve(screen?.takeIf { it in allowed }?.let {
       PushEvents.map(JSONObject().put("screen", it)
         .put("requestOsPermission", context.currentActivity?.intent?.getBooleanExtra("requestOsPermission", false) == true))

@@ -1,5 +1,5 @@
 import { sendAPNS } from './apns.ts';
-import { sendFCM } from './fcm.ts';
+import { sendFCM, cleanCustomer } from './fcm.ts';
 import webpush from 'npm:web-push@3.6.7';
 
 const base = Deno.env.get('SUPABASE_URL')!;
@@ -38,7 +38,8 @@ async function deliver(row: any, config: any) {
     });
     if (!context.ok) throw new Error('BOOKING_CONTEXT_FAILED');
     const booking = await context.json();
-    if (booking) row.payload.booking = booking;
+    if (booking?.customer) row.payload.customer = cleanCustomer(booking.customer);
+    else if (booking) row.payload.booking = booking;
     if (row.subscription.transport === 'apns') {
       const result = await sendAPNS(row.subscription, row.payload);
       if (result.clearActivityUpdate) {

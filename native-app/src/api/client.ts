@@ -5,7 +5,7 @@ export const PROMOTORS_SERVER = 'https://ytigiculewerivyytxza.supabase.co';
 export const NATIVE_SOURCE = 'promotors-native://app';
 export const NATIVE_SYNC_RPC = 'pm_native_sync_read';
 export type RpcName = 'pm_login' | 'pm_admin_login' | 'pm_register' | 'pm_logout' | 'pm_sync_read'
-  | 'pm_native_sync_read' | 'pm_is_developer'
+  | 'pm_native_sync_read' | 'pm_is_developer' | 'pm_customer_activity'
   | 'pm_sync_write' | 'pm_sync_merge_by_id' | 'pm_member_booking_create' | 'pm_booking_availability'
   | 'pm_branch_hours_read' | 'pm_admin_booking_actions' | 'pm_notifications' | 'pm_native_push_subscribe'
   | 'pm_account_deletion' | 'pm_deletion_receipt' | 'pm_asset_get' | 'pm_change_password'
@@ -29,12 +29,12 @@ export type FetchLike = (url: string, init: {
 export interface ApiClientOptions { supabaseUrl: string; publicAnonKey: string; fetch?: FetchLike; timeoutMs?: number }
 
 const signedIn = new Set<RpcName>(['pm_sync_write', 'pm_sync_merge_by_id', 'pm_member_booking_create',
-  'pm_admin_booking_actions', 'pm_notifications', 'pm_native_push_subscribe', 'pm_account_deletion',
+  'pm_admin_booking_actions', 'pm_notifications', 'pm_native_push_subscribe', 'pm_customer_activity', 'pm_account_deletion',
   'pm_change_password', 'pm_messages_read', 'pm_promo_read', 'pm_coupon_use', 'pm_event_enter',
   'pm_promo_write', 'pm_branch_hours_write', 'pm_customer_accounts', 'pm_admin_accounts']);
 const epochRequired = new Set<RpcName>(['pm_sync_write', 'pm_sync_merge_by_id', 'pm_member_booking_create',
   'pm_register', 'pm_guest_booking_create_v2', 'pm_guest_booking_cancel', 'pm_change_password',
-  'pm_admin_booking_actions', 'pm_native_push_subscribe', 'pm_coupon_use', 'pm_event_enter', 'pm_promo_write', 'pm_branch_hours_write']);
+  'pm_admin_booking_actions', 'pm_native_push_subscribe', 'pm_customer_activity', 'pm_coupon_use', 'pm_event_enter', 'pm_promo_write', 'pm_branch_hours_write']);
 function validateConfig(options: ApiClientOptions) {
   if (options.supabaseUrl.replace(/\/$/, '') !== PROMOTORS_SERVER || !options.publicAnonKey) throw new ApiError('API_CONFIG_INVALID');
   const key = options.publicAnonKey;

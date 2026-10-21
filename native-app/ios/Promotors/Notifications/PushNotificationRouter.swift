@@ -38,7 +38,7 @@ enum PushNotificationRouter {
         deliver(target, trusted: trusted)
     }
     @discardableResult static func captureURL(_ url: URL) -> Bool {
-        guard url.scheme?.lowercased() == "promotors", url.host?.lowercased() == "booking",
+        guard url.scheme?.lowercased() == "promotors", ["booking", "repair"].contains(url.host?.lowercased() ?? ""),
               let components = URLComponents(url: url, resolvingAgainstBaseURL: false) else { return false }
         let items = components.queryItems ?? []
         guard items.filter({ $0.name == "binding" }).count == 1,
@@ -46,7 +46,7 @@ enum PushNotificationRouter {
               UUID(uuidString: binding) != nil else { return false }
         var payload: [AnyHashable: Any] = ["binding": binding]
         if let id = items.first(where: { $0.name == "id" })?.value, !id.isEmpty {
-            guard validId(id) else { return false }; payload["bookingId"] = id
+            guard validId(id) else { return false }; payload[url.host?.lowercased() == "repair" ? "runId" : "bookingId"] = id
         }
         guard let target = safeTarget(payload) else { return false }
         // URL parameters can never authorize an approval or rejection.
@@ -61,6 +61,9 @@ enum PushNotificationRouter {
         }
         if let id = payload["bookingId"] as? String {
             guard validId(id) else { return nil }; target["bookingId"] = id
+        }
+        if let id = payload["runId"] as? String {
+            guard validId(id) else { return nil }; target["runId"] = id
         }
         return target
     }

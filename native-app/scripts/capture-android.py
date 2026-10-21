@@ -65,10 +65,10 @@ def tap(text, source=None):
             return
     raise RuntimeError('Native control unavailable: ' + text)
 
-def expand_card(source, title, expanded=True):
+def expand_card(source, title, expanded=True, exact=False):
     document = ET.fromstring(source)
     parents = {child: parent for parent in document.iter() for child in parent}
-    anchor = next((node for node in document.iter('node') if title in node.get('text', '')), None)
+    anchor = next((node for node in document.iter('node') if (title == node.get('text', '') if exact else title in node.get('text', ''))), None)
     while anchor is not None:
         candidates = [node for node in anchor.iter('node') if node.get('resource-id', '').endswith('/expand_button')]
         if candidates:
@@ -149,13 +149,38 @@ source = wait_for('앱 알림 설정')
 assert '연결됨' in source and '테스트 알림 보내기' in source
 save('automatic-notification-settings', source)
 results = [{'screen': 'setup', 'systemAppearance': 'light', 'nativeViews': True, 'webViewCount': 0, 'automaticOsPermission': True, 'allowImmediatelyConnected': True, 'settingsOpened': True}]
-for screen, label in [('booking', '정비 예약'), ('mypage', '마이페이지'), ('admin', '예약관리'), ('notifications', '앱 알림 설정'), ('updates', '새 버전이 나왔어요'), ('setup-denied', '앱 알림을 켜주세요'), ('inbox', '프로모터스 알림'), ('detail', '예약 상세')]:
+for screen, label in [('booking', '정비 예약'), ('mypage', '마이페이지'), ('admin', '예약관리'), ('notifications', '앱 알림 설정'), ('updates', '새 버전이 나왔어요'), ('setup-denied', '앱 알림을 켜주세요'), ('inbox', '프로모터스 알림'), ('detail', '예약 상세'), ('customer', '정비 상세')]:
     adb('shell', 'am', 'force-stop', 'kr.promotors.app')
     adb('shell', 'am', 'start', '-n', 'kr.promotors.app/.MainActivity', '--es', 'qaScreen', screen)
     source = wait_for('실제 발송 없음')
     source = wait_for(label)
     save(screen, source)
     results.append({'screen': screen, 'systemAppearance': 'light', 'nativeViews': True, 'webViewCount': 0})
+    if screen == 'customer':
+        for phase, button, title in [('confirmed', '확정 예시', '예약이 확정되었어요'), ('visit', '방문 예시', '방문을 기다리고 있어요'), ('repair', '정비 예시', '내 차 정비 중'), ('completed', '완료 예시', '정비가 완료되었어요')]:
+            tap(button, wait_for(button))
+            wait_for('고객 상시알림 예시 표시')
+            adb('shell', 'input', 'keyevent', 'KEYCODE_HOME')
+            adb('shell', 'cmd', 'statusbar', 'expand-notifications')
+            live_capture = True
+            source = wait_for(title)
+            source = expand_card(source, title, True, exact=True)
+            assert '예약 승인' not in source and '예약 거절' not in source
+            assert '정비 진행' in source and 'BMW 520d' in source
+            save('customer-' + phase + '-ongoing', source)
+            adb('shell', 'cmd', 'statusbar', 'collapse')
+            adb('shell', 'am', 'start', '-n', 'kr.promotors.app/.MainActivity')
+            live_capture = False
+        tap('정비 예시', wait_for('정비 예시'))
+        wait_for('고객 상시알림 예시 표시')
+        adb('shell', 'cmd', 'statusbar', 'expand-notifications')
+        live_capture = True
+        source = wait_for('예시 · 내 차 정비 중')
+        tap('예시 · 내 차 정비 중', source)
+        live_capture = False
+        source = wait_for('정비 상세')
+        assert '예약 정보 보기' in source and '차량 상태를 점검했습니다.' in source
+        save('customer-notification-open-detail', source)
     if screen == 'updates':
         assert '업데이트' in source and '나중에' in source, 'Update choices absent'
         tap('나중에', source)

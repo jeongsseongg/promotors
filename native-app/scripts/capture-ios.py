@@ -13,7 +13,7 @@ checker = pathlib.Path(os.environ['RUNNER_TEMP']) / 'verify-native-screen'
 subprocess.run(['swiftc', str(root / 'scripts/verify-native-screen.swift'), '-o', str(checker)], check=True)
 ongoing_only = os.environ.get('PM_CAPTURE_SCOPE') == 'ongoing'
 
-titles = {'booking': '정비 예약', 'mypage': '마이페이지', 'admin': '예약관리', 'notifications': '앱 알림 설정', 'updates': '새 버전이 나왔어요', 'setup': '앱 알림이 연결됐어요', 'setup-denied': '앱 알림을 켜주세요', 'inbox': '프로모터스 알림', 'detail': '예약 상세'}
+titles = {'booking': '정비 예약', 'mypage': '마이페이지', 'admin': '예약관리', 'notifications': '앱 알림 설정', 'updates': '새 버전이 나왔어요', 'setup': '앱 알림이 연결됐어요', 'setup-denied': '앱 알림을 켜주세요', 'inbox': '프로모터스 알림', 'detail': '예약 상세', 'customer': '정비 상세'}
 
 def sim(*args):
     return subprocess.check_output(['xcrun', 'simctl', *args])
@@ -29,7 +29,7 @@ for kind, device in selected:
     sim('bootstatus', device, '-b')
     sim('status_bar', device, 'override', '--time', '9:41', '--dataNetwork', 'wifi', '--wifiMode', 'active', '--wifiBars', '3', '--batteryState', 'charged', '--batteryLevel', '100')
     sim('install', device, str(app))
-    captures = [('admin', 'light')] if ongoing_only else [(screen, 'light') for screen in titles] + [(screen, 'dark') for screen in ['booking', 'mypage']]
+    captures = [('admin', 'light'), ('customer', 'light')] if ongoing_only else [(screen, 'light') for screen in titles] + [(screen, 'dark') for screen in ['booking', 'mypage']]
     for screen, appearance in captures:
         sim('ui', device, 'appearance', appearance)
         assert sim('ui', device, 'appearance').decode().strip().lower().endswith(appearance), 'System appearance not applied'
@@ -67,6 +67,12 @@ for kind, device in selected:
                 target = output / (kind + '-live-activity-' + presentation + '.png')
                 shutil.copyfile(rendered, target)
                 subprocess.run([str(checker), str(target), 'BMW 520d'], check=True)
+            for phase in ['confirmed', 'visit', 'repair', 'completed']:
+                for presentation in ['lock', 'island']:
+                    rendered = container / 'Documents' / ('qa-customer-' + phase + '-' + presentation + '.png')
+                    target = output / (kind + '-customer-' + phase + '-' + presentation + '.png')
+                    shutil.copyfile(rendered, target)
+                    subprocess.run([str(checker), str(target), '정비 진행'], check=True)
         results.append({'device': kind, 'screen': screen, 'systemAppearance': appearance, 'nativeQaReady': True, 'operationalRequests': 0})
     sim('ui', device, 'appearance', 'light')
     sim('shutdown', device)

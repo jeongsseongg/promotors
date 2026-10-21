@@ -23,6 +23,23 @@ object BookingSchedule {
         result.put(key, PushPayload.text(value, length))
       }
     }
+    if (source.optString("audience") == "customer") {
+      val phase = source.optString("phase")
+      if (phase !in setOf("confirmed", "visit", "repair", "completed", "cancelled")) return null
+      result.put("audience", "customer").put("phase", phase)
+      for ((key, limit) in mapOf("runId" to 128, "stageLabel" to 50)) {
+        val value = source.opt(key)
+        if (value != null && value !== JSONObject.NULL && value !is String) return null
+        result.put(key, PushPayload.text(source.optString(key), limit))
+      }
+      if (source.has("active") && source.opt("active") !is Boolean) return null
+      result.put("active", source.optBoolean("active", false))
+      for (key in listOf("progress", "expiresAt")) {
+        val value = source.opt(key)
+        if (value !is Number || !value.toDouble().isFinite() || value.toDouble() < 0) return null
+        result.put(key, value.toLong().coerceAtMost(if (key == "progress") 100L else 4_102_444_800L))
+      }
+    }
     return result
   }
 

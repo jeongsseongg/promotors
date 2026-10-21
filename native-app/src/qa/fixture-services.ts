@@ -6,11 +6,12 @@ import {createQaPush} from './fixture-push';
 import {createQaAccount, createQaDeletion} from './fixture-account';
 import {createQaNotifications} from './fixture-notifications';
 
-export type QaConfiguration = {screen: 'booking' | 'mypage' | 'admin' | 'notifications' | 'updates' | 'setup' | 'setup-denied' | 'inbox' | 'detail'; requestOsPermission?: boolean};
+export type QaConfiguration = {screen: 'booking' | 'mypage' | 'admin' | 'notifications' | 'updates' | 'setup' | 'setup-denied' | 'inbox' | 'detail' | 'customer'; requestOsPermission?: boolean};
 export function createQaEnvironment(config: QaConfiguration, imageUri: string) {
   const admin = ['admin', 'notifications', 'inbox', 'detail'].includes(config.screen);
   const data = createQaData(), auth = createQaSession(admin), calls: string[] = [];
   data.notificationState.admin = admin;
+  if (config.screen === 'customer') {data.bookings[0].status = '예약'; data.runs[0].bookingKey = 'qa-pending';}
   const clone = <T,>(value: T): T => JSON.parse(JSON.stringify(value));
   const requireBooking = (id: string) => {const row = data.bookings.find(item => item.id === id); if (!row) throw new Error('예약을 찾을 수 없습니다.'); return row;};
   const scoped = () => data.bookings.filter(row => admin ? row.branch === '프로모터스 안산점' : row.memberId === qaProfile.id);
@@ -46,6 +47,6 @@ export function createQaEnvironment(config: QaConfiguration, imageUri: string) {
     notifications: createQaNotifications(data, push, calls),
     deletion: createQaDeletion(calls),
   } as unknown as NativeServices;
-  const initialRoute: Route = config.screen === 'booking' ? {name: 'reserve'} : ['mypage', 'updates', 'setup', 'setup-denied'].includes(config.screen) ? {name: 'my'} : config.screen === 'admin' ? {name: 'admin'} : config.screen === 'inbox' ? {name: 'notifications'} : config.screen === 'detail' ? {name: 'admin-booking', id: 'qa-pending'} : {name: 'notification-settings'};
+  const initialRoute: Route = config.screen === 'customer' ? {name: 'work-detail', id: 'qa-run'} : config.screen === 'booking' ? {name: 'reserve'} : ['mypage', 'updates', 'setup', 'setup-denied'].includes(config.screen) ? {name: 'my'} : config.screen === 'admin' ? {name: 'admin'} : config.screen === 'inbox' ? {name: 'notifications'} : config.screen === 'detail' ? {name: 'admin-booking', id: 'qa-pending'} : {name: 'notification-settings'};
   return {services, push, initialRoute, calls, data, qaDate, updates: config.screen === 'updates' ? {check: async () => ({key: 'qa-update', version: '2.0.0 (실제 발송 없음)'}), openStore: async () => {calls.push('updates.openStore');}} : undefined};
 }

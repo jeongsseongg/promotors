@@ -56,8 +56,12 @@ final class BookingActivityController {
             startsAt: Self.timestamp(values["startsAt"]),
             customerName: Self.text(values["customerName"], limit: 60),
             vehicleName: Self.text(values["vehicleName"], limit: 80),
-            vehiclePlate: Self.text(values["vehiclePlate"], limit: 30))
-        let active = values["active"] as? Bool == true && state.pendingCount + state.upcomingCount > 0
+            vehiclePlate: Self.text(values["vehiclePlate"], limit: 30),
+            audience: Self.text(values["audience"], limit: 20), phase: Self.text(values["phase"], limit: 20),
+            runId: Self.text(values["runId"], limit: 128), stageLabel: Self.text(values["stageLabel"], limit: 50),
+            progress: max(0, min(100, (values["progress"] as? NSNumber)?.intValue ?? 0)),
+            expiresAt: Self.timestamp(values["expiresAt"]))
+        let active = values["active"] as? Bool == true && (state.audience == "customer" ? state.phase != "cancelled" : state.pendingCount + state.upcomingCount > 0)
         return try await enqueue(context) { ticket in
             guard ActivityAuthorizationInfo().areActivitiesEnabled else { return ["supported": true, "enabled": false] }
             for activity in Activity<BookingActivityAttributes>.activities where !active || activity.attributes.binding != binding {

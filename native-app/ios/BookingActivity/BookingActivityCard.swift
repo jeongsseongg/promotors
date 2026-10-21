@@ -12,12 +12,18 @@ struct BookingActivityCard: View {
     private var time: String { state.schedule.split(separator: "·").last.map { String($0).trimmingCharacters(in: .whitespaces) } ?? "예약 일정" }
     private var day: String { state.schedule.split(separator: "·").first.map { String($0).trimmingCharacters(in: .whitespaces) } ?? "" }
     private var appointment: Date { Date(timeIntervalSince1970: state.startsAt) }
-    static func url(_ id: String, binding: String) -> URL? {
-        var url = URLComponents(string: "promotors://booking")
-        url?.queryItems = [URLQueryItem(name: "id", value: id), URLQueryItem(name: "binding", value: binding)]
+    static func url(_ id: String, binding: String, runId: String? = nil) -> URL? {
+        let repair = !(runId ?? "").isEmpty
+        var url = URLComponents(string: repair ? "promotors://repair" : "promotors://booking")
+        url?.queryItems = [URLQueryItem(name: "id", value: repair ? runId : id), URLQueryItem(name: "binding", value: binding)]
         return url?.url
     }
     var body: some View {
+        if state.audience == "customer" {
+            CustomerActivityCard(state: state, binding: binding, island: island)
+        } else { adminCard }
+    }
+    private var adminCard: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .center) {
                 Text(pending ? "승인 대기 \(state.pendingCount)건" : "승인 대기 없음")

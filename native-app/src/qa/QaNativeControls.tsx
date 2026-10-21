@@ -12,7 +12,7 @@ function snapshot(active: boolean): NativeBookingSnapshot {
     startsAt: appointment.getTime() / 1000,
     customerName: '예시 고객', vehicleName: 'BMW 520d', vehiclePlate: '차량번호 비공개'};
 }
-export function QaNativeControls() {
+export function QaNativeControls({customer = false}: {customer?: boolean}) {
   const [busy, setBusy] = useState(false), [message, setMessage] = useState('상시알림 예시 · 서버 연결 및 발송 없음');
   async function display(active: boolean) {
     if (busy) return; setBusy(true);
@@ -42,6 +42,24 @@ export function QaNativeControls() {
     } catch (failure) {setMessage(failure instanceof Error ? failure.message : '예시 알림을 표시하지 못했습니다.');}
     finally {setBusy(false);}
   }
+  async function displayCustomer(phase: 'confirmed' | 'visit' | 'repair' | 'completed') {
+    const bridge = NativeModules.PromotorsPush; if (busy) return; setBusy(true);
+    try {
+      if (await bridge.requestPermission() !== 'granted') throw new Error('앱 알림 권한을 허용해 주세요.');
+      await bridge.bindConnection(binding);
+      const value = {...snapshot(true), audience: 'customer', phase, runId: phase === 'repair' || phase === 'completed' ? 'qa-run' : '',
+        pendingCount: 0, upcomingCount: 0, progress: {confirmed: 0, visit: 33, repair: 77, completed: 100}[phase],
+        stageLabel: phase === 'completed' ? '정비가 완료되었어요' : '입고 점검 확인 완료',
+        expiresAt: phase === 'completed' ? Date.now() / 1000 + 7200 : 0};
+      await bridge.syncBookingSchedule(value);
+      if (bridge.showQaCustomerNotification) await bridge.showQaCustomerNotification(phase);
+      setMessage('고객 상시알림 예시 표시 · ' + phase + ' · 실제 발송 없음');
+    } catch (e) {setMessage(e instanceof Error ? e.message : '예시 표시 실패');}
+    finally {setBusy(false);}
+  }
+  if (customer) return <View style={styles.box}><Text style={styles.text}>{message}</Text>
+    <View style={styles.row}>{(['confirmed', 'visit', 'repair', 'completed'] as const).map((phase, index) => <View key={phase} style={styles.flex}>
+      <Button secondary label={['확정 예시', '방문 예시', '정비 예시', '완료 예시'][index]} disabled={busy} onPress={() => void displayCustomer(phase)}/></View>)}</View></View>;
   return <View style={styles.box}><Text style={styles.text}>{message}</Text><View style={styles.row}>
     <View style={styles.flex}><Button secondary label="상시알림 예시" busy={busy} onPress={() => void display(true)}/></View>
     <View style={styles.flex}><Button secondary label="예시 지우기" disabled={busy} onPress={() => void display(false)}/></View>

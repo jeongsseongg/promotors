@@ -75,6 +75,8 @@ export interface NativeBookingSnapshot {
   active: boolean; binding: string; pendingCount: number; upcomingCount: number;
   branch: string; schedule: string; bookingId: string; startsAt: number;
   customerName: string; vehicleName: string; vehiclePlate: string;
+  audience?: 'customer'; phase?: 'confirmed' | 'visit' | 'repair' | 'completed' | 'cancelled';
+  runId?: string; stageLabel?: string; progress?: number; expiresAt?: number;
 }
 export interface InboxItem extends JsonRecord {
   id: string; category: string; title: string; body: string; created_at: string;
@@ -85,7 +87,7 @@ export interface NotificationState {
   canViewLogs?: boolean; maintenanceDate?: string | null;
 }
 export interface NotificationOpenTarget {
-  notificationId?: string; bookingId?: string; binding: string; action?: 'accept' | 'reject'; trustedAction?: boolean;
+  notificationId?: string; bookingId?: string; runId?: string; binding: string; action?: 'accept' | 'reject'; trustedAction?: boolean;
 }
 export interface NativePushPlatform {
   platform: 'ios' | 'android';

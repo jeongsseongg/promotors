@@ -11,15 +11,17 @@ import {runName, runStage, runSteps} from './runDisplay';
 import {ui} from '../../theme/styles';
 import {color} from '../../theme/tokens';
 
-export function WorkScreen({history = false}: {history?: boolean}) {
+export function WorkScreen({history = false, id}: {history?: boolean; id?: string}) {
   const services = useServices(), nav = useNav(), [photo, setPhoto] = useState('');
   const resource = useResource(useCallback(() => services.account.load(), [services]));
-  const runs = resource.data?.runs.filter(row => history || runStage(row) < 4) || [];
-  return <Screen title={history ? '정비 이력' : '작업사진·현황'} onBack={nav.back} refreshing={resource.loading} onRefresh={resource.reload}>
+  const runs = resource.data?.runs.filter(row => id ? row.id === id : history || runStage(row) < 4) || [];
+  const booking = id && runs[0]?.bookingKey ? resource.data?.bookings.find(row => row.id === runs[0].bookingKey) : undefined;
+  return <Screen title={id ? '정비 상세' : history ? '정비 이력' : '작업사진·현황'} onBack={nav.back} refreshing={resource.loading} onRefresh={resource.reload}>
     <Text style={ui.title}>{history ? '내 차의 정비 기록' : '지금 내 차는'}</Text><Text style={ui.muted}>{history ? '완료된 정비 이력과 승인된 작업사진을 확인하세요.' : '작업 단계를 확인하고 사진으로 살펴보세요.'}</Text>
-    <DataState loading={resource.loading && !resource.data} error={resource.error} empty={!resource.loading && !runs.length ? (history ? '아직 등록된 정비 이력이 없습니다.' : '진행 중인 작업이 없습니다.') : ''} onRetry={resource.reload}/>
+    <DataState loading={resource.loading && !resource.data} error={resource.error} empty={!resource.loading && !runs.length ? (id ? '정비 내역을 찾을 수 없습니다.' : history ? '아직 등록된 정비 이력이 없습니다.' : '진행 중인 작업이 없습니다.') : ''} onRetry={resource.reload}/>
     {runs.map(run => <RunCard key={run.id} run={run} onPhoto={setPhoto}/>)}
-    {history && resource.data?.bookings.length ? <View style={ui.card}><Text style={ui.heading}>방문 예약 기록</Text>
+    {booking ? <Button secondary label="예약 정보 보기" onPress={() => nav.go({name: 'booking', id: booking.id})}/> : null}
+    {history && !id && resource.data?.bookings.length ? <View style={ui.card}><Text style={ui.heading}>방문 예약 기록</Text>
       {resource.data.bookings.map(row => <Pressable accessibilityRole="button" key={row.id} onPress={() => nav.go({name: 'booking', id: row.id})}>
         <Text style={ui.label}>{row.date} {row.time} · {row.status}</Text><Text style={ui.muted}>{row.branch} · {(row.services || []).join(' · ')}</Text></Pressable>)}</View> : null}
     <Modal visible={!!photo} onRequestClose={() => setPhoto('')} animationType="fade"><SafeAreaView style={styles.photoShell}>

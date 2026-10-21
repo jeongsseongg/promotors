@@ -171,10 +171,16 @@ class NotificationsService {
     this.assertSession(token, state.revision);
     requireValue(uuid.test(raw.binding), 'INVALID_ARGUMENT');
     requireValue((raw.notificationId === undefined || typeof raw.notificationId === 'string' && recordId.test(raw.notificationId)) &&
-      (raw.bookingId === undefined || typeof raw.bookingId === 'string' && recordId.test(raw.bookingId)), 'INVALID_ARGUMENT');
+      (raw.bookingId === undefined || typeof raw.bookingId === 'string' && recordId.test(raw.bookingId)) &&
+      (raw.runId === undefined || typeof raw.runId === 'string' && recordId.test(raw.runId)), 'INVALID_ARGUMENT');
     let target: NotificationTarget;
     if (raw.notificationId && recordId.test(raw.notificationId)) target = await this.resolve(raw.notificationId);
-    else if (raw.bookingId && recordId.test(raw.bookingId)) {
+    else if (raw.runId && recordId.test(raw.runId)) {
+      this.session.requireRole('customer'); await this.session.refresh();
+      const rows = this.session.data()?.rows.find(row => row.data_key === 'pm-service-runs')?.payload;
+      requireValue(Array.isArray(rows) && rows.some(row => row.id === raw.runId), 'FORBIDDEN');
+      target = {kind: 'repair', id: raw.runId};
+    } else if (raw.bookingId && recordId.test(raw.bookingId)) {
       if (state.role === 'customer') {
         await this.session.refresh();
         const rows = this.session.data()?.rows.find(row => row.data_key === 'pm-bookings')?.payload;
@@ -255,7 +261,7 @@ class NotificationsService {
     return this.flushOpen();
   }
   async registerActivityToken(event: { binding: string; kind: 'start' | 'update'; token: string }) {
-    this.session.requireRole('admin');
+    requireValue(this.session.snapshot().authenticated, 'AUTH_REQUIRED');
     requireValue(this.push?.platform === 'ios' && this.deviceId && this.binding && event.binding === this.binding, 'DEVICE_BINDING_REQUIRED');
     requireValue(['start', 'update'].includes(event.kind) && /^[a-f0-9]{64,256}$/.test(event.token), 'INVALID_DEVICE');
     const { token, state } = this.session.credentials(), generation = this.generation;
@@ -268,7 +274,13 @@ class NotificationsService {
     const empty: NativeBookingSnapshot = { active: false, binding: '', pendingCount: 0, upcomingCount: 0, branch: '', schedule: '',
       bookingId: '', startsAt: 0, customerName: '', vehicleName: '', vehiclePlate: '' };
     const { token, state } = this.session.credentials(), generation = this.generation;
-    if (!state.authenticated || state.role === 'customer' || !this.binding || this.owner !== token || this.revision !== state.revision) return empty;
+    if (!state.authenticated || !this.binding || this.owner !== token || this.revision !== state.revision) return empty;
+    if (state.role === 'customer') {
+      const value = await this.rpc.call<NativeBookingSnapshot>('pm_customer_activity', {});
+      this.guard(token, state.revision, generation);
+      requireValue(value?.audience === 'customer' && typeof value.active === 'boolean', 'INVALID_RESPONSE');
+      return {...value, binding: this.binding};
+    }
     const value = await this.rpc.call<AdminBookingQueue>('pm_admin_booking_actions', { p_action: 'pending', p_data: {} });
     this.guard(token, state.revision, generation);
     const visible = (row: { branch: string }) => state.role !== 'general' || state.branches.includes(row.branch);

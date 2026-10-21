@@ -30,6 +30,22 @@ enum NativeQaActivityRenderer {
                 .environment(\.colorScheme, .light)
             try render(view).write(to: directory.appendingPathComponent("qa-activity-" + name + ".png"), options: .atomic)
         }
+        for (index, phase) in ["confirmed", "visit", "repair", "completed"].enumerated() {
+            var customer = state
+            customer.audience = "customer"; customer.phase = phase; customer.runId = index >= 2 ? "qa-run" : ""
+            customer.progress = [0, 33, 77, 100][index]; customer.pendingCount = 0; customer.upcomingCount = 0
+            customer.stageLabel = index == 3 ? "정비가 완료되었어요" : "입고 점검 확인 완료"
+            for (name, island) in [("lock", false), ("island", true)] {
+                let card = BookingActivityCard(state: customer, binding: "00000000-0000-4000-8000-000000000015", island: island)
+                let bounds = UIHostingController(rootView: card).sizeThatFits(in: CGSize(width: 360, height: 1000))
+                guard bounds.height <= 175 else { throw CocoaError(.coderInvalidValue) }
+                let view = VStack(spacing: 0) {
+                    card.padding(island ? 16 : 0)
+                    Text("테스트 화면 · 실제 발송 없음").font(.system(size: 11)).foregroundStyle(island ? Color.white.opacity(0.7) : Color.gray).padding(.bottom, 8)
+                }.frame(width: 360).background(island ? Color.black : Color.white).environment(\.colorScheme, .light)
+                try render(view).write(to: directory.appendingPathComponent("qa-customer-" + phase + "-" + name + ".png"), options: .atomic)
+            }
+        }
         NSLog("PROMOTORS_NATIVE_QA_ACTIVITY_RENDERED")
     }
     private static func render<Content: View>(_ content: Content) throws -> Data {
