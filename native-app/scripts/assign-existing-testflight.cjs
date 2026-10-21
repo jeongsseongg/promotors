@@ -38,7 +38,11 @@ function bearer() {
 async function request(endpoint,method='GET',body) {
   check(endpoint.startsWith('/v1/'),'INVALID_ASC_PATH');
   const response=await fetch('https://api.appstoreconnect.apple.com'+endpoint,{method,headers:{Authorization:'Bearer '+bearer(),'Content-Type':'application/json'},body:body?JSON.stringify(body):undefined,signal:AbortSignal.timeout(20000)});
-  check(response.ok,`ASC_HTTP_${response.status}`);
+  if(!response.ok){
+    let detail;try{const body=await response.json();detail=body.errors?.map(e=>({code:e.code,detail:String(e.detail||'').slice(0,500)}));}catch{}
+    console.error(JSON.stringify({code:`ASC_HTTP_${response.status}`,endpoint,requestId:response.headers.get('x-request-id'),errors:detail}));
+    throw Error(`ASC_HTTP_${response.status}`);
+  }
   return response.status===204?{}:response.json();
 }
 module.exports={assignExistingGroup};

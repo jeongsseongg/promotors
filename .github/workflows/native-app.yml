@@ -5,6 +5,10 @@ on:
     paths: ['native-app/**', '.github/workflows/native-app.yml']
   workflow_dispatch:
     inputs:
+      testflight_only:
+        description: 이미 업로드한 빌드를 기존 내부 테스트 그룹에만 배정
+        type: boolean
+        default: false
       ongoing_only:
         description: 상시알림 수정 검증 시 iOS 캡처 범위만 좁힘 (컴파일·Android·서버 검사 유지)
         type: boolean
@@ -28,6 +32,7 @@ concurrency:
   cancel-in-progress: true
 jobs:
   server:
+    if: ${{ inputs.testflight_only != true }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -40,6 +45,7 @@ jobs:
       - name: Verify native server privacy, registration and reservation actions
         run: node --test scripts/test-existing-testflight.cjs scripts/test-customer-activity-sql.cjs scripts/test-customer-push.cjs scripts/test-apns-activity-lifecycle.cjs scripts/test-native-activity-feedback.cjs scripts/test-fcm-account-switch.cjs scripts/test-fcm-subscribe.cjs scripts/test-fcm-transport.cjs scripts/test-fcm-worker.cjs scripts/test-native-booking-action.cjs scripts/test-native-push.cjs scripts/test-native-subscribe.cjs native-app/server/tests/test-native-sync.cjs
   android:
+    if: ${{ inputs.testflight_only != true }}
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
@@ -117,7 +123,7 @@ jobs:
             native-app/qa-results/**
           retention-days: 7
   ios:
-    if: ${{ inputs.android_only != true }}
+    if: ${{ inputs.android_only != true && inputs.testflight_only != true }}
     runs-on: macos-26
     timeout-minutes: 55
     defaults:
@@ -216,4 +222,32 @@ jobs:
           path: |
             native-app/qa-results/**
             ${{ runner.temp }}/native-ios.log
+          retention-days: 7
+
+  testflight:
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.testflight_only }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.19.0
+      - run: node --test scripts/test-existing-testflight.cjs
+      - name: Assign uploaded build to existing internal group
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_PRIVATE_KEY: ${{ secrets.ASC_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          mkdir -p "$HOME/.appstoreconnect/private_keys"
+          printf '%s' "$ASC_PRIVATE_KEY" > "$HOME/.appstoreconnect/private_keys/AuthKey_${ASC_KEY_ID}.p8"
+          node native-app/scripts/assign-existing-testflight.cjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: existing-internal-testflight
+          path: ${{ runner.temp }}/testflight-assignment.json
           retention-days: 7
