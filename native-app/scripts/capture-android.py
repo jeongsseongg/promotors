@@ -99,7 +99,7 @@ def save_ongoing_notification():
     source = expand_card(source, 'BMW 520d', False)
     save('booking-ongoing-compact', source)
     source = expand_card(source, 'BMW 520d', True)
-    for value in ['처리 대기 1건', '방문 예정 1건', '예시 고객', 'BMW 520d', '비공개', '예약 정보 확인']:
+    for value in ['승인 대기 1건', '방문 예정 1건', '예시 고객', 'BMW 520d', '비공개', '승인·거절하기']:
         assert value in source, 'Ongoing notification content absent: ' + value
     save('booking-ongoing-notification', source)
     def remaining(xml):
