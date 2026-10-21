@@ -35,7 +35,7 @@ enum NativeQaActivityRenderer {
     private static func render<Content: View>(_ content: Content) throws -> Data {
         guard let scene = UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene })
             .first(where: { $0.activationState == .foregroundActive }) else { throw CocoaError(.coderInvalidValue) }
-        let host = UIHostingController(rootView: content)
+        let host = UIHostingController(rootView: content.ignoresSafeArea())
         host.overrideUserInterfaceStyle = .light
         let size = host.sizeThatFits(in: CGSize(width: 360, height: 1000))
         let window = UIWindow(windowScene: scene)
