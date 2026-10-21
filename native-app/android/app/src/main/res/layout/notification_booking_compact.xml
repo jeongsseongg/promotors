@@ -2,8 +2,12 @@
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent" android:layout_height="48dp" android:orientation="vertical">
     <LinearLayout android:layout_width="match_parent" android:layout_height="26dp" android:orientation="horizontal" android:gravity="center_vertical">
-        <TextView style="@style/TextAppearance.Compat.Notification.Title" android:id="@+id/booking_time" android:layout_width="wrap_content" android:layout_height="wrap_content" android:textSize="18sp" android:textStyle="bold" android:fontFamily="sans-serif" android:singleLine="true"/>
-        <TextView style="@style/TextAppearance.Compat.Notification.Title" android:id="@+id/booking_customer" android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content" android:layout_marginStart="12dp" android:textSize="15sp" android:textStyle="bold" android:singleLine="true" android:ellipsize="end"/>
+        <TextView style="@style/TextAppearance.Compat.Notification.Line2" android:id="@+id/booking_live_status" android:layout_width="wrap_content" android:layout_height="wrap_content" android:textSize="12sp" android:singleLine="true"/>
+        <Chronometer style="@style/TextAppearance.Compat.Notification.Title" android:id="@+id/booking_countdown" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginStart="8dp" android:textSize="20sp" android:textStyle="bold" android:fontFamily="sans-serif-medium" android:singleLine="true"/>
+        <TextView style="@style/TextAppearance.Compat.Notification.Line2" android:id="@+id/booking_time" android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content" android:gravity="end" android:textSize="12sp" android:singleLine="true"/>
     </LinearLayout>
-    <TextView style="@style/TextAppearance.Compat.Notification.Line2" android:id="@+id/booking_vehicle" android:layout_width="match_parent" android:layout_height="wrap_content" android:textSize="14sp" android:singleLine="true" android:ellipsize="end"/>
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal">
+        <TextView style="@style/TextAppearance.Compat.Notification.Title" android:id="@+id/booking_customer" android:layout_width="wrap_content" android:layout_height="wrap_content" android:textSize="13sp" android:textStyle="bold" android:singleLine="true" android:maxWidth="100dp" android:ellipsize="end"/>
+        <TextView style="@style/TextAppearance.Compat.Notification.Line2" android:id="@+id/booking_vehicle" android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content" android:layout_marginStart="8dp" android:textSize="13sp" android:singleLine="true" android:ellipsize="end"/>
+    </LinearLayout>
 </LinearLayout>

@@ -2,13 +2,14 @@ import React, {useState} from 'react';
 import {NativeModules, StyleSheet, Text, View} from 'react-native';
 import {Button} from '../components/Controls';
 import {NativeBookingSnapshot} from '../domain/types';
-import {qaDate} from './fixture-data';
 
 const binding = '00000000-0000-4000-8000-000000000015';
 function snapshot(active: boolean): NativeBookingSnapshot {
+  const appointment = new Date(Date.now() + 45 * 60 * 1000);
+  const schedule = new Intl.DateTimeFormat('sv-SE', {timeZone: 'Asia/Seoul', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit'}).format(appointment).replace(/-/g, '.').replace(' ', ' · ');
   return {active, binding, pendingCount: active ? 1 : 0, upcomingCount: active ? 1 : 0,
-    branch: '프로모터스 안산점', schedule: qaDate(1) + ' · 10:00', bookingId: 'qa-pending',
-    startsAt: Date.parse(qaDate(1).replace(/\./g, '-') + 'T10:00:00+09:00') / 1000,
+    branch: '프로모터스 안산점', schedule, bookingId: 'qa-pending',
+    startsAt: appointment.getTime() / 1000,
     customerName: '예시 고객', vehicleName: 'BMW 520d', vehiclePlate: '차량번호 비공개'};
 }
 export function QaNativeControls() {

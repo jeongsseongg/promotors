@@ -7,8 +7,13 @@ import UIKit
 enum NativeQaActivityRenderer {
     static func capture() throws {
         guard NativeQaConfiguration.isAllowed else { return }
+        let appointment = Date().addingTimeInterval(45 * 60)
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "ko_KR")
+        formatter.timeZone = TimeZone(identifier: "Asia/Seoul")
+        formatter.dateFormat = "yyyy.MM.dd · HH:mm"
         let state = BookingActivityAttributes.ContentState(pendingCount: 1, upcomingCount: 1,
-            branch: "프로모터스 안산점", schedule: "2026.10.22 · 10:00", bookingId: "qa-pending", startsAt: 0,
+            branch: "프로모터스 안산점", schedule: formatter.string(from: appointment), bookingId: "qa-pending", startsAt: appointment.timeIntervalSince1970,
             customerName: "예시 고객", vehicleName: "BMW 520d", vehiclePlate: "차량번호 비공개")
         let directory = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
         for (name, island) in [("lock", false), ("island", true)] {

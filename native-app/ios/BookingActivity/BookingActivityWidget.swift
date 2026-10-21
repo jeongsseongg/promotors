@@ -23,12 +23,16 @@ struct BookingActivityWidget: Widget {
                     BookingActivityCard(state: context.state, binding: context.attributes.binding, island: true).padding(.top, 8)
                 }
             } compactLeading: {
-                Image(systemName: "wrench.adjustable").foregroundStyle(.yellow)
+                Image(systemName: "car.fill").foregroundStyle(.yellow)
             } compactTrailing: {
-                Text("\(context.state.pendingCount > 0 ? context.state.pendingCount : context.state.upcomingCount)")
-                    .font(.system(size: 13, weight: .bold)).monospacedDigit()
+                if context.state.startsAt > Date().timeIntervalSince1970 {
+                    Text(timerInterval: Date()...Date(timeIntervalSince1970: context.state.startsAt), countsDown: true, showsHours: false)
+                        .font(.system(size: 12, weight: .bold)).monospacedDigit().frame(width: 56)
+                } else {
+                    Text("예약").font(.system(size: 12, weight: .bold))
+                }
             } minimal: {
-                Image(systemName: "wrench.adjustable").foregroundStyle(.yellow)
+                Image(systemName: "car.fill").foregroundStyle(.yellow)
             }
             .widgetURL(BookingActivityCard.url(context.state.bookingId, binding: context.attributes.binding))
         }
