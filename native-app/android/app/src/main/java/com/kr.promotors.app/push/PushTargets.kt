@@ -52,7 +52,7 @@ object PushTargets {
         if (reusable == null && value.optString("binding") == binding &&
           value.optString("bookingId") == bookingId.orEmpty() && value.optLong("expires", 0) > now) {
           reusable = nonce
-          value.put("expires", now + 86400)
+          value.put("expires", Long.MAX_VALUE)
         } else targets.remove(nonce)
       }
     PushState.preferences(context).edit().putString("targets", targets.toString()).commit()
@@ -60,7 +60,7 @@ object PushTargets {
     if (existing != null) return@synchronized Created(existing, pendingIntent(context, existing))
     val created = create(context, null, bookingId, binding, now = now)
     val updated = load(context)
-    updated.getJSONObject(created.nonce).put("_schedule", true)
+    updated.getJSONObject(created.nonce).put("_schedule", true).put("expires", Long.MAX_VALUE)
     PushState.preferences(context).edit().putString("targets", updated.toString()).commit()
     created
   }
@@ -91,9 +91,11 @@ object PushTargets {
     if (intent?.action != ACTION) return
     val nonce = intent.getStringExtra(EXTRA) ?: return
     intent.removeExtra(EXTRA)
+    val schedule = synchronized(PushState.lock) { load(activity).optJSONObject(nonce)?.optBoolean("_schedule") == true }
     val target = consumeNonce(activity, nonce, System.currentTimeMillis() / 1000) ?: return
     synchronized(PushState.lock) {
       if (target.optString("binding") != PushState.binding(activity)) return
+      if (schedule) PushNotifications.rearmScheduleTarget(activity, target.optString("bookingId"), target.getString("binding"))
       PushState.preferences(activity).edit().putString("initial_target", target.toString()).commit()
     }
     PushEvents.emitOpen()

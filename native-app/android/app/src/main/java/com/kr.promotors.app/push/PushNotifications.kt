@@ -118,8 +118,18 @@ object PushNotifications {
       .setCustomContentView(BookingScheduleViews.create(context, snapshot, false))
       .setCustomBigContentView(BookingScheduleViews.create(context, snapshot, true))
       .setContentIntent(intent.pendingIntent).setOngoing(true).setOnlyAlertOnce(true)
-      .setSilent(true).setPriority(NotificationCompat.PRIORITY_LOW).setTimeoutAfter(86400000)
+      .setSilent(true).setPriority(NotificationCompat.PRIORITY_LOW)
     try { NotificationManagerCompat.from(context).notify(SCHEDULE_TAG, 0, builder.build()) }
+    catch (_: SecurityException) { return@synchronized }
+  }
+
+  fun rearmScheduleTarget(context: Context, bookingId: String, binding: String) = synchronized(PushState.lock) {
+    if (binding != PushState.binding(context) || !PushState.consented(context) || !permitted(context)) return@synchronized
+    val manager = context.getSystemService(NotificationManager::class.java)
+    val visible = manager.activeNotifications.firstOrNull { it.tag == SCHEDULE_TAG && it.id == 0 } ?: return@synchronized
+    val next = PushTargets.schedule(context, bookingId, binding)
+    visible.notification.contentIntent = next.pendingIntent
+    try { NotificationManagerCompat.from(context).notify(SCHEDULE_TAG, 0, visible.notification) }
     catch (_: SecurityException) { return@synchronized }
   }
 
