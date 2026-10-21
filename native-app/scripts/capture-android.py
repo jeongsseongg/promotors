@@ -181,6 +181,20 @@ for screen, label in [('booking', '정비 예약'), ('mypage', '마이페이지'
         source = wait_for('정비 상세')
         assert '예약 정보 보기' in source and '차량 상태를 점검했습니다.' in source
         save('customer-notification-open-detail', source)
+        tap('정비 예시', wait_for('정비 예시'))
+        wait_for('고객 상시알림 예시 표시')
+        adb('shell', 'cmd', 'statusbar', 'expand-notifications')
+        live_capture = True
+        source = expand_card(wait_for('내 차 정비 중'), '내 차 정비 중', True, exact=True)
+        tap('kr.promotors.app:id/customer_link', source)
+        live_capture = False
+        source = wait_for('정비 상세')
+        assert '예약 정보 보기' in source and '차량 상태를 점검했습니다.' in source
+        save('customer-ongoing-open-detail', source)
+        tap('예약 정보 보기', source)
+        source = wait_for('예약 상세')
+        assert 'BMW 520d' in source and '예약 전체 정보' in source
+        save('customer-linked-booking', source)
     if screen == 'updates':
         assert '업데이트' in source and '나중에' in source, 'Update choices absent'
         tap('나중에', source)

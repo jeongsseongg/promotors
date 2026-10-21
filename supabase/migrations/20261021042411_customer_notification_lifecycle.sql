@@ -63,7 +63,7 @@ begin
  result:=pm_push_private.customer_snapshot(a.login_id);
  select * into prefs from public.pm_push_preferences where login_id=a.login_id;
  if not coalesce(prefs.enabled,false) or not coalesce(case when result->>'phase' in ('repair','completed') then prefs.repair else prefs.booking end,false)
- then result:=jsonb_set(result,'active','false'); end if;
+ then result:=jsonb_set(result,'{active}','false'); end if;
  return result;
 end $$;
 revoke all on function pm_push_private.customer_state(jsonb,boolean) from public,anon,authenticated;
@@ -90,7 +90,7 @@ begin
     customer_state:=pm_push_private.customer_snapshot(a.login_id);
     select * into prefs from public.pm_push_preferences where login_id=a.login_id;
     if not coalesce(case when customer_state->>'phase' in ('repair','completed') then prefs.repair else prefs.booking end,false)
-      then customer_state:=jsonb_set(customer_state,'active','false'); end if;
+      then customer_state:=jsonb_set(customer_state,'{active}','false'); end if;
     return jsonb_build_object('customer',jsonb_build_object('title',notice.title,'body',notice.body,'snapshot',customer_state));
   end if;
   if a.role not in ('general','main','developer') or notice.category<>'booking' or notice.target->>'kind'<>'booking' then return null; end if;

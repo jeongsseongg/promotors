@@ -12,7 +12,7 @@ let requestScheduleRefresh: () => Promise<void> = async () => {};
 let requestActivityTokenRefresh: () => Promise<void> = async () => {};
 function activityContext() {
   const state = services.session.snapshot(), native = bindingSnapshot();
-  const owner = state.authenticated ?
+  const owner = state.authenticated && !state.deletionPending ?
     JSON.stringify([state.revision, state.profile?.id, state.role, state.branches, state.privacyEpoch]) : null;
   return {owner, binding: native.binding, generation: native.generation};
 }

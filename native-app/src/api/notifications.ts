@@ -262,6 +262,7 @@ class NotificationsService {
   }
   async registerActivityToken(event: { binding: string; kind: 'start' | 'update'; token: string }) {
     requireValue(this.session.snapshot().authenticated, 'AUTH_REQUIRED');
+    requireValue(!this.session.snapshot().deletionPending, 'ACCOUNT_DELETION_PENDING');
     requireValue(this.push?.platform === 'ios' && this.deviceId && this.binding && event.binding === this.binding, 'DEVICE_BINDING_REQUIRED');
     requireValue(['start', 'update'].includes(event.kind) && /^[a-f0-9]{64,256}$/.test(event.token), 'INVALID_DEVICE');
     const { token, state } = this.session.credentials(), generation = this.generation;
@@ -274,7 +275,7 @@ class NotificationsService {
     const empty: NativeBookingSnapshot = { active: false, binding: '', pendingCount: 0, upcomingCount: 0, branch: '', schedule: '',
       bookingId: '', startsAt: 0, customerName: '', vehicleName: '', vehiclePlate: '' };
     const { token, state } = this.session.credentials(), generation = this.generation;
-    if (!state.authenticated || !this.binding || this.owner !== token || this.revision !== state.revision) return empty;
+    if (!state.authenticated || state.deletionPending || !this.binding || this.owner !== token || this.revision !== state.revision) return empty;
     if (state.role === 'customer') {
       const value = await this.rpc.call<NativeBookingSnapshot>('pm_customer_activity', {});
       this.guard(token, state.revision, generation);

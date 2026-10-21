@@ -15,9 +15,10 @@ async function authorization() {
 }
 type Subscription = { token: string; activityStart?: string; activityUpdate?: string; activityAudience?: string };
 type ActivityResult = { code: string; clearActivityUpdate?: string };
-export type APNSResult = ActivityResult & { ok: boolean };
+export type APNSResult = ActivityResult & { ok: boolean; cancelled?: boolean };
 type Payload = { id: string; binding: string; category: string; alertDelivered?: boolean; customer?: { title: string; body: string; snapshot: { active: boolean; audience: string; phase: string; expiresAt?: number; [key: string]: unknown } }; booking?: { id?: string; pending: boolean; branch: string; schedule: string; customerName?: string; vehicleName?: string; vehiclePlate?: string; snapshot: { pendingCount: number; upcomingCount: number; [key: string]: unknown } } };
-async function sendActivity(subscription: Subscription, payload: Payload, bearer: string): Promise<ActivityResult> {
+async function sendActivity(subscription: Subscription, payload: Payload, bearer: string, beforeSend?: () => Promise<boolean>): Promise<ActivityResult> {
+  if (beforeSend && !await beforeSend()) return { code: 'SKIPPED' };
   if (!payload.booking && !payload.customer) return { code: 'SKIPPED' };
   if (payload.customer && subscription.activityAudience !== 'customer') return { code: 'NO_ACTIVITY_TOKEN' };
   const state = payload.customer?.snapshot || payload.booking!.snapshot;
@@ -44,9 +45,10 @@ async function sendActivity(subscription: Subscription, payload: Payload, bearer
   const clear = subscription.activityUpdate === token && (event === 'end' && response.ok || expired);
   return { code: response.ok ? '200' : `ACTIVITY_${response.status}`, ...(clear ? { clearActivityUpdate: token } : {}) };
 }
-export async function sendAPNS(subscription: Subscription, payload: Payload): Promise<APNSResult> {
+export async function sendAPNS(subscription: Subscription, payload: Payload, options: { beforeSend?: () => Promise<boolean> } = {}): Promise<APNSResult> {
   if (!/^[a-f0-9]{64}$/.test(subscription.token)) return { ok: false, code: '410' };
   const bearer = await authorization();
+  if (options.beforeSend && !await options.beforeSend()) return { ok: false, cancelled: true, code: 'REVOKED' };
   const booking = payload.booking;
   const vehicle = booking ? [booking.customerName, booking.vehicleName, booking.vehiclePlate].filter(Boolean).join(' · ') : '';
   const bookingBody = booking ? [booking.branch + ' · ' + booking.schedule, vehicle, '눌러서 예약 일정 확인'].filter(Boolean).join('\n') : '';
@@ -61,7 +63,7 @@ export async function sendAPNS(subscription: Subscription, payload: Payload): Pr
       id: payload.id, binding: payload.binding, ...(booking?.id ? { bookingId: booking.id } : {}) })
   });
   const reason = response.ok ? '' : (await response.json().catch(() => ({}))).reason;
-  const activity: ActivityResult = response.ok ? await sendActivity(subscription, payload, bearer).catch(() => ({ code: 'ACTIVITY_TRANSPORT_ERROR' })) : { code: 'SKIPPED' };
+  const activity: ActivityResult = response.ok ? await sendActivity(subscription, payload, bearer, options.beforeSend).catch(() => ({ code: 'ACTIVITY_TRANSPORT_ERROR' })) : { code: 'SKIPPED' };
   const feedback = activity.clearActivityUpdate ? { clearActivityUpdate: activity.clearActivityUpdate } : {};
   if (activity.code.startsWith('ACTIVITY_')) return { ok: false, code: `${activity.code}_ALERT_SENT`, ...feedback };
   return { ok: response.ok, code: ['Unregistered', 'BadDeviceToken', 'DeviceTokenNotForTopic'].includes(reason)
