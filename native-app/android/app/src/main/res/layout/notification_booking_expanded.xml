@@ -19,7 +19,7 @@
     <TextView style="@style/TextAppearance.Compat.Notification.Line2" android:id="@+id/booking_vehicle" android:layout_width="match_parent" android:layout_height="wrap_content" android:textSize="14sp" android:paddingTop="2dp" android:maxLines="2" android:ellipsize="end"/>
     <TextView style="@style/TextAppearance.Compat.Notification.Line2" android:id="@+id/booking_branch" android:layout_width="match_parent" android:layout_height="wrap_content" android:textSize="12sp" android:paddingTop="4dp" android:maxLines="1" android:ellipsize="end"/>
     <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center_vertical" android:orientation="horizontal" android:paddingTop="12dp">
-        <Space android:layout_width="0dp" android:layout_weight="1" android:layout_height="1dp"/>
+        <TextView android:layout_width="0dp" android:layout_weight="1" android:layout_height="1dp"/>
         <TextView style="@style/TextAppearance.Compat.Notification.Title" android:id="@+id/booking_link" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="예약 정보 확인  ›" android:textSize="13sp" android:textStyle="bold"/>
     </LinearLayout>
 </LinearLayout>
