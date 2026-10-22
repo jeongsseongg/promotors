@@ -48,7 +48,7 @@ async function context() {
   check(release.attributes.version === TARGET.version, 'BUILD_VERSION_MISMATCH');
   check(build.attributes.processingState === 'VALID', 'BUILD_NOT_VALID');
   check(build.attributes.usesNonExemptEncryption === false, 'EXPORT_COMPLIANCE_UNCONFIRMED');
-  const submissions = (await request(`/v1/apps/${APP}/reviewSubmissions?limit=50&include=items,items.appStoreVersion`));
+  const submissions = (await request(`/v1/apps/${APP}/reviewSubmissions?limit=50&include=items`));
   return {app, versions, build, submissions, target: versions.find(v => v.attributes.versionString === TARGET.version)};
 }
 async function snapshot(ctx) {
