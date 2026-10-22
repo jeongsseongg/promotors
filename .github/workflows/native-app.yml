@@ -5,6 +5,19 @@ on:
     paths: ['native-app/**', '.github/workflows/native-app.yml']
   workflow_dispatch:
     inputs:
+      review_only:
+        description: 업로드된 프로모터스 빌드의 정식 심사 상태 확인 및 제출
+        type: boolean
+        default: false
+      review_mode:
+        description: inspect는 읽기 전용, prepare는 초안 준비, submit은 정식 심사 제출
+        type: choice
+        options: [inspect, prepare, submit]
+        default: inspect
+      confirm_review_version:
+        description: 준비 또는 제출할 정확한 버전/빌드 (예 1.1.2/38)
+        type: string
+        default: ""
       confirm_exempt_version:
         description: 기존 면제 신고와 동일함을 확인한 정확한 버전/빌드 (평소에는 비움)
         type: string
@@ -32,11 +45,11 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: promotors-independent-native
-  cancel-in-progress: true
+  group: ${{ inputs.review_only && 'promotors-store-review' || 'promotors-independent-native' }}
+  cancel-in-progress: ${{ inputs.review_only != true }}
 jobs:
   server:
-    if: ${{ inputs.testflight_only != true }}
+    if: ${{ inputs.testflight_only != true && inputs.review_only != true }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -49,7 +62,7 @@ jobs:
       - name: Verify native server privacy, registration and reservation actions
         run: node --test scripts/test-existing-testflight.cjs scripts/test-customer-activity-sql.cjs scripts/test-customer-push.cjs scripts/test-apns-activity-lifecycle.cjs scripts/test-native-activity-feedback.cjs scripts/test-fcm-account-switch.cjs scripts/test-fcm-subscribe.cjs scripts/test-fcm-transport.cjs scripts/test-fcm-worker.cjs scripts/test-native-booking-action.cjs scripts/test-native-push.cjs scripts/test-native-subscribe.cjs native-app/server/tests/test-native-sync.cjs
   android:
-    if: ${{ inputs.testflight_only != true }}
+    if: ${{ inputs.testflight_only != true && inputs.review_only != true }}
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
@@ -127,7 +140,7 @@ jobs:
             native-app/qa-results/**
           retention-days: 7
   ios:
-    if: ${{ inputs.android_only != true && inputs.testflight_only != true }}
+    if: ${{ inputs.android_only != true && inputs.testflight_only != true && inputs.review_only != true }}
     runs-on: macos-26
     timeout-minutes: 55
     defaults:
@@ -229,7 +242,7 @@ jobs:
           retention-days: 7
 
   testflight:
-    if: ${{ github.event_name == 'workflow_dispatch' && inputs.testflight_only }}
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.testflight_only && inputs.review_only != true }}
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
@@ -255,4 +268,29 @@ jobs:
         with:
           name: existing-internal-testflight
           path: ${{ runner.temp }}/testflight-assignment.json
+          retention-days: 7
+  appstore-review:
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.review_only }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.19.0
+      - name: Check review submission script
+        run: node --check native-app/scripts/submit-appstore-review.cjs
+      - name: Read or submit the exact existing App Store build
+        env:
+          PM_REVIEW_MODE: ${{ inputs.review_mode }}
+          PM_CONFIRM_REVIEW_VERSION: ${{ inputs.confirm_review_version }}
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_PRIVATE_KEY: ${{ secrets.ASC_PRIVATE_KEY }}
+        run: node native-app/scripts/submit-appstore-review.cjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: appstore-review-status
+          path: ${{ runner.temp }}/appstore-review-status.json
           retention-days: 7
