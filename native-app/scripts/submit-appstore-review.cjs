@@ -49,6 +49,10 @@ async function context() {
   check(build.attributes.processingState === 'VALID', 'BUILD_NOT_VALID');
   check(build.attributes.usesNonExemptEncryption === false, 'EXPORT_COMPLIANCE_UNCONFIRMED');
   const submissions = (await request(`/v1/apps/${APP}/reviewSubmissions?limit=50&include=items`));
+  for (const submission of submissions.data.filter(s => ['READY_FOR_REVIEW', 'WAITING_FOR_REVIEW', 'IN_REVIEW'].includes(s.attributes.state))) {
+    const rows = (await request(`/v1/reviewSubmissions/${submission.id}/items?include=appStoreVersion&limit=50`)).data;
+    submissions.included = [...(submissions.included || []).filter(i => !rows.some(r => r.id === i.id)), ...rows];
+  }
   return {app, versions, build, submissions, target: versions.find(v => v.attributes.versionString === TARGET.version)};
 }
 async function snapshot(ctx) {
@@ -126,7 +130,7 @@ async function submit(ctx) {
     await request('/v1/reviewSubmissionItems', 'POST', data('reviewSubmissionItems', null, null,
       {reviewSubmission: link('reviewSubmissions', submission.id), appStoreVersion: link('appStoreVersions', target.id)}));
   }
-  const actualItems = (await request(`/v1/reviewSubmissions/${submission.id}/items?limit=50`)).data;
+  const actualItems = (await request(`/v1/reviewSubmissions/${submission.id}/items?include=appStoreVersion&limit=50`)).data;
   check(actualItems.length === 1 && actualItems[0].relationships?.appStoreVersion?.data?.id === target.id, 'SUBMISSION_SCOPE_MISMATCH');
   await request(`/v1/reviewSubmissions/${submission.id}`, 'PATCH', data('reviewSubmissions', submission.id, {submitted: true}));
   const verified = (await request(`/v1/reviewSubmissions/${submission.id}`)).data;
