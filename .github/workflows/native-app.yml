@@ -15,7 +15,7 @@ on:
         options: [inspect, prepare, submit, release]
         default: inspect
       confirm_review_version:
-        description: 준비 또는 제출할 정확한 버전/빌드 (예 1.1.2/38)
+        description: 준비·제출·공개할 정확한 버전/빌드 (예 1.1.2/38)
         type: string
         default: ""
       confirm_exempt_version:

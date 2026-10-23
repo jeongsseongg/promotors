@@ -139,6 +139,7 @@ async function submit(ctx) {
 async function releaseApprovedVersion(ctx) {
   const target = ctx.target;
   check(target?.id === 'ebc6c970-833d-4f1b-b20e-c7d11893cf91', 'RELEASE_VERSION_ID_MISMATCH');
+  check(ctx.build.attributes.version === TARGET.build, 'RELEASE_BUILD_NUMBER_MISMATCH');
   const attached = (await request(`/v1/appStoreVersions/${target.id}/relationships/build`)).data;
   check(attached?.id === ctx.build.id, 'ATTACHED_BUILD_MISMATCH');
   const state = target.attributes.appStoreState;
