@@ -10,9 +10,9 @@ on:
         type: boolean
         default: false
       review_mode:
-        description: inspect는 읽기 전용, prepare는 초안 준비, submit은 정식 심사 제출
+        description: inspect는 조회, prepare는 초안, submit은 심사 제출, release는 승인된 정확한 버전 공개
         type: choice
-        options: [inspect, prepare, submit]
+        options: [inspect, prepare, submit, release]
         default: inspect
       confirm_review_version:
         description: 준비 또는 제출할 정확한 버전/빌드 (예 1.1.2/38)

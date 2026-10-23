@@ -136,13 +136,34 @@ async function submit(ctx) {
   const verified = (await request(`/v1/reviewSubmissions/${submission.id}`)).data;
   check(['WAITING_FOR_REVIEW', 'IN_REVIEW', 'COMPLETE'].includes(verified.attributes.state), 'SUBMISSION_NOT_ACCEPTED');
 }
+async function releaseApprovedVersion(ctx) {
+  const target = ctx.target;
+  check(target?.id === 'ebc6c970-833d-4f1b-b20e-c7d11893cf91', 'RELEASE_VERSION_ID_MISMATCH');
+  const attached = (await request(`/v1/appStoreVersions/${target.id}/relationships/build`)).data;
+  check(attached?.id === ctx.build.id, 'ATTACHED_BUILD_MISMATCH');
+  const state = target.attributes.appStoreState;
+  if (['PENDING_APPLE_RELEASE', 'PROCESSING_FOR_APP_STORE', 'READY_FOR_SALE', 'READY_FOR_DISTRIBUTION'].includes(state))
+    return {alreadyRequested: true, versionId: target.id, state};
+  check(state === 'PENDING_DEVELOPER_RELEASE' && target.attributes.releaseType === 'MANUAL', 'APPROVED_MANUAL_RELEASE_REQUIRED');
+  const submission = ctx.submissions.data.find(s => s.id === '9606d566-2b35-4394-adfb-351ebd6f4b7c');
+  check(submission?.attributes.state === 'COMPLETE', 'APPROVED_SUBMISSION_REQUIRED');
+  const items = (await request(`/v1/reviewSubmissions/${submission.id}/items?include=appStoreVersion&limit=50`)).data;
+  check(items.length === 1 && items[0].attributes.state === 'APPROVED' &&
+    items[0].relationships?.appStoreVersion?.data?.id === target.id, 'APPROVED_SUBMISSION_SCOPE_REQUIRED');
+  const released = await request('/v1/appStoreVersionReleaseRequests', 'POST',
+    data('appStoreVersionReleaseRequests', null, null, {appStoreVersion: link('appStoreVersions', target.id)}));
+  return {requestedAt: new Date().toISOString(), versionId: target.id, requestId: released.data.id};
+}
 async function main() {
-  check(['inspect', 'prepare', 'submit'].includes(mode), 'INVALID_MODE');
+  check(['inspect', 'prepare', 'submit', 'release'].includes(mode), 'INVALID_MODE');
   if (mode !== 'inspect') check(process.env.PM_CONFIRM_REVIEW_VERSION === `${TARGET.version}/${TARGET.build}`, 'EXPLICIT_VERSION_CONFIRMATION_REQUIRED');
   let ctx = await context();
   if (mode === 'prepare') { await prepare(ctx); ctx = await context(); }
   if (mode === 'submit') { await submit(ctx); ctx = await context(); }
+  let releaseAction;
+  if (mode === 'release') { releaseAction = await releaseApprovedVersion(ctx); ctx = await context(); }
   const result = await snapshot(ctx);
+  if (releaseAction) result.releaseAction = releaseAction;
   const output = JSON.stringify(result, null, 2);
   console.log(output);
   if (process.env.RUNNER_TEMP) fs.writeFileSync(path.join(process.env.RUNNER_TEMP, 'appstore-review-status.json'), output);
