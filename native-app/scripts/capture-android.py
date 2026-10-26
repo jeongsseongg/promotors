@@ -31,7 +31,7 @@ notification_drawer_recoveries = 0
 def hierarchy():
     global dump_number
     if live_capture:
-        result = adb('shell', 'am', 'instrument', '-w', 'kr.promotors.app.test/kr.promotors.app.qa.CaptureInstrumentation').decode('utf8')
+        result = adb('shell', 'am', 'instrument', '-w', '-e', 'surface', 'notifications', 'kr.promotors.app.test/kr.promotors.app.qa.CaptureInstrumentation').decode('utf8')
         assert 'PM_XML_BEGIN' in result and 'PM_XML_END' in result, result
         return result.split('PM_XML_BEGIN', 1)[1].split('PM_XML_END', 1)[0].strip()
     dump_number += 1
