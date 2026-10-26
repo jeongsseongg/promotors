@@ -27,10 +27,11 @@ sys.excepthook = failed
 dump_number = 0
 live_capture = False
 launcher_recoveries = 0
+notification_drawer_recoveries = 0
 def hierarchy():
     global dump_number
     if live_capture:
-        result = adb('shell', 'am', 'instrument', '-w', 'kr.promotors.app.test/kr.promotors.app.qa.CaptureInstrumentation').decode('utf8')
+        result = adb('shell', 'am', 'instrument', '-w', '-e', 'surface', 'notifications', 'kr.promotors.app.test/kr.promotors.app.qa.CaptureInstrumentation').decode('utf8')
         assert 'PM_XML_BEGIN' in result and 'PM_XML_END' in result, result
         return result.split('PM_XML_BEGIN', 1)[1].split('PM_XML_END', 1)[0].strip()
     dump_number += 1
@@ -43,7 +44,8 @@ def hierarchy():
         return ''
 
 def wait_for(label):
-    global launcher_recoveries
+    global launcher_recoveries, notification_drawer_recoveries
+    drawer_attempts = 0
     for _ in range(35):
         source = hierarchy()
         if "Pixel Launcher isn&apos;t responding" in source or "Pixel Launcher isn't responding" in source:
@@ -54,6 +56,12 @@ def wait_for(label):
             continue
         if label in source and 'com.facebook.react.devsupport' not in source:
             return source
+        if live_capture and 'package="com.google.android.apps.nexuslauncher"' in source and drawer_attempts < 3:
+            # ADB may report success before the launcher finishes the HOME transition.
+            # Reopen only from the observed launcher; keep all notification assertions.
+            drawer_attempts += 1
+            notification_drawer_recoveries += 1
+            adb('shell', 'cmd', 'statusbar', 'expand-notifications')
         time.sleep(2)
     raise RuntimeError('Native screen not ready: ' + label)
 
@@ -263,5 +271,5 @@ set_appearance('no')
 logs = adb('logcat', '-d', '-s', 'ReactNativeJS').decode('utf8')
 assert 'PROMOTORS_NATIVE_QA_READY' in logs, 'Native QA readiness marker absent'
 assert not re.search(r'operationalRequests["\\: ]+[1-9]', logs), 'QA made a production network request'
-(output / 'verification.json').write_text(json.dumps({'screens': results, 'osPermissionApp': '프로모터스', 'automaticPermissionAndConnection': True, 'operationalRequests': 0, 'physicalPushDelivery': 'not-tested', 'emulatorLauncherRecoveries': launcher_recoveries}, ensure_ascii=False, indent=2), encoding='utf8')
+(output / 'verification.json').write_text(json.dumps({'screens': results, 'osPermissionApp': '프로모터스', 'automaticPermissionAndConnection': True, 'operationalRequests': 0, 'physicalPushDelivery': 'not-tested', 'emulatorLauncherRecoveries': launcher_recoveries, 'notificationDrawerRecoveries': notification_drawer_recoveries}, ensure_ascii=False, indent=2), encoding='utf8')
 print('Independent Android native UI and OS permission verified; no real push sent.')

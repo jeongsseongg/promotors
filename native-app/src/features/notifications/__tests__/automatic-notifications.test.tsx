@@ -2,7 +2,7 @@ import React from 'react';
 import {AppState, AppStateStatus, Modal, Text} from 'react-native';
 import TestRenderer, {act, ReactTestRenderer} from 'react-test-renderer';
 import App from '../../../App';
-import {Button, Field, MenuRow} from '../../../components/Controls';
+import {Button, Choice, Field, MenuRow} from '../../../components/Controls';
 import {NativePush, NativeServices, PushStatus, Route} from '../../../components/AppContext';
 import {Screen} from '../../../components/Screen';
 import {createQaEnvironment} from '../../../qa/fixture-services';
@@ -97,6 +97,24 @@ test('실제 로그인 화면의 로그인 완료 후 별도 연결 버튼 없�
   expect(value.push.connect).toHaveBeenCalledTimes(1);
   expect(modalText(tree)).toContain('앱 알림이 연결됐어요');
 });
+
+test('관리자 로그인도 로그인 유지 후 연결 버튼 없이 앱 알림을 연결한다', async () => {
+  const value = fixture(true), tree = await mount(value, {name: 'login'});
+  await act(async () => {tree.root.findAllByType(Choice).find(node => node.props.label === '관리자 로그인')!.props.onPress();});
+  await act(async () => {tree.root.findAllByType(Field).find(node => node.props.label === '관리자 비밀번호')!.props.onChangeText('synthetic-admin-password');});
+  await press(tree, '로그인');
+  expect(value.auth.session.snapshot().role).toBe('general');
+  expect(value.push.connect).toHaveBeenCalledTimes(1);
+  expect(modalText(tree)).toContain('앱 알림이 연결됐어요');
+});
+
+test('일반 알림만 연결됐으면 상시 알림은 별도 준비 상태로 표시한다', async () => {
+  const value = fixture();
+  value.setStatus({permission: 'granted', connected: true, ongoing: {supported: true, enabled: true, connected: false}});
+  const tree = await mount(value, {name: 'notification-settings'});
+  expect(text(tree.root)).toContain('상시 알림 연결 준비 중');
+  expect(text(tree.root)).not.toContain('상시 알림 연결됨');
+});
 test('이미 연결된 기기나 사용자가 직접 끈 기기에는 자동 연결·안내를 반복하지 않는다', async () => {
   for (const patch of [{permission: 'granted' as const, connected: true}, {automatic: false}]) {
     const value = fixture(); value.setStatus(patch); const tree = await mount(value);
@@ -163,6 +181,30 @@ test('서버 등록 실패는 오류로 남기고 사용자가 다시 누르면 
   await press(tree, '다시 시도');
   expect(value.push.connect).toHaveBeenCalledTimes(2);
   expect(modalText(tree)).toContain('앱 알림이 연결됐어요');
+});
+
+test('일시 등록 실패 후 앱에 다시 들어오면 버튼 없이 연결을 복구한다', async () => {
+  const value = fixture(); value.push.connect.mockRejectedValueOnce(new Error('offline'));
+  const tree = await mount(value);
+  expect(value.push.connect).toHaveBeenCalledTimes(1);
+  await foreground('background'); await foreground('active');
+  expect(value.push.connect).toHaveBeenCalledTimes(2);
+  expect(modalText(tree)).toContain('앱 알림이 연결됐어요');
+});
+
+test('일시 등록 실패는 활성 화면에서 자동 재시도하지만 나중에를 누르면 멈춘다', async () => {
+  jest.useFakeTimers();
+  try {
+    const value = fixture(); value.push.connect.mockRejectedValue(new Error('offline'));
+    const tree = await mount(value);
+    await act(async () => {await jest.advanceTimersByTimeAsync(2000);}); await settle();
+    expect(value.push.connect).toHaveBeenCalledTimes(2);
+    await press(tree, '나중에');
+    await act(async () => {await jest.advanceTimersByTimeAsync(120000);});
+    await foreground('background'); await foreground('active');
+    expect(value.push.connect).toHaveBeenCalledTimes(2);
+    expect(visibleModals(tree)).toHaveLength(0);
+  } finally {jest.useRealTimers();}
 });
 test('이전 계정의 연결 완료 응답은 새 계정의 성공 안내로 사용하지 않는다', async () => {
   const value = fixture(), connection = deferred<void>();

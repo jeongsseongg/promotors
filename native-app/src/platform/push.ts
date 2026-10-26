@@ -1,5 +1,6 @@
 import {NativeEventEmitter, NativeModules, Platform} from 'react-native';
 import type {NativeBookingSnapshot, NativePushPlatform, NotificationOpenTarget, Permission} from '../domain/types';
+import type {ActivityTokenEvent} from './activity-tokens';
 
 interface NativeBridge {
   getPermissionStatus(): Promise<Permission>;
@@ -11,6 +12,7 @@ interface NativeBridge {
   getInitialTarget(): Promise<NotificationOpenTarget | null>;
   syncBookingSchedule(value: NativeBookingSnapshot): Promise<unknown>;
   clearBookingSchedule(): Promise<void>;
+  getActivityTokenSnapshot?(): Promise<unknown>;
   consumeTrustedAction?(nonce: string): Promise<boolean>;
   addListener(name: string): void;
   removeListeners(count: number): void;
@@ -80,6 +82,20 @@ export async function deviceId() {
   return value;
 }
 export function bindingSnapshot() {return {binding: currentBinding, generation};}
+export interface ActivityTokenSnapshot {supported: boolean; enabled: boolean; binding: string | null; tokens: ActivityTokenEvent[]}
+export async function activityTokenSnapshot(): Promise<ActivityTokenSnapshot> {
+  const captured = bindingSnapshot();
+  const empty = {supported: false, enabled: false, binding: null, tokens: []};
+  if (Platform.OS !== 'ios' || !bridge?.getActivityTokenSnapshot) return empty;
+  const raw = await bridge.getActivityTokenSnapshot() as Partial<ActivityTokenSnapshot> | null;
+  if (captured.generation !== generation || captured.binding !== currentBinding) return empty;
+  const supported = raw?.supported === true, enabled = supported && raw?.enabled === true;
+  const binding = raw?.binding === currentBinding && currentBinding ? currentBinding : null;
+  const tokens = enabled && binding && Array.isArray(raw?.tokens) ? raw.tokens.filter(event =>
+    event && event.binding === binding && (event.kind === 'start' || event.kind === 'update') &&
+    typeof event.token === 'string' && /^[a-f0-9]{64,256}$/.test(event.token)) : [];
+  return {supported, enabled, binding, tokens};
+}
 export async function syncSchedule(value: NativeBookingSnapshot, captured: ReturnType<typeof bindingSnapshot>) {
   if (!captured.binding || captured.binding !== currentBinding || captured.generation !== generation) return;
   if (!value.active) {await native().clearBookingSchedule(); return;}

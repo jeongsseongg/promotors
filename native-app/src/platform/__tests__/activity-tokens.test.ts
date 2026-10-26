@@ -1,5 +1,5 @@
 import {NativeModules} from 'react-native';
-import {nativePush, onActivityToken} from '../push';
+import {activityTokenSnapshot, nativePush, onActivityToken} from '../push';
 import type {ActivityTokenContext, ActivityTokenEvent} from '../activity-tokens';
 function createActivityTokenQueue(options: Parameters<typeof import('../activity-tokens').createActivityTokenQueue>[0]) {return (require('../activity-tokens') as typeof import('../activity-tokens')).createActivityTokenQueue(options);}
 
@@ -13,6 +13,7 @@ jest.mock('react-native', () => ({
   NativeModules: {PromotorsPush: {
     bindConnection: jest.fn(async (target: string) => {mockListeners.get('pm-activity-token')?.({binding: target, kind: 'start', token: 'a'.repeat(64)});}),
     clearConnection: jest.fn(async () => {}),
+    getActivityTokenSnapshot: jest.fn(),
     addListener: jest.fn(), removeListeners: jest.fn(),
   }},
   NativeEventEmitter: jest.fn().mockImplementation(() => ({
@@ -40,6 +41,22 @@ test('로그아웃 뒤에는 이전 binding의 네이티브 토큰을 전달하�
   mockListeners.get('pm-activity-token')?.(token());
   expect(received).not.toHaveBeenCalled();
   stop();
+});
+
+test('이벤트를 놓쳐도 네이티브 현재 토큰을 조회해 등록할 수 있다', async () => {
+  await nativePush.clear(); await nativePush.bind(binding);
+  NativeModules.PromotorsPush.getActivityTokenSnapshot.mockResolvedValue({supported: true, enabled: true, binding, tokens: [token()]});
+  const snapshot = await activityTokenSnapshot();
+  expect(snapshot).toEqual({supported: true, enabled: true, binding, tokens: [token()]});
+});
+
+test('네이티브 조회가 늦게 끝나도 로그아웃한 계정의 토큰은 복구하지 않는다', async () => {
+  await nativePush.clear(); await nativePush.bind(binding);
+  let finish!: (value: unknown) => void;
+  NativeModules.PromotorsPush.getActivityTokenSnapshot.mockImplementationOnce(() => new Promise(resolve => {finish = resolve;}));
+  const reading = activityTokenSnapshot(); await nativePush.clear();
+  finish({supported: true, enabled: true, binding, tokens: [token()]});
+  expect((await reading).tokens).toEqual([]);
 });
 
 test('재연결 중 이전 binding 이벤트가 새 대기 토큰을 덮지 않는다', async () => {
@@ -140,6 +157,19 @@ test('동일 계정이어도 native 연결 세대가 바뀌면 이전 토큰을 
   queue.offer(token()); context = {...context, binding, generation: 2};
   await queue.flush();
   expect(register).not.toHaveBeenCalled();
+  queue.dispose();
+});
+
+test('이미 등록한 토큰은 반복 조회해도 보내지 않고 연결 세대가 바뀌면 다시 검증한다', async () => {
+  let context: ActivityTokenContext = {owner: 'account-a:1', binding, generation: 1};
+  const register = jest.fn().mockResolvedValue(undefined);
+  const queue = createActivityTokenQueue({context: () => context, register});
+  queue.offer(token()); await queue.flush();
+  queue.offer(token()); await queue.flush();
+  expect(register).toHaveBeenCalledTimes(1);
+  context = {...context, generation: 2}; queue.reconcile();
+  queue.offer(token()); await queue.flush();
+  expect(register).toHaveBeenCalledTimes(2);
   queue.dispose();
 });
 

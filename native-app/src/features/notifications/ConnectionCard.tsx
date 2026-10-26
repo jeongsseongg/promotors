@@ -2,12 +2,13 @@ import React, {useCallback, useState} from 'react';
 import {Text, View} from 'react-native';
 import {Button} from '../../components/Controls';
 import {usePush, useServices} from '../../components/AppContext';
-import {useResource} from '../../components/DataState';
+import {useForegroundRefresh, useResource} from '../../components/DataState';
 import {ui} from '../../theme/styles';
 
 export function ConnectionCard() {
   const push = usePush(), services = useServices(), [busy, setBusy] = useState(false), [error, setError] = useState(''), [message, setMessage] = useState('');
   const resource = useResource(useCallback(() => push.status(), [push]));
+  useForegroundRefresh(resource.reload, 15000);
   async function act(action: 'connect' | 'disconnect' | 'test') {
     if (busy) return; setBusy(true); setError(''); setMessage('');
     try {
@@ -25,11 +26,13 @@ export function ConnectionCard() {
   const status = resource.data;
   return <View style={ui.card}><Text style={ui.heading}>이 기기의 앱 알림</Text>
     <Text style={ui.body}>{status?.connected ? '연결됨 · 프로모터스 앱으로 알려드려요.' : status?.permission === 'denied' ? '휴대폰 설정에서 앱 알림이 꺼져 있어요.' : '예약과 정비 알림을 받으려면 연결해 주세요.'}</Text>
+    {status?.connected && status.ongoing?.supported ? <Text style={ui.body}>{!status.ongoing.enabled ? '상시 알림 꺼짐 · 휴대폰 설정에서 허용해 주세요.' : status.ongoing.connected ? '상시 알림 연결됨 · 예약과 정비 상태를 이어서 알려드려요.' : '상시 알림 연결 준비 중 · 자동으로 다시 확인하고 있어요.'}</Text> : null}
     <Text style={ui.muted}>앱을 닫아도 휴대폰 알림창과 잠금화면에서 확인할 수 있습니다. 잠금화면 표시와 소리는 휴대폰 설정을 따릅니다.</Text>
     {(error || resource.error) ? <Text accessibilityRole="alert" style={ui.error}>{error || resource.error}</Text> : null}
     {message ? <Text accessibilityRole="alert" style={ui.body}>{message}</Text> : null}
     {status?.permission === 'denied' ? <Button label="휴대폰 설정" onPress={() => void push.openSettings().catch(() => setError('휴대폰 설정을 열지 못했습니다.'))}/> :
       <Button label={status?.connected ? '테스트 알림 보내기' : '앱 알림 연결'} busy={busy} onPress={() => void act(status?.connected ? 'test' : 'connect')} testID="native-push-connect"/>}
     {status?.connected ? <Button secondary label="이 기기 연결 해제" disabled={busy} onPress={() => void act('disconnect')}/> : null}
+    {status?.connected && status.ongoing?.supported && !status.ongoing.enabled ? <Button secondary label="상시 알림 설정" onPress={() => void push.openSettings().catch(() => setError('휴대폰 설정을 열지 못했습니다.'))}/> : null}
   </View>;
 }
