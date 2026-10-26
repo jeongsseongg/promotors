@@ -39,7 +39,7 @@ function QaApp() {
     const method = NativeModules.PromotorsPush?.getQaConfiguration;
     if (!method) {setError('승인된 네이티브 테스트 환경이 아닙니다.'); return;}
     Promise.resolve(method()).then(config => {
-      if (!config || !['booking', 'mypage', 'admin', 'notifications', 'updates', 'setup', 'setup-denied', 'inbox', 'detail', 'customer'].includes(config.screen)) throw new Error('Debug QA 설정을 확인해 주세요.');
+      if (!config || !['home', 'booking', 'mypage', 'admin', 'notifications', 'updates', 'setup', 'setup-denied', 'inbox', 'detail', 'customer'].includes(config.screen)) throw new Error('Debug QA 설정을 확인해 주세요.');
       const imageUri = Image.resolveAssetSource(require('./assets/qa/workshop.png')).uri;
       if (active) {
         setEnvironment({...createQaEnvironment(config, imageUri), screen: config.screen, showNativeControls: ['admin', 'customer'].includes(config.screen)});

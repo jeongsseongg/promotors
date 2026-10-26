@@ -13,7 +13,7 @@ checker = pathlib.Path(os.environ['RUNNER_TEMP']) / 'verify-native-screen'
 subprocess.run(['swiftc', str(root / 'scripts/verify-native-screen.swift'), '-o', str(checker)], check=True)
 ongoing_only = os.environ.get('PM_CAPTURE_SCOPE') == 'ongoing'
 
-titles = {'booking': '정비 예약', 'mypage': '마이페이지', 'admin': '예약관리', 'notifications': '앱 알림 설정', 'updates': '새 버전이 나왔어요', 'setup': '앱 알림이 연결됐어요', 'setup-denied': '앱 알림을 켜주세요', 'inbox': '프로모터스 알림', 'detail': '예약 상세', 'customer': '마이페이지'}
+titles = {'home': '정비예약', 'booking': '정비 예약', 'mypage': '마이페이지', 'admin': '예약관리', 'notifications': '앱 알림 설정', 'updates': '새 버전이 나왔어요', 'setup': '앱 알림이 연결됐어요', 'setup-denied': '앱 알림을 켜주세요', 'inbox': '프로모터스 알림', 'detail': '예약 상세', 'customer': '마이페이지'}
 
 def sim(*args):
     return subprocess.check_output(['xcrun', 'simctl', *args])
