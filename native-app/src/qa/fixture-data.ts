@@ -22,7 +22,7 @@ export function createQaData() {
       {name: '프로모터스 새솔점', addr: '새솔점 위치 예시', tel: '', imageKey: 'qa-workshop'},
       {name: '프로모터스 부천점', addr: '부천점 위치 예시', tel: '', imageKey: 'qa-workshop'},
     ],
-    cases: [{id: 'qa-case', title: 'BMW 520d · 엔진오일 교환', branch: '프로모터스 안산점', date: qaDate(), imageKeys: ['qa-workshop'], body: '차량 상태를 점검하고 정해진 절차에 따라 엔진오일과 필터를 교환했습니다. 예시 화면입니다.'}],
+    cases: [{id: 'qa-case', title: '공개 정비사례 · 엔진오일 교환', branch: '프로모터스 안산점', date: qaDate(), imageKeys: ['qa-workshop'], body: '차량 상태를 점검하고 정해진 절차에 따라 엔진오일과 필터를 교환했습니다. 예시 화면입니다.'}],
     notices: [{id: 'qa-notice', title: '프로모터스 앱 이용 안내', date: qaDate(), body: '방문 예약과 정비사진, 정비 이력을 프로모터스 앱에서 확인하세요.'}],
     introSlides: [{key: 'qa-workshop', alt: '정비 작업 예시'}],
     products: [{id: 'qa-oil', name: '엔진오일 교환'}, {id: 'qa-brake', name: '브레이크 점검'}, {id: 'qa-inspection', name: '차량 점검'}], eventBanners: [],

@@ -9,11 +9,13 @@ import {BookingInput} from '../../domain/types';
 import {Calendar, dateKey, monthRange} from './Calendar';
 import {GuestFields, GuestValues, ServiceFields, validateGuest} from './BookingForm';
 import {ui} from '../../theme/styles';
+import {ReserveEntry} from './ReserveEntry';
 
 export function ReserveScreen() {
   const services = useServices(), nav = useNav(), session = services.session.snapshot();
   const [month, setMonth] = useState(new Date()), [branch, setBranch] = useState(''), [date, setDate] = useState(''), [time, setTime] = useState('');
   const [step, setStep] = useState(0), [selected, setSelected] = useState<string[]>([]), [memo, setMemo] = useState('');
+  const [guestEntry, setGuestEntry] = useState(false);
   const [guest, setGuest] = useState<GuestValues>({name: '', phone: '', car: '', model: '', bookingPin: '', agreed: false});
   const [busy, setBusy] = useState(false), [error, setError] = useState(''), [done, setDone] = useState('');
   const setup = useResource(useCallback(async () => {
@@ -39,6 +41,7 @@ export function ReserveScreen() {
     finally {setBusy(false);}
   }
   const changeMonth = (value: Date) => {setMonth(value); setDate(''); setTime('');};
+  if (!session.authenticated && !guestEntry) return <ReserveEntry onGuest={() => setGuestEntry(true)}/>;
   if (done) return <Screen title="예약 신청 완료" onBack={() => nav.go({name: 'home'})}>
     <View style={ui.card}><Text style={ui.title}>예약 신청이{ '\n' }접수되었어요.</Text><Text style={ui.heading}>{done}</Text>
       <Text style={ui.body}>매장에서 확인하면 예약이 확정됩니다. 알림과 예약 내역에서 확인해 주세요.</Text>

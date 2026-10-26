@@ -5,8 +5,15 @@ import {createQaSession} from './fixture-session';
 import {createQaPush} from './fixture-push';
 import {createQaAccount, createQaDeletion} from './fixture-account';
 import {createQaNotifications} from './fixture-notifications';
+import {parseWorkshopFeed} from '../api/workshop-feed';
 
-export type QaConfiguration = {screen: 'booking' | 'mypage' | 'admin' | 'notifications' | 'updates' | 'setup' | 'setup-denied' | 'inbox' | 'detail' | 'customer'; requestOsPermission?: boolean};
+function verifyNativeFeedRuntime() {
+  const sample = '<rss><channel><item><title>안산 공개 정비사례</title><link>https://blog.naver.com/lsh861124/123456</link><description><![CDATA[<img src="https://blogthumb.pstatic.net/example.jpg">]]></description></item></channel></rss>';
+  const posts = parseWorkshopFeed(sample, [{key: 'ansan', branch: '프로모터스 안산점', keywords: ['안산']}]);
+  if (posts.length !== 1 || posts[0].imageUrls?.length !== 1) throw new Error('네이티브 정비사례 읽기 검증에 실패했습니다.');
+}
+
+export type QaConfiguration = {screen: 'home' | 'booking' | 'mypage' | 'admin' | 'notifications' | 'updates' | 'setup' | 'setup-denied' | 'inbox' | 'detail' | 'customer'; requestOsPermission?: boolean};
 export function createQaEnvironment(config: QaConfiguration, imageUri: string) {
   const admin = ['admin', 'notifications', 'inbox', 'detail'].includes(config.screen);
   const data = createQaData(), auth = createQaSession(admin), calls: string[] = [];
@@ -30,7 +37,7 @@ export function createQaEnvironment(config: QaConfiguration, imageUri: string) {
   const push = createQaPush(!!config.requestOsPermission, enabled => {data.notificationState.preferences.enabled = enabled;}, config.screen.startsWith('setup'), config.screen === 'setup-denied');
   const services = {
     session: auth.session,
-    publicContent: {load: async () => clone(data.content), assetUrl: (_key: string) => imageUri, legacyAsset: async (_key: string) => null},
+    publicContent: {load: async () => clone(data.content), caseFeed: async () => {verifyNativeFeedRuntime(); return clone(data.content);}, assetUrl: (_key: string) => imageUri, legacyAsset: async (_key: string) => null},
     bookings: {
       list: async () => clone(scoped()),
       hours: async () => Object.fromEntries(data.content.branches.map(branch => [branch.name, {days: Object.fromEntries(Array.from({length: 7}, (_, day) => [String(day), {open: day !== 0, start: '09:30', end: '19:00'}])), lunchEnabled: true, lunchStart: '12:00', lunchEnd: '13:00', closedDates: []}])),
@@ -47,6 +54,6 @@ export function createQaEnvironment(config: QaConfiguration, imageUri: string) {
     notifications: createQaNotifications(data, push, calls),
     deletion: createQaDeletion(calls),
   } as unknown as NativeServices;
-  const initialRoute: Route = config.screen === 'customer' ? {name: 'my'} : config.screen === 'booking' ? {name: 'reserve'} : ['mypage', 'updates', 'setup', 'setup-denied'].includes(config.screen) ? {name: 'my'} : config.screen === 'admin' ? {name: 'admin'} : config.screen === 'inbox' ? {name: 'notifications'} : config.screen === 'detail' ? {name: 'admin-booking', id: 'qa-pending'} : {name: 'notification-settings'};
+  const initialRoute: Route = config.screen === 'home' ? {name: 'home'} : config.screen === 'customer' ? {name: 'my'} : config.screen === 'booking' ? {name: 'reserve'} : ['mypage', 'updates', 'setup', 'setup-denied'].includes(config.screen) ? {name: 'my'} : config.screen === 'admin' ? {name: 'admin'} : config.screen === 'inbox' ? {name: 'notifications'} : config.screen === 'detail' ? {name: 'admin-booking', id: 'qa-pending'} : {name: 'notification-settings'};
   return {services, push, initialRoute, calls, data, qaDate, updates: config.screen === 'updates' ? {check: async () => ({key: 'qa-update', version: '2.0.0 (실제 발송 없음)'}), openStore: async () => {calls.push('updates.openStore');}} : undefined};
 }

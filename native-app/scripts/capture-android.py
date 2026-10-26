@@ -165,12 +165,14 @@ source = wait_for('앱 알림 설정')
 assert '연결됨' in source and '테스트 알림 보내기' in source
 save('automatic-notification-settings', source)
 results = [{'screen': 'setup', 'systemAppearance': 'light', 'nativeViews': True, 'webViewCount': 0, 'automaticOsPermission': True, 'allowImmediatelyConnected': True, 'settingsOpened': True}]
-for screen, label in [('booking', '정비 예약'), ('mypage', '마이페이지'), ('admin', '예약관리'), ('notifications', '앱 알림 설정'), ('updates', '새 버전이 나왔어요'), ('setup-denied', '앱 알림을 켜주세요'), ('inbox', '프로모터스 알림'), ('detail', '예약 상세'), ('customer', '마이페이지')]:
+for screen, label in [('home', '정비예약'), ('booking', '정비 예약'), ('mypage', '마이페이지'), ('admin', '예약관리'), ('notifications', '앱 알림 설정'), ('updates', '새 버전이 나왔어요'), ('setup-denied', '앱 알림을 켜주세요'), ('inbox', '프로모터스 알림'), ('detail', '예약 상세'), ('customer', '마이페이지')]:
     adb('shell', 'am', 'force-stop', 'kr.promotors.app')
     adb('shell', 'am', 'start', '-n', 'kr.promotors.app/.MainActivity', '--es', 'qaScreen', screen)
     source = wait_for('실제 발송 없음')
     source = wait_for(label)
     save(screen, source)
+    if screen == 'home':
+        subprocess.run([sys.executable, str(root / 'scripts/check-home-layout.py'), str(output / 'home.xml')], check=True)
     results.append({'screen': screen, 'systemAppearance': 'light', 'nativeViews': True, 'webViewCount': 0})
     if screen == 'customer':
         for phase, button, title in [('confirmed', '확정 예시', '예약이 확정되었어요'), ('visit', '방문 예시', '방문을 기다리고 있어요'), ('repair', '정비 예시', '내 차 정비 중'), ('completed', '완료 예시', '정비가 완료되었어요')]:
