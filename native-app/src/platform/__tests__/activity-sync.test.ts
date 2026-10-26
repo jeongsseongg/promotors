@@ -27,7 +27,7 @@ test('휴대폰에서 상시 알림을 끄면 일반 토큰이 있어도 연결 
   expect(value.register).not.toHaveBeenCalled(); value.sync.dispose();
 });
 test('계정 변경 도중 도착한 이전 토큰 조회 응답을 등록하지 않는다', async () => {
-  const value = fixture(); let finish!: (value: Awaited<ReturnType<typeof value.read>>) => void;
+  const value = fixture(); let finish!: (snapshot: Awaited<ReturnType<typeof value.read>>) => void;
   value.read.mockImplementationOnce(() => new Promise(resolve => {finish = resolve;}));
   const refreshing = value.sync.refresh();
   value.setContext({owner: 'account-b', binding, generation: 2});
