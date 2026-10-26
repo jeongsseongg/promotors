@@ -1,4 +1,6 @@
 import {createWorkshopFeed, parseWorkshopFeed} from '../workshop-feed';
+import {createPublicContentService} from '../public';
+import type {RpcClient} from '../client';
 
 const item = (title: string, link = 'https://blog.naver.com/lsh861124/123456', photo = 'https://blogthumb.pstatic.net/example.jpg') =>
   `<item><title><![CDATA[${title}]]></title><link>${link}</link><pubDate>Mon, 26 Oct 2026 00:30:00 +0900</pubDate><description><![CDATA[<p>실제 정비 과정</p><img src="${photo}">]]></description></item>`;
@@ -20,6 +22,13 @@ test('외부 링크와 이미지 주소를 앱 안에서 임의로 열거나 불
 test('과도한 XML과 외부 엔티티 선언을 파싱 전에 거절한다', () => {
   expect(() => parseWorkshopFeed('<!DOCTYPE rss [<!ENTITY a SYSTEM "file:///etc/passwd">]>' + rss(item('안산 정비')), groups)).toThrow();
   expect(() => parseWorkshopFeed(' '.repeat(2_000_001), groups)).toThrow();
+});
+test('공개 저장 자료의 임의 주소를 휴대폰 사진 주소나 외부 링크로 승격하지 않는다', async () => {
+  const rpc = {call: jest.fn(async () => [{data_key: 'promotors-cases', payload: [{id: 'ordinary', title: '공개 사례', imageUrls: ['file:///private/example'], sourceUrl: 'javascript:alert(1)'}]}])} as unknown as RpcClient;
+  const content = await createPublicContentService(rpc).load();
+  expect(content.cases[0].imageUrls).toBeUndefined();
+  expect(content.cases[0].sourceUrl).toBeUndefined();
+  expect(rpc.call).toHaveBeenCalledWith('pm_sync_read', {p_token: null});
 });
 test('한 지점 RSS가 실패해도 다른 지점의 사진과 실패 상태를 함께 반환한다', async () => {
   const send = jest.fn(async (url: string) => {
