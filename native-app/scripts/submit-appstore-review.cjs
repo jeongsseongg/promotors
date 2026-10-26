@@ -101,7 +101,11 @@ async function prepareReviewDetail(target, previous) {
   await request('/v1/appStoreReviewDetails', 'POST', data('appStoreReviewDetails', null, attributes, {appStoreVersion: link('appStoreVersions', target.id)}));
 }
 async function prepare(ctx) {
-  if (ctx.target && accepted.has(ctx.target.attributes.appStoreState)) return;
+  if (ctx.target && accepted.has(ctx.target.attributes.appStoreState)) {
+    const attached = (await request(`/v1/appStoreVersions/${ctx.target.id}/relationships/build`)).data;
+    check(attached?.id === ctx.build.id, 'ATTACHED_BUILD_MISMATCH');
+    return;
+  }
   const previous = ctx.versions.filter(v => v.attributes.versionString !== TARGET.version &&
     ['READY_FOR_SALE', 'READY_FOR_DISTRIBUTION'].includes(v.attributes.appStoreState))
     .sort((a, b) => b.attributes.versionString.localeCompare(a.attributes.versionString, undefined, {numeric: true}))[0];
@@ -139,6 +143,38 @@ async function submit(ctx) {
   const verified = (await request(`/v1/reviewSubmissions/${submission.id}`)).data;
   check(['WAITING_FOR_REVIEW', 'IN_REVIEW', 'COMPLETE'].includes(verified.attributes.state), 'SUBMISSION_NOT_ACCEPTED');
 }
+async function cancelReview(ctx) {
+  const target = ctx.target;
+  const pending = new Set(['WAITING_FOR_REVIEW', 'IN_REVIEW']);
+  check(target && pending.has(target.attributes.appStoreState), 'PENDING_REVIEW_REQUIRED');
+  const previousBuild = process.env.PM_CONFIRM_REPLACED_BUILD;
+  check(/^[0-9]+$/.test(previousBuild || '') && Number.isSafeInteger(Number(previousBuild)) &&
+    Number(previousBuild) < Number(TARGET.build), 'EXACT_PREVIOUS_BUILD_REQUIRED');
+  const attached = (await request(`/v1/appStoreVersions/${target.id}/relationships/build`)).data;
+  check(attached?.id && attached.id !== ctx.build.id, 'PREVIOUS_ATTACHMENT_REQUIRED');
+  const old = (await request(`/v1/builds/${attached.id}`)).data;
+  check(old?.attributes.version === previousBuild, 'PREVIOUS_BUILD_MISMATCH');
+  const oldApp = (await request(`/v1/builds/${old.id}/app`)).data;
+  check(oldApp?.id === APP && oldApp.attributes.bundleId === BUNDLE, 'PREVIOUS_APP_MISMATCH');
+  const oldVersion = (await request(`/v1/builds/${old.id}/preReleaseVersion`)).data;
+  check(oldVersion?.attributes.version === TARGET.version, 'PREVIOUS_VERSION_MISMATCH');
+  const items = ctx.submissions.included?.filter(i => i.type === 'reviewSubmissionItems' &&
+    i.relationships?.appStoreVersion?.data?.id === target.id) || [];
+  const candidates = ctx.submissions.data.filter(s => pending.has(s.attributes.state) &&
+    s.relationships?.items?.data?.some(i => items.some(j => j.id === i.id)));
+  check(candidates.length === 1, 'EXACT_PENDING_SUBMISSION_REQUIRED');
+  const submission = candidates[0];
+  const scope = (await request(`/v1/reviewSubmissions/${submission.id}/items?include=appStoreVersion&limit=50`)).data;
+  check(scope.length === 1 && scope[0].relationships?.appStoreVersion?.data?.id === target.id,
+    'SUBMISSION_SCOPE_MISMATCH');
+  const current = (await request(`/v1/reviewSubmissions/${submission.id}`)).data;
+  check(pending.has(current?.attributes.state), 'SUBMISSION_NO_LONGER_PENDING');
+  const canceled = (await request(`/v1/reviewSubmissions/${submission.id}`, 'PATCH',
+    data('reviewSubmissions', submission.id, {canceled: true}))).data;
+  check(canceled?.id === submission.id, 'CANCELLATION_RESPONSE_MISMATCH');
+  return {requestedAt: new Date().toISOString(), versionId: target.id, submissionId: submission.id,
+    previousBuild, beforeState: current.attributes.state, afterState: canceled.attributes.state};
+}
 async function releaseApprovedVersion(ctx) {
   const target = ctx.target;
   check(target?.id && target.attributes.versionString === TARGET.version, 'RELEASE_VERSION_ID_MISMATCH');
@@ -161,15 +197,17 @@ async function releaseApprovedVersion(ctx) {
   return {requestedAt: new Date().toISOString(), versionId: target.id, requestId: released.data.id};
 }
 async function main() {
-  check(['inspect', 'prepare', 'submit', 'release'].includes(mode), 'INVALID_MODE');
+  check(['inspect', 'prepare', 'submit', 'release', 'cancel'].includes(mode), 'INVALID_MODE');
   if (mode !== 'inspect') check(process.env.PM_CONFIRM_REVIEW_VERSION === `${TARGET.version}/${TARGET.build}`, 'EXPLICIT_VERSION_CONFIRMATION_REQUIRED');
   let ctx = await context();
   if (mode === 'prepare') { await prepare(ctx); ctx = await context(); }
   if (mode === 'submit') { await submit(ctx); ctx = await context(); }
-  let releaseAction;
+  let releaseAction, cancelAction;
+  if (mode === 'cancel') { cancelAction = await cancelReview(ctx); ctx = await context(); }
   if (mode === 'release') { releaseAction = await releaseApprovedVersion(ctx); ctx = await context(); }
   const result = await snapshot(ctx);
   if (releaseAction) result.releaseAction = releaseAction;
+  if (cancelAction) result.cancelAction = cancelAction;
   const output = JSON.stringify(result, null, 2);
   console.log(output);
   if (process.env.RUNNER_TEMP) fs.writeFileSync(path.join(process.env.RUNNER_TEMP, 'appstore-review-status.json'), output);
