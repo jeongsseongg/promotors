@@ -164,6 +164,30 @@ test('서버 등록 실패는 오류로 남기고 사용자가 다시 누르면 
   expect(value.push.connect).toHaveBeenCalledTimes(2);
   expect(modalText(tree)).toContain('앱 알림이 연결됐어요');
 });
+
+test('일시 등록 실패 후 앱에 다시 들어오면 버튼 없이 연결을 복구한다', async () => {
+  const value = fixture(); value.push.connect.mockRejectedValueOnce(new Error('offline'));
+  const tree = await mount(value);
+  expect(value.push.connect).toHaveBeenCalledTimes(1);
+  await foreground('background'); await foreground('active');
+  expect(value.push.connect).toHaveBeenCalledTimes(2);
+  expect(modalText(tree)).toContain('앱 알림이 연결됐어요');
+});
+
+test('일시 등록 실패는 활성 화면에서 자동 재시도하지만 나중에를 누르면 멈춘다', async () => {
+  jest.useFakeTimers();
+  try {
+    const value = fixture(); value.push.connect.mockRejectedValue(new Error('offline'));
+    const tree = await mount(value);
+    await act(async () => {await jest.advanceTimersByTimeAsync(2000);}); await settle();
+    expect(value.push.connect).toHaveBeenCalledTimes(2);
+    await press(tree, '나중에');
+    await act(async () => {await jest.advanceTimersByTimeAsync(120000);});
+    await foreground('background'); await foreground('active');
+    expect(value.push.connect).toHaveBeenCalledTimes(2);
+    expect(visibleModals(tree)).toHaveLength(0);
+  } finally {jest.useRealTimers();}
+});
 test('이전 계정의 연결 완료 응답은 새 계정의 성공 안내로 사용하지 않는다', async () => {
   const value = fixture(), connection = deferred<void>();
   value.push.connect.mockImplementationOnce(() => connection.promise);

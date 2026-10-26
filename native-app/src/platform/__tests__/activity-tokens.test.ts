@@ -143,6 +143,19 @@ test('동일 계정이어도 native 연결 세대가 바뀌면 이전 토큰을 
   queue.dispose();
 });
 
+test('이미 등록한 토큰은 반복 조회해도 보내지 않고 연결 세대가 바뀌면 다시 검증한다', async () => {
+  let context: ActivityTokenContext = {owner: 'account-a:1', binding, generation: 1};
+  const register = jest.fn().mockResolvedValue(undefined);
+  const queue = createActivityTokenQueue({context: () => context, register});
+  queue.offer(token()); await queue.flush();
+  queue.offer(token()); await queue.flush();
+  expect(register).toHaveBeenCalledTimes(1);
+  context = {...context, generation: 2}; queue.reconcile();
+  queue.offer(token()); await queue.flush();
+  expect(register).toHaveBeenCalledTimes(2);
+  queue.dispose();
+});
+
 test('이전 계정 등록의 늦은 완료가 새 계정의 대기 토큰을 지우지 않는다', async () => {
   let context: ActivityTokenContext = {owner: 'account-a:1', binding, generation: 1};
   let finish!: () => void;
