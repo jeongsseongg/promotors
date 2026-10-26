@@ -20,13 +20,13 @@ export function HomeHero() {
 }
 const styles = StyleSheet.create({
   hero: {paddingHorizontal: 20, paddingTop: 8, paddingBottom: 24, minHeight: 680, backgroundColor: color.surface},
-  logo: {width: '100%', aspectRatio: 1202 / 542},
+  logo: {width: '100%', height: undefined, aspectRatio: 1202 / 542},
   yellowLine: {width: 66, height: 8, borderRadius: 4, backgroundColor: color.yellow, marginTop: 10},
   title: {fontFamily: font.bold, fontSize: 68, lineHeight: 84, letterSpacing: -2, color: color.navy, marginTop: 28},
   description: {fontFamily: font.medium, fontSize: 13, lineHeight: 20, color: '#2B2F33', marginTop: 20},
   reserve: {marginTop: 32},
   reserveText: {fontFamily: font.bold, fontSize: 23, color: color.yellow},
   arrow: {position: 'absolute', right: 24, fontFamily: font.bold, fontSize: 30, color: color.yellow},
-  brands: {width: '100%', aspectRatio: 1632 / 535, marginTop: 44},
+  brands: {width: '100%', height: undefined, aspectRatio: 1632 / 535, marginTop: 44},
   scroll: {marginTop: 54, textAlign: 'center', fontSize: 30, color: '#C3C8D0'},
 });
