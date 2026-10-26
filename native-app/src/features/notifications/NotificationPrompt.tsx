@@ -8,6 +8,22 @@ import {color, font} from '../../theme/tokens';
 
 type Phase = 'idle' | 'checking' | 'connected' | 'denied' | 'error';
 type Result = {owner: string; phase: Phase; message?: string};
+function useConnectionRetry(phase: Phase, active: boolean, eligible: boolean, failures: React.RefObject<number>, run: (retry?: boolean) => Promise<void>) {
+  useEffect(() => {
+    if (phase !== 'error' || !active || !eligible || failures.current >= 5) return;
+    const timer = setTimeout(() => {void run(true);}, Math.min(30000, 2000 * 2 ** Math.max(0, failures.current - 1)));
+    return () => clearTimeout(timer);
+  }, [phase, active, eligible, failures, run]);
+}
+function useForegroundState(setActive: React.Dispatch<React.SetStateAction<boolean>>, setResume: React.Dispatch<React.SetStateAction<number>>) {
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', state => {
+      setActive(state === 'active');
+      if (state === 'active') setResume(value => value + 1);
+    });
+    return () => subscription.remove();
+  }, [setActive, setResume]);
+}
 export function useAutomaticNotifications(push: NativePush, session: SessionSnapshot, eligible: boolean) {
   const owner = session.authenticated && session.status === 'signedIn' ? JSON.stringify([session.profile?.id, session.role, session.branches, session.privacyEpoch]) : '';
   const [active, setActive] = useState(AppState.currentState !== 'background' && AppState.currentState !== 'inactive');
@@ -55,18 +71,8 @@ export function useAutomaticNotifications(push: NativePush, session: SessionSnap
   useEffect(() => {
     void run(resume > 0 && (settingsOwner.current === owner || latestPhase.current === 'error'));
   }, [owner, eligible, active, resume, run]);
-  useEffect(() => {
-    if (phase !== 'error' || !active || !eligible || failures.current >= 5) return;
-    const timer = setTimeout(() => {void run(true);}, Math.min(30000, 2000 * 2 ** Math.max(0, failures.current - 1)));
-    return () => clearTimeout(timer);
-  }, [phase, active, eligible, run]);
-  useEffect(() => {
-    const subscription = AppState.addEventListener('change', state => {
-      setActive(state === 'active');
-      if (state === 'active') setResume(value => value + 1);
-    });
-    return () => subscription.remove();
-  }, []);
+  useConnectionRetry(phase, active, eligible, failures, run);
+  useForegroundState(setActive, setResume);
   const openSettings = useCallback(async () => {
     settingsOwner.current = owner;
     try {await push.openSettings();}
