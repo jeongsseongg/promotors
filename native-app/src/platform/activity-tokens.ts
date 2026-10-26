@@ -10,10 +10,11 @@ const uuid = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
 /** Only RAM is used: an account or native connection change discards every token. */
 export function createActivityTokenQueue(options: Options) {
   const pending = new Map<ActivityTokenEvent['kind'], Entry>();
+  const acknowledged = new Map<ActivityTokenEvent['kind'], ActivityTokenEvent>();
   let context = options.context(), queuedBinding: string | null = null, epoch = 0, failures = 0;
   let running: Promise<void> | null = null, timer: ReturnType<typeof setTimeout> | null = null, disposed = false;
   function cancelRetry() {if (timer !== null) {clearTimeout(timer); timer = null;}}
-  function clear() {epoch++; pending.clear(); queuedBinding = null; failures = 0; cancelRetry();}
+  function clear() {epoch++; pending.clear(); acknowledged.clear(); queuedBinding = null; failures = 0; cancelRetry();}
   function reconcile() {
     const next = options.context();
     if (!next.owner || next.owner !== context.owner || next.generation !== context.generation) clear();
@@ -36,6 +37,7 @@ export function createActivityTokenQueue(options: Options) {
         await options.register(entry.event);
         reconcile();
         if (disposed || captured !== epoch) return;
+        acknowledged.set(entry.event.kind, entry.event);
         if (pending.get(entry.event.kind) === entry) pending.delete(entry.event.kind);
       } catch {
         reconcile();
@@ -63,6 +65,7 @@ export function createActivityTokenQueue(options: Options) {
     if (disposed || !current.owner || !uuid.test(event.binding) || !['start', 'update'].includes(event.kind) ||
       !/^[a-f0-9]{64,256}$/.test(event.token)) return false;
     if (queuedBinding !== event.binding) {clear(); queuedBinding = event.binding;}
+    if (registered(event)) return true;
     const previous = pending.get(event.kind)?.event;
     if (previous?.binding === event.binding && previous.token === event.token) return true;
     pending.set(event.kind, {event: {...event}}); failures = 0;
@@ -70,5 +73,10 @@ export function createActivityTokenQueue(options: Options) {
     return true;
   }
   function dispose() {disposed = true; clear();}
-  return {offer, flush, reconcile, clear, dispose};
+  function registered(event: ActivityTokenEvent) {
+    reconcile();
+    const value = acknowledged.get(event.kind);
+    return value?.binding === event.binding && value.token === event.token;
+  }
+  return {offer, flush, reconcile, clear, dispose, registered};
 }

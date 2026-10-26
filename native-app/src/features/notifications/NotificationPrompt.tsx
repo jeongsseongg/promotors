@@ -15,8 +15,9 @@ export function useAutomaticNotifications(push: NativePush, session: SessionSnap
   const [resume, setResume] = useState(0);
   const context = useRef({owner, eligible, active}); context.current = {owner, eligible, active};
   const generation = useRef(0), handled = useRef(''), busy = useRef(false), settingsOwner = useRef('');
+  const failures = useRef(0);
   useEffect(() => {
-    generation.current++; handled.current = ''; busy.current = false; settingsOwner.current = '';
+    generation.current++; handled.current = ''; busy.current = false; settingsOwner.current = ''; failures.current = 0;
     setResult({owner, phase: 'idle'});
     return () => {generation.current++;};
   }, [owner, push]);
@@ -38,24 +39,34 @@ export function useAutomaticNotifications(push: NativePush, session: SessionSnap
       const after = await push.status();
       if (!current()) return;
       if (!after.connected) throw new Error('알림 연결을 완료하지 못했어요. 연결 상태를 확인하고 다시 시도해 주세요.');
+      failures.current = 0;
       setResult({owner, phase: 'connected'});
     } catch (error) {
       if (!current()) return;
       handled.current = owner;
+      failures.current++;
       let denied = false;
       try {denied = (await push.status()).permission === 'denied';} catch {}
       if (current()) setResult({owner, phase: denied ? 'denied' : 'error', message: error instanceof Error ? error.message : '알림 연결을 완료하지 못했어요. 다시 시도해 주세요.'});
     } finally {if (current()) busy.current = false;}
   }, [owner, push]);
-  useEffect(() => {void run(resume > 0 && settingsOwner.current === owner);}, [owner, eligible, active, resume, run]);
+  const phase = result.owner === owner ? result.phase : 'idle';
+  const latestPhase = useRef(phase); latestPhase.current = phase;
+  useEffect(() => {
+    void run(resume > 0 && (settingsOwner.current === owner || latestPhase.current === 'error'));
+  }, [owner, eligible, active, resume, run]);
+  useEffect(() => {
+    if (phase !== 'error' || !active || !eligible || failures.current >= 5) return;
+    const timer = setTimeout(() => {void run(true);}, Math.min(30000, 2000 * 2 ** Math.max(0, failures.current - 1)));
+    return () => clearTimeout(timer);
+  }, [phase, active, eligible, run]);
   useEffect(() => {
     const subscription = AppState.addEventListener('change', state => {
       setActive(state === 'active');
-      if (state === 'active' && settingsOwner.current === context.current.owner) setResume(value => value + 1);
+      if (state === 'active') setResume(value => value + 1);
     });
     return () => subscription.remove();
   }, []);
-  const phase = result.owner === owner ? result.phase : 'idle';
   const openSettings = useCallback(async () => {
     settingsOwner.current = owner;
     try {await push.openSettings();}

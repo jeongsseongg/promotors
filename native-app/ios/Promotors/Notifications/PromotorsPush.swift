@@ -139,6 +139,13 @@ final class PromotorsPush: RCTEventEmitter {
     func getInitialTarget(_ resolve: @escaping RCTPromiseResolveBlock, rejecter reject: @escaping RCTPromiseRejectBlock) {
         if let target = PushConnectionStore.shared.takeTarget() { resolve(target) } else { resolve(NSNull()) }
     }
+    @objc(getActivityTokenSnapshot:rejecter:)
+    func getActivityTokenSnapshot(_ resolve: @escaping RCTPromiseResolveBlock, rejecter reject: @escaping RCTPromiseRejectBlock) {
+        Task { @MainActor in
+            guard #available(iOS 16.2, *) else { resolve(["supported": false, "enabled": false, "tokens": []]); return }
+            resolve(BookingActivityController.shared.tokenSnapshot())
+        }
+    }
     @objc(consumeTrustedAction:resolver:rejecter:)
     func consumeTrustedAction(_ nonce: String, resolver resolve: @escaping RCTPromiseResolveBlock, rejecter reject: @escaping RCTPromiseRejectBlock) {
         resolve(PushConnectionStore.shared.consumeTrustedAction(nonce))

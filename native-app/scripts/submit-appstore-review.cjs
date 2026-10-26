@@ -3,8 +3,9 @@ const path = require('node:path');
 const crypto = require('node:crypto');
 const APP = '6810716100';
 const BUNDLE = 'kr.promotors.app';
-const TARGET = {version: '1.1.2', build: '38'};
-const NOTES = '예약 확정·방문 예정·정비 진행·완료 알림을 추가했습니다.\n알림에서 본인 예약과 정비 내역을 바로 확인할 수 있습니다.\n상시 알림과 관리자 예약 승인·거절 기능을 개선했습니다.';
+const release = require('../release.json');
+const TARGET = {version: release.version, build: String(release.iosBuild)};
+const NOTES = '앱 알림 연결이 지연될 때 자동으로 다시 연결하도록 개선했습니다.\n아이폰 상시 알림 연결을 복구하고 연결 상태를 더 정확하게 표시합니다.\n예약과 정비 알림의 안정성을 개선했습니다.';
 const mode = process.env.PM_REVIEW_MODE || 'inspect';
 const accepted = new Set(['WAITING_FOR_REVIEW', 'IN_REVIEW', 'PENDING_DEVELOPER_RELEASE', 'PENDING_APPLE_RELEASE', 'PROCESSING_FOR_APP_STORE', 'READY_FOR_SALE', 'READY_FOR_DISTRIBUTION']);
 function check(value, code) { if (!value) throw Error(code); }
@@ -101,7 +102,9 @@ async function prepareReviewDetail(target, previous) {
 }
 async function prepare(ctx) {
   if (ctx.target && accepted.has(ctx.target.attributes.appStoreState)) return;
-  const previous = ctx.versions.find(v => v.attributes.versionString === '1.1.1' && accepted.has(v.attributes.appStoreState));
+  const previous = ctx.versions.filter(v => v.attributes.versionString !== TARGET.version &&
+    ['READY_FOR_SALE', 'READY_FOR_DISTRIBUTION'].includes(v.attributes.appStoreState))
+    .sort((a, b) => b.attributes.versionString.localeCompare(a.attributes.versionString, undefined, {numeric: true}))[0];
   check(previous, 'PREVIOUS_RELEASE_REQUIRED');
   check(!ctx.versions.some(v => v.attributes.versionString !== TARGET.version && ['WAITING_FOR_REVIEW', 'IN_REVIEW'].includes(v.attributes.appStoreState)), 'OTHER_VERSION_IN_REVIEW');
   let target = ctx.target;
@@ -138,7 +141,7 @@ async function submit(ctx) {
 }
 async function releaseApprovedVersion(ctx) {
   const target = ctx.target;
-  check(target?.id === 'ebc6c970-833d-4f1b-b20e-c7d11893cf91', 'RELEASE_VERSION_ID_MISMATCH');
+  check(target?.id && target.attributes.versionString === TARGET.version, 'RELEASE_VERSION_ID_MISMATCH');
   check(ctx.build.attributes.version === TARGET.build, 'RELEASE_BUILD_NUMBER_MISMATCH');
   const attached = (await request(`/v1/appStoreVersions/${target.id}/relationships/build`)).data;
   check(attached?.id === ctx.build.id, 'ATTACHED_BUILD_MISMATCH');
@@ -146,11 +149,13 @@ async function releaseApprovedVersion(ctx) {
   if (['PENDING_APPLE_RELEASE', 'PROCESSING_FOR_APP_STORE', 'READY_FOR_SALE', 'READY_FOR_DISTRIBUTION'].includes(state))
     return {alreadyRequested: true, versionId: target.id, state};
   check(state === 'PENDING_DEVELOPER_RELEASE' && target.attributes.releaseType === 'MANUAL', 'APPROVED_MANUAL_RELEASE_REQUIRED');
-  const submission = ctx.submissions.data.find(s => s.id === '9606d566-2b35-4394-adfb-351ebd6f4b7c');
-  check(submission?.attributes.state === 'COMPLETE', 'APPROVED_SUBMISSION_REQUIRED');
-  const items = (await request(`/v1/reviewSubmissions/${submission.id}/items?include=appStoreVersion&limit=50`)).data;
-  check(items.length === 1 && items[0].attributes.state === 'APPROVED' &&
-    items[0].relationships?.appStoreVersion?.data?.id === target.id, 'APPROVED_SUBMISSION_SCOPE_REQUIRED');
+  let approved = false;
+  for (const submission of ctx.submissions.data.filter(s => s.attributes.state === 'COMPLETE')) {
+    const items = (await request(`/v1/reviewSubmissions/${submission.id}/items?include=appStoreVersion&limit=50`)).data;
+    if (items.length === 1 && items[0].attributes.state === 'APPROVED' &&
+      items[0].relationships?.appStoreVersion?.data?.id === target.id) {approved = true; break;}
+  }
+  check(approved, 'APPROVED_SUBMISSION_SCOPE_REQUIRED');
   const released = await request('/v1/appStoreVersionReleaseRequests', 'POST',
     data('appStoreVersionReleaseRequests', null, null, {appStoreVersion: link('appStoreVersions', target.id)}));
   return {requestedAt: new Date().toISOString(), versionId: target.id, requestId: released.data.id};

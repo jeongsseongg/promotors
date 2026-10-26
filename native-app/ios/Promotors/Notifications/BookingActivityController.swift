@@ -41,9 +41,28 @@ final class BookingActivityController {
                 guard self.current(context, ticket: ticket) else { return ["stale": true] }
             }
             self.observedContext = context
+            for activity in Activity<BookingActivityAttributes>.activities where activity.attributes.binding == context.binding {
+                if activity.activityState == .active || activity.activityState == .stale { self.observe(activity, context: context) }
+            }
             if #available(iOS 17.2, *) { self.observeStart(context) }
             return ["supported": true]
         }
+    }
+    func tokenSnapshot() -> [String: Any] {
+        let context = PushConnectionStore.shared.context()
+        let enabled = ActivityAuthorizationInfo().areActivitiesEnabled
+        var result: [String: Any] = ["supported": true, "enabled": enabled, "tokens": [[String: String]]()]
+        guard enabled, !NativeQaConfiguration.isAllowed, let binding = context.binding, observedContext == context else { return result }
+        var tokens: [[String: String]] = []
+        func append(_ data: Data, kind: String) {
+            tokens.append(["binding": binding, "kind": kind, "token": data.map { String(format: "%02x", $0) }.joined()])
+        }
+        if #available(iOS 17.2, *), let token = Activity<BookingActivityAttributes>.pushToStartToken { append(token, kind: "start") }
+        if let activity = Activity<BookingActivityAttributes>.activities.first(where: {
+            $0.attributes.binding == binding && ($0.activityState == .active || $0.activityState == .stale)
+        }), let token = activity.pushToken { append(token, kind: "update") }
+        result["binding"] = binding; result["tokens"] = tokens
+        return result
     }
     func sync(_ values: NSDictionary) async throws -> [String: Bool] {
         let context = PushConnectionStore.shared.context()
