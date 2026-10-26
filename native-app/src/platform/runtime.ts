@@ -31,7 +31,7 @@ export const push = {
 export function startRuntime() {
   let stopped = false, busy = false, queued = false, requestEpoch = 0;
   const activityTokens = createActivitySync({context: activityContext, read: activityTokenSnapshot, register: event => services.notifications.registerActivityToken(event)});
-  const refreshTokens = () => AppState.currentState === 'active' ? activityTokens.refresh() : Promise.resolve();
+  const refreshTokens = () => activityTokens.refresh();
   ongoingStatus = activityTokens.status;
   requestActivityTokenRefresh = refreshTokens;
   const refreshSchedule = async () => {
