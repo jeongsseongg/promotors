@@ -13,11 +13,13 @@ export interface Branch extends JsonRecord {
 export interface PublicPost extends JsonRecord {
   id?: string | number; title: string; body?: string; bodyHtml?: string;
   date?: string; branch?: string; model?: string; imageKeys?: string[]; status?: string;
+  imageUrls?: string[]; sourceUrl?: string;
 }
 export interface IntroSlide extends JsonRecord { key: string; alt?: string }
 export interface PublicContent {
   branches: Branch[]; cases: PublicPost[]; notices: PublicPost[];
   introSlides: IntroSlide[]; products: JsonRecord[]; eventBanners: JsonRecord[];
+  caseFeedErrors?: string[];
 }
 export interface Booking extends JsonRecord {
   id: string; branch: string; date: string; time: string; status: string;

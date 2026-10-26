@@ -4,6 +4,7 @@ import {Screen} from '../../components/Screen';
 import {Button} from '../../components/Controls';
 import {useNav} from '../../components/AppContext';
 import {ui} from '../../theme/styles';
+import {OpenSourceNotices} from './OpenSourceNotices';
 
 const terms = [
   ['제1조 목적', '이 약관은 프로모터스 안산점(이하 “회사”)이 제공하는 회원, 정비예약, 정비 진행현황 및 고객문의 서비스의 이용조건과 절차를 정하는 것을 목적으로 합니다.'],
@@ -29,5 +30,6 @@ export function LegalScreen({kind}: {kind: 'privacy' | 'terms'}) {
     <Text style={ui.muted}>{kind === 'privacy' ? '공지일: 2026년 9월 28일 · 시행일: 2026년 10월 5일' : '시행일: 2026년 7월 13일'}</Text>
     {rows.map(([heading, body]) => <View key={heading} style={ui.card}><Text style={ui.heading}>{heading}</Text><Text selectable style={ui.body}>{body}</Text></View>)}
     <Button secondary label="개인정보 문의" onPress={() => void call()}/>{kind === 'privacy' ? <Button secondary label="탈퇴·삭제 요청" onPress={() => nav.go({name: 'deletion'})}/> : null}
+    {kind === 'terms' ? <OpenSourceNotices/> : null}
   </Screen>;
 }

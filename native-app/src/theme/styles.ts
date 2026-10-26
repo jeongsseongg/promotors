@@ -7,7 +7,7 @@ export const ui = StyleSheet.create({
   row: {flexDirection: 'row', alignItems: 'center', gap: 8},
   spread: {flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12},
   wrap: {flexDirection: 'row', flexWrap: 'wrap', gap: 8},
-  card: {padding: 20, borderRadius: 24, backgroundColor: color.surface, gap: 12},
+  card: {padding: 16, borderRadius: 18, backgroundColor: color.surface, gap: 12},
   title: {fontFamily: font.bold, fontSize: 28, lineHeight: 36, color: color.navy},
   heading: {fontFamily: font.bold, fontSize: 21, lineHeight: 29, color: color.text},
   body: {fontFamily: font.regular, fontSize: 16, lineHeight: 25, color: color.text},
