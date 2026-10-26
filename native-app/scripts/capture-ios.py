@@ -53,6 +53,8 @@ for kind, device in selected:
             screenshot = output / (name + '.png')
             sim('io', device, 'screenshot', str(screenshot))
             subprocess.run([str(checker), str(screenshot), titles[screen]], check=True)
+            if screen == 'home':
+                subprocess.run([str(checker), str(screenshot), '예약하기'], check=True)
             process.terminate()
         if '"operationalRequests":0' not in source.replace(' ', '').replace('\\"', '"'):
             raise RuntimeError('QA production-request check missing')

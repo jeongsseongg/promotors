@@ -171,6 +171,8 @@ for screen, label in [('home', '정비예약'), ('booking', '정비 예약'), ('
     source = wait_for('실제 발송 없음')
     source = wait_for(label)
     save(screen, source)
+    if screen == 'home':
+        subprocess.run([sys.executable, str(root / 'scripts/check-home-layout.py'), str(output / 'home.xml')], check=True)
     results.append({'screen': screen, 'systemAppearance': 'light', 'nativeViews': True, 'webViewCount': 0})
     if screen == 'customer':
         for phase, button, title in [('confirmed', '확정 예시', '예약이 확정되었어요'), ('visit', '방문 예시', '방문을 기다리고 있어요'), ('repair', '정비 예시', '내 차 정비 중'), ('completed', '완료 예시', '정비가 완료되었어요')]:
