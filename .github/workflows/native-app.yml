@@ -10,12 +10,16 @@ on:
         type: boolean
         default: false
       review_mode:
-        description: inspect는 조회, prepare는 초안, submit은 심사 제출, release는 승인된 정확한 버전 공개
+        description: inspect는 조회, prepare는 초안, submit은 제출, release는 공개, cancel은 확인한 기존 빌드 심사 취소
         type: choice
-        options: [inspect, prepare, submit, release]
+        options: [inspect, prepare, submit, release, cancel]
         default: inspect
       confirm_review_version:
         description: 준비·제출·공개할 정확한 버전/빌드 (예 1.1.2/38)
+        type: string
+        default: ""
+      confirm_replaced_build:
+        description: 교체를 위해 심사를 취소할 기존 빌드 번호 (취소 모드에서만 입력)
         type: string
         default: ""
       confirm_exempt_version:
@@ -278,12 +282,15 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 24.19.0
-      - name: Check review submission script
-        run: node --check native-app/scripts/submit-appstore-review.cjs
+      - name: Check exact review build and cancellation guards
+        run: |
+          node --check native-app/scripts/submit-appstore-review.cjs
+          node --test scripts/test-appstore-review.cjs
       - name: Read or submit the exact existing App Store build
         env:
           PM_REVIEW_MODE: ${{ inputs.review_mode }}
           PM_CONFIRM_REVIEW_VERSION: ${{ inputs.confirm_review_version }}
+          PM_CONFIRM_REPLACED_BUILD: ${{ inputs.confirm_replaced_build }}
           ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
           ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
           ASC_PRIVATE_KEY: ${{ secrets.ASC_PRIVATE_KEY }}
