@@ -1,0 +1,30 @@
+import {StyleSheet} from 'react-native';
+import {color, font} from '../../theme/tokens';
+
+export const workProgress = StyleSheet.create({
+  screen: {padding: 16, gap: 14, paddingBottom: 28, backgroundColor: color.surface},
+  progress: {gap: 10}, service: {fontFamily: font.semibold, fontSize: 14, lineHeight: 21, color: '#5D6672', marginBottom: 4},
+  serviceName: {fontFamily: font.bold, fontSize: 15, color: '#111827'},
+  stage: {borderWidth: 1, borderColor: '#EEF1F5', borderRadius: 16, backgroundColor: color.surface,
+    padding: 16, boxShadow: '0 6px 18px rgba(15,23,42,0.05)'},
+  stageNow: {borderColor: '#2F6FE4', boxShadow: '0 8px 22px rgba(47,111,228,0.16)'},
+  stageHeader: {flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 8},
+  iconCircle: {width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center', backgroundColor: '#F1F4F8'},
+  icon: {width: 18, height: 18, tintColor: '#9AA7B6'}, iconDone: {backgroundColor: '#EAF2FF'},
+  iconNow: {backgroundColor: '#2F6FE4'}, imageDone: {tintColor: '#2F6FE4'}, imageNow: {tintColor: color.surface},
+  stageTitle: {flex: 1, fontFamily: font.bold, fontSize: 16, lineHeight: 23, color: '#111827'},
+  badge: {fontFamily: font.bold, fontSize: 12, lineHeight: 17, paddingHorizontal: 10, paddingVertical: 4,
+    borderRadius: 20, overflow: 'hidden', backgroundColor: '#F1F4F8', color: '#9AA7B6'},
+  badgeDone: {backgroundColor: '#EAF2FF', color: '#1B4FC0'}, badgeNow: {backgroundColor: '#2F6FE4', color: color.surface},
+  description: {fontFamily: font.semibold, fontSize: 14, lineHeight: 21, color: '#5D6672'},
+  descriptionNow: {color: '#1F2933'}, approvedNote: {fontFamily: font.regular, fontSize: 14, lineHeight: 21, color: color.text, marginTop: 8},
+  hint: {marginTop: 10, fontFamily: font.semibold, fontSize: 13, lineHeight: 20, color: '#8A94A0'},
+  photos: {marginTop: 12, marginHorizontal: -6, flexDirection: 'row', flexWrap: 'wrap'},
+  photoCell: {width: '50%', paddingHorizontal: 6, paddingBottom: 12}, photo: {width: '100%', aspectRatio: 4 / 3, borderRadius: 10},
+  history: {gap: 10, marginTop: 8}, historyTitle: {fontFamily: font.bold, fontSize: 17, lineHeight: 24, color: color.navy},
+  historyItem: {flexDirection: 'row', alignItems: 'center', gap: 12, borderWidth: 1, borderColor: '#E2E6EA', borderRadius: 14, padding: 14, backgroundColor: '#F8FAFC'},
+  historyContent: {flex: 1, gap: 3}, historyName: {fontFamily: font.bold, fontSize: 15, lineHeight: 22, color: '#111827'},
+  historyDate: {fontFamily: font.regular, fontSize: 13, lineHeight: 20, color: '#667085'},
+  historyStatus: {fontFamily: font.semibold, fontSize: 12, lineHeight: 18, color: '#1B4FC0'},
+  historyAction: {fontFamily: font.semibold, fontSize: 12, lineHeight: 18, color: color.navy},
+});
