@@ -61,7 +61,7 @@ export function createStoreUpdates(options: Options = {}): StoreUpdates {
       return readAppleRelease(data, options.currentVersion || release.version, options.iosVersion || String(Platform.Version));
     },
     async openStore() {
-      const open = options.open || Linking.openURL;
+      const open = options.open || ((url: string) => Linking.openURL(url));
       if (platform === 'ios') {await open(appleStore); return;}
       if (platform !== 'android') throw new Error('지원되는 앱 기기가 아닙니다.');
       try {await open('market://details?id=kr.promotors.app');} catch {await open(playStore);}
