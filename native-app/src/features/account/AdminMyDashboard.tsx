@@ -1,12 +1,12 @@
 import React, {useCallback} from 'react';
-import {Image, Pressable, Text, View} from 'react-native';
+import {Image, Pressable, Text, useWindowDimensions, View} from 'react-native';
 import {useNav, useServices} from '../../components/AppContext';
 import {DataState, useForegroundRefresh, useResource} from '../../components/DataState';
 import type {Booking, Inquiry, SessionSnapshot} from '../../domain/types';
 import type {WorkList} from '../../domain/management';
 import {runStage} from './runDisplay';
 import {MyGreeting, MyMenuSection} from './MyMenuSection';
-import {myPage as card} from './myPageStyles';
+import {myPage as card, myPageAtWidth} from './myPageStyles';
 import {adminMy as styles} from './adminMyStyles';
 
 const koreanDay = (date: Date) => new Date(date.getTime() + 9 * 3600000).toISOString().slice(0, 10).replace(/-/g, '.');
@@ -49,11 +49,11 @@ export function adminDashboardSnapshot(work: WorkList, session: SessionSnapshot,
 type Summary = ReturnType<typeof adminDashboardSnapshot>;
 
 function AdminCounts({summary}: {summary: Summary}) {
-  const nav = useNav();
+  const nav = useNav(), compact = useWindowDimensions().width <= 360;
   const counts = [{label: '신규', value: summary.newCount, alert: summary.newCount > 0, booking: true},
     {label: '확정', value: summary.confirmedCount, booking: true}, {label: '작업중', value: summary.activeCount},
     {label: '승인대기', value: summary.approvalCount, alert: summary.approvalCount > 0}, {label: '출고', value: summary.completedCount}];
-  return <View style={styles.counts}>{counts.map(item => <Pressable key={item.label} accessibilityRole="button"
+  return <View style={[styles.counts, compact && styles.compactCounts]}>{counts.map(item => <Pressable key={item.label} accessibilityRole="button"
     accessibilityLabel={`${item.label} ${item.value}건`} onPress={() => nav.go(item.booking ? {name: 'admin'} : {name: 'management', section: 'work'})}
     style={[styles.count, item.alert && styles.alertCount]}>
     <Text style={[styles.countValue, item.alert && styles.alertText]}>{item.value}</Text>
@@ -69,12 +69,12 @@ function scheduleLabel(booking?: Booking) {
   return [label, booking.car].filter(Boolean).join(' · ');
 }
 function AdminSummaryCard({summary}: {summary: Summary}) {
-  const nav = useNav();
-  return <View style={card.vehicle} testID="admin-my-dashboard"><View style={card.vehicleBody}>
+  const nav = useNav(), layout = myPageAtWidth(useWindowDimensions().width);
+  return <View style={card.vehicle} testID="admin-my-dashboard"><View style={[card.vehicleBody, layout.body]}>
     <View style={card.tags}><Text numberOfLines={1} style={card.plate}>{summary.branchLabel}</Text><Text style={card.badge}>관리중</Text></View>
-    <View style={card.vehicleHead}><Text style={card.model}>오늘 예약 {summary.todayCount}건</Text>
+    <View style={card.vehicleHead}><Text style={[card.model, layout.model]}>오늘 예약 {summary.todayCount}건</Text>
       <Text style={card.description}>신규 {summary.newCount} · 확정 {summary.confirmedCount} · 출고 {summary.completedCount}</Text></View>
-    <View style={card.rateRow}><Text style={card.rate}>{summary.confirmationRate}<Text style={card.percent}>%</Text></Text>
+    <View style={card.rateRow}><Text style={[card.rate, layout.rate]}>{summary.confirmationRate}<Text style={[card.percent, layout.percent]}>%</Text></Text>
       <Text style={card.status}>확정 {summary.confirmedCount} / {summary.todayCount}건</Text></View>
     <View accessibilityRole="progressbar" accessibilityLabel="오늘 예약 확정률" accessibilityValue={{min: 0, max: 100, now: summary.confirmationRate}} style={card.track}>
       <View style={[card.progress, {width: `${summary.confirmationRate}%`}]}/></View>
@@ -91,14 +91,20 @@ function AdminMenus({summary}: {summary: Summary}) {
   return <>
     <MyMenuSection title="오늘 할 일" items={[
       {title: '예약관리', detail: summary.newCount ? `신규 ${summary.newCount}` : `${summary.todayCount}건`, icon: 'calendar', onPress: () => nav.go({name: 'admin'})},
-      ...(role === 'main' ? [{title: '작업승인', detail: summary.approvalCount ? `대기 ${summary.approvalCount}` : '대기 없음', icon: 'check' as const, onPress: () => nav.go({name: 'management', section: 'work'})}] : []),
+      ...(role === 'main' ? [{title: '작업승인', detail: summary.approvalCount ? `대기 ${summary.approvalCount}` : '대기 없음', badge: '메인', icon: 'check' as const, onPress: () => nav.go({name: 'management', section: 'work'})}] : []),
       {title: '고객문의', detail: summary.inquiryCount ? `답변 ${summary.inquiryCount}` : '답변 완료', icon: 'headset', onPress: () => nav.go({name: 'management', section: 'inquiries'})},
     ]}/>
     <MyMenuSection title="작업 · 고객" items={[
       {title: '작업현황', detail: `진행 ${summary.activeCount}건`, icon: 'wrench', onPress: () => nav.go({name: 'management', section: 'work'})},
-      ...(role === 'main' || role === 'developer' ? [{title: '고객관리', icon: 'user' as const, onPress: () => nav.go({name: 'management', section: 'customers'})}] : []),
+      ...(role === 'main' || role === 'developer' ? [{title: '고객관리', badge: role === 'main' ? '메인' : '개발자', icon: 'user' as const, onPress: () => nav.go({name: 'management', section: 'customers'})}] : []),
+    ]}/>
+    <MyMenuSection title="운영 설정" items={[
+      {title: '영업시간 · 휴무', detail: '담당 지점', icon: 'calendar', onPress: () => nav.go({name: 'management', section: 'hours'})},
+      ...(role === 'main' ? [
+        {title: '게시글 · 매장 정보', badge: '메인', icon: 'doc' as const, onPress: () => nav.go({name: 'management', section: 'content'})},
+        {title: '쿠폰 · 이벤트', badge: '메인', icon: 'flag' as const, onPress: () => nav.go({name: 'management', section: 'promotions'})},
+      ] : []),
       {title: '매장 관리', detail: '작업·고객·콘텐츠·운영 설정', icon: 'doc', onPress: () => nav.go({name: 'management'})},
-      {title: '예약 알림함', icon: 'bell', onPress: () => nav.go({name: 'notifications'})},
     ]}/>
   </>;
 }
