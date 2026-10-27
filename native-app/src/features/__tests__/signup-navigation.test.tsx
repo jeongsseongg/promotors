@@ -53,7 +53,7 @@ test.each(['이용약관', '개인정보 처리방침'])('회원가입 입력과
 test('가입 화면을 완전히 떠났다가 다시 열면 민감 입력이 남지 않는다', async () => {
   const {tree} = await mount(); await fill(tree); await back(tree, '회원가입');
   await act(async () => {tree.root.findByType(TabBar).props.onChange('my');});
-  await act(async () => {tree.root.findAllByType(Button).find(row => row.props.label === '회원가입')!.props.onPress();});
+  await act(async () => {tree.root.findAll(row => row.props.accessibilityRole === 'tab' && row.props.accessibilityLabel === '회원가입' && typeof row.props.onPress === 'function')[0].props.onPress();});
   assertBlank(tree);
 });
 
