@@ -10,6 +10,7 @@ import {HomeScreen} from '../home/HomeScreen';
 import {NotificationTarget} from '../../domain/types';
 
 jest.mock('react-native-safe-area-context', () => ({
+  ...jest.requireActual('react-native-safe-area-context/jest/mock').default,
   SafeAreaProvider: ({children}: {children: React.ReactNode}) => children,
   SafeAreaView: require('react-native').View,
 }));

@@ -11,18 +11,20 @@ const tabs: {id: Tab; label: string; icon: ImageSourcePropType}[] = [
   {id: 'notices', label: '게시판', icon: require('../../assets/navigation/notices.png')},
   {id: 'my', label: '마이', icon: require('../../assets/navigation/my.png')},
 ];
+export function tabBarHeight(fontScale = 1) {return 13 + Math.max(44, 31 + 13 * fontScale);}
 export function TabBar({active, onChange}: {active: Tab; onChange: (tab: Tab) => void}) {
   return <SafeAreaView edges={['bottom']} style={styles.safe}><View style={styles.row}>
     {tabs.map(tab => <Pressable key={tab.id} accessibilityRole="tab" accessibilityState={{selected: active === tab.id}}
-      onPress={() => onChange(tab.id)} style={styles.tab} testID={'tab-' + tab.id}>
+      onPress={() => onChange(tab.id)} hitSlop={{top: 2, bottom: 2}} style={styles.tab} testID={'tab-' + tab.id}>
       <Image accessible={false} source={tab.icon} style={[styles.icon, active === tab.id && styles.activeIcon]}/>
       <Text style={[styles.label, active === tab.id && styles.active]}>{tab.label}</Text>
     </Pressable>)}
   </View></SafeAreaView>;
 }
 const styles = StyleSheet.create({
-  safe: {backgroundColor: color.surface, borderTopWidth: 1, borderTopColor: color.border},
-  row: {flexDirection: 'row'}, tab: {flex: 1, minHeight: 68, alignItems: 'center', justifyContent: 'center', gap: 2},
-  icon: {width: 26, height: 26, tintColor: color.muted}, activeIcon: {tintColor: color.navy},
-  label: {fontFamily: font.semibold, fontSize: 12, color: color.muted}, active: {color: color.navy},
+  safe: {backgroundColor: color.surface, borderTopWidth: 1, borderTopColor: '#E5E8EC', boxShadow: '0 -6px 18px rgba(15,23,42,0.08)'},
+  row: {flexDirection: 'row', paddingHorizontal: 4, paddingVertical: 6},
+  tab: {flex: 1, minHeight: 44, paddingTop: 4, paddingBottom: 2, alignItems: 'center', justifyContent: 'center', gap: 3},
+  icon: {width: 22, height: 22, tintColor: '#8A94A0'}, activeIcon: {tintColor: color.navy},
+  label: {fontFamily: font.bold, fontSize: 11, lineHeight: 13, includeFontPadding: false, color: '#8A94A0'}, active: {color: color.navy},
 });

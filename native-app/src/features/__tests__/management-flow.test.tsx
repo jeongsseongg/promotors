@@ -8,7 +8,8 @@ import {ManagedRun} from '../../domain/management';
 import {Role} from '../../domain/types';
 import {Route} from '../../components/AppContext';
 
-jest.mock('react-native-safe-area-context', () => ({SafeAreaProvider: ({children}: {children: React.ReactNode}) => children, SafeAreaView: require('react-native').View}));
+jest.mock('react-native-safe-area-context', () => ({
+  ...jest.requireActual('react-native-safe-area-context/jest/mock').default,SafeAreaProvider: ({children}: {children: React.ReactNode}) => children, SafeAreaView: require('react-native').View}));
 Object.assign(globalThis, {IS_REACT_ACT_ENVIRONMENT: true});
 const trees: ReactTestRenderer[] = [];
 function fixture(role: Role = 'main') {

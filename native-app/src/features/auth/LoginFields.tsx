@@ -21,7 +21,7 @@ export function LoginFields({admin, signup, id, password, onId, onPassword}: Pro
   </View>;
 }
 export function LoginCheck({label, checked, onChange}: {label: string; checked: boolean; onChange(value: boolean): void}) {
-  return <Pressable accessibilityRole="checkbox" accessibilityLabel={label} accessibilityState={{checked}} onPress={() => onChange(!checked)} style={styles.check}>
+  return <Pressable accessibilityRole="checkbox" accessibilityLabel={label} accessibilityState={{checked}} hitSlop={6} onPress={() => onChange(!checked)} style={styles.check}>
     <View style={[styles.box, checked && styles.checkedBox]}><Text style={styles.tick}>{checked ? '✓' : ''}</Text></View>
     <Text style={styles.checkLabel}>{label}</Text>
   </Pressable>;

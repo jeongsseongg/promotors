@@ -9,7 +9,8 @@ import {NativeServices, Route} from '../../../components/AppContext';
 import {createQaEnvironment} from '../../../qa/fixture-services';
 import {createQaSession} from '../../../qa/fixture-session';
 
-jest.mock('react-native-safe-area-context', () => ({SafeAreaView: require('react-native').View, SafeAreaProvider: ({children}: {children: React.ReactNode}) => children}));
+jest.mock('react-native-safe-area-context', () => ({
+  ...jest.requireActual('react-native-safe-area-context/jest/mock').default,SafeAreaView: require('react-native').View, SafeAreaProvider: ({children}: {children: React.ReactNode}) => children}));
 Object.assign(globalThis, {IS_REACT_ACT_ENVIRONMENT: true});
 const trees: ReactTestRenderer[] = [];
 let foreground: ((state: string) => void) | undefined;

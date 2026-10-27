@@ -38,6 +38,10 @@ on:
         description: 안드로이드 검증만 실행 (iOS 빌드와 업로드 제외)
         type: boolean
         default: false
+      ios_only:
+        description: 아이폰 전체 검증과 업로드만 실행 (별도 Android 검증 유지)
+        type: boolean
+        default: false
       archive:
         description: Build with the existing iOS distribution identity
         type: boolean
@@ -63,10 +67,15 @@ jobs:
           node-version: 24.19.0
           cache: npm
       - run: npm ci --ignore-scripts
+      - name: Reject conflicting platform selections
+        if: ${{ inputs.android_only && inputs.ios_only }}
+        run: |
+          echo "::error::Select only one platform restriction."
+          exit 1
       - name: Verify native server privacy, registration and reservation actions
         run: node --test scripts/test-existing-testflight.cjs scripts/test-customer-activity-sql.cjs scripts/test-customer-push.cjs scripts/test-apns-activity-lifecycle.cjs scripts/test-native-activity-feedback.cjs scripts/test-fcm-account-switch.cjs scripts/test-fcm-subscribe.cjs scripts/test-fcm-transport.cjs scripts/test-fcm-worker.cjs scripts/test-native-booking-action.cjs scripts/test-native-push.cjs scripts/test-native-subscribe.cjs native-app/server/tests/test-native-sync.cjs
   android:
-    if: ${{ inputs.testflight_only != true && inputs.review_only != true }}
+    if: ${{ inputs.ios_only != true && inputs.testflight_only != true && inputs.review_only != true }}
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
@@ -177,6 +186,14 @@ jobs:
         env:
           PM_CAPTURE_SCOPE: ${{ inputs.ongoing_only && 'ongoing' || 'all' }}
         run: python3 scripts/capture-ios.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: independent-ios
+          path: |
+            native-app/qa-results/**
+            ${{ runner.temp }}/native-ios.log
+          retention-days: 7
       - name: Install existing distribution identity
         if: github.event_name == 'workflow_dispatch' && inputs.archive
         env:
@@ -235,14 +252,6 @@ jobs:
             ${{ runner.temp }}/native-export/*.ipa
             ${{ runner.temp }}/native-archive.log
             ${{ runner.temp }}/testflight-assignment.json
-          retention-days: 7
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: independent-ios
-          path: |
-            native-app/qa-results/**
-            ${{ runner.temp }}/native-ios.log
           retention-days: 7
 
   testflight:

@@ -10,6 +10,7 @@ import {createQaEnvironment} from '../../qa/fixture-services';
 import {createQaSession} from '../../qa/fixture-session';
 
 jest.mock('react-native-safe-area-context', () => ({
+  ...jest.requireActual('react-native-safe-area-context/jest/mock').default,
   SafeAreaProvider: ({children}: {children: React.ReactNode}) => children,
   SafeAreaView: require('react-native').View,
 }));

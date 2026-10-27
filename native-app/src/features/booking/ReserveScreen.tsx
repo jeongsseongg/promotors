@@ -51,10 +51,10 @@ export function ReserveScreen() {
   const value = useReservation(), {session, nav, branch, step, done, setup, error, busy, time, occupied} = value;
   if (!session.authenticated && !value.guestEntry) return <ReserveEntry onGuest={() => value.setGuestEntry(true)}/>;
   if (done) return <Screen title="예약 신청 완료" plain hideHeader onBack={() => nav.go({name: 'home'})} contentStyle={styles.content}>
-    <BookingHeader title="예약 신청 완료" onClose={() => nav.go({name: 'home'})}/><Text style={styles.heading}>예약 신청이 접수되었어요.</Text>
+    <BookingHeader title="예약 신청 완료" onClose={() => nav.go({name: 'home'})}/><View style={styles.resultBody}><Text style={styles.heading}>예약 신청이 접수되었어요.</Text>
     <Text style={styles.body}>{done}</Text><Text style={styles.body}>매장에서 확인하면 예약이 확정됩니다. 알림과 예약 내역에서 확인해 주세요.</Text>
     {!session.authenticated ? <Text style={styles.hint}>직접 입력한 예약 확인번호로 비회원 예약을 조회할 수 있습니다.</Text> : null}
-    <Button brand label="예약 확인" onPress={() => nav.go({name: session.authenticated ? 'bookings' : 'guest-lookup'})}/></Screen>;
+    <Button brand appearance="modal" label="예약 확인" onPress={() => nav.go({name: session.authenticated ? 'bookings' : 'guest-lookup'})}/></View></Screen>;
   const title = !branch ? session.authenticated ? '예약 지점 선택' : '비회원 예약' : branch + ' 정비예약';
   return <Screen title="정비 예약" plain hideHeader onBack={value.back} testID="reserve-screen" contentStyle={styles.content}>
     <BookingHeader title={title} onClose={nav.back}/><DataState loading={setup.loading && !setup.data} error={setup.error} onRetry={setup.reload}/>
@@ -63,16 +63,16 @@ export function ReserveScreen() {
       {!session.authenticated ? <GuestFields values={value.guest} onChange={value.setGuest}/> : <Text style={styles.summaryText}>{session.profile?.name} · {session.profile?.model} · {session.profile?.car}</Text>}
       <ServiceFields products={setup.data?.content.products || []} selected={value.selected} onSelect={value.setSelected} memo={value.memo} onMemo={value.setMemo}/>
     </View> : <BookingSchedule value={value}/>}
-    {error ? <Text accessibilityRole="alert" style={ui.error}>{error}</Text> : null}
-    {branch && (step || value.date) ? <View style={styles.actions}><View style={styles.flex}><Button brand label={step ? '예약 신청' : '다음'} busy={busy}
+    {error ? <Text accessibilityRole="alert" style={[ui.error, styles.formError]}>{error}</Text> : null}
+    {branch && (step || value.date) ? <View style={[styles.actions, styles.formActions]}><View style={styles.flex}><Button brand appearance="modal" label={step ? '예약 신청' : '다음'} busy={busy}
       disabled={!step && (!time || occupied.loading || !!occupied.error)} onPress={() => step ? void value.submit() : value.setStep(1)} testID="reserve-next"/></View>
-      <View style={styles.cancel}><Button brand secondary label={step ? '이전' : '취소'} onPress={value.back}/></View></View> : null}
+      <View style={styles.cancel}><Button brand secondary appearance="modal" label={step ? '이전' : '취소'} onPress={value.back}/></View></View> : null}
   </Screen>;
 }
 function BookingBranches({value}: {value: Reservation}) {
-  return <View style={styles.branches}>{!value.session.authenticated ? <Pressable accessibilityRole="button" accessibilityLabel="예약 확인하기"
-    onPress={() => value.nav.go({name: 'guest-lookup'})} style={[styles.branch, styles.lookup]}><Text style={styles.branchText}>예약 확인하기</Text></Pressable> : null}
-    <View style={styles.branches}>{value.setup.data?.content.branches.map(row => <Choice key={row.name} label={row.name} appearance="branch"
+  return <View style={value.session.authenticated ? styles.branches : styles.guestBranches}>{!value.session.authenticated ? <Pressable accessibilityRole="button" accessibilityLabel="예약 확인하기"
+    onPress={() => value.nav.go({name: 'guest-lookup'})} style={[styles.branch, styles.lookup]}><Text style={[styles.branchText, styles.lookupText]}>예약 확인하기</Text></Pressable> : null}
+    <View style={[styles.branches, !value.session.authenticated && styles.guestBranchList]}>{value.setup.data?.content.branches.map(row => <Choice key={row.name} label={row.name} appearance="branch"
       selected={value.branch === row.name} onPress={() => value.changeBranch(row.name)}/>)}</View>
   </View>;
 }
