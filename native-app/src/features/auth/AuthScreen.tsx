@@ -45,9 +45,9 @@ export function AuthScreen({signup = false}: {signup?: boolean}) {
       {signup ? <SignupFields values={profile} onChange={setProfile}/> : <View style={styles.checks}>
         {!admin && services.rememberedLogin ? <LoginCheck label="아이디 기억하기" checked={rememberId} onChange={setRememberId}/> : null}
         <LoginCheck label="자동로그인" checked={remember} onChange={setRemember}/></View>}
-      {error ? <Text accessibilityRole="alert" style={ui.error}>{error}</Text> : null}</View>
-    <View style={styles.actions}><View style={styles.primary}><Button brand label={signup ? '가입하기' : '로그인'} busy={busy} onPress={() => void submit()} testID="auth-submit"/></View>
-      <View style={styles.cancel}><Button brand secondary label="취소" onPress={nav.back}/></View></View>
+      <Text accessibilityRole={error ? 'alert' : undefined} style={[ui.error, styles.error]}>{error}</Text></View>
+    <View style={styles.actions}><View style={styles.primary}><Button brand appearance="modal" label={signup ? '가입하기' : '로그인'} busy={busy} onPress={() => void submit()} testID="auth-submit"/></View>
+      <View style={styles.cancel}><Button brand secondary appearance="modal" label="취소" onPress={nav.back}/></View></View>
     {!signup ? <View style={styles.secondary}><View style={styles.links}><Choice compact label={admin ? '고객 로그인' : '관리자 로그인'} selected={admin} onPress={() => {setAdmin(!admin); setPassword(''); setError('');}}/>
       <AuthLink label="비회원 예약 조회" onPress={() => nav.go({name: 'guest-lookup'})}/><AuthLink label="탈퇴 처리 상태" onPress={() => nav.go({name: 'deletion'})}/></View>
       <AuthLink label="비밀번호를 잊으셨나요? 매장 문의" onPress={() => {Alert.alert('매장에 문의해 주세요', '등록한 이름과 차량번호를 알려주시면 계정 확인을 도와드립니다.'); nav.go({name: 'branches'});}}/></View> : null}
