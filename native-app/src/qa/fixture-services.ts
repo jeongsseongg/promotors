@@ -7,6 +7,8 @@ import {createQaPush} from './fixture-push';
 import {createQaAccount, createQaDeletion} from './fixture-account';
 import {createQaNotifications} from './fixture-notifications';
 import {parseWorkshopFeed} from '../api/workshop-feed';
+import type {BranchAdminAccount, BranchAdminCreate} from '../api/branch-admin-accounts';
+import {ApiError} from '../api/errors';
 
 function verifyNativeFeedRuntime() {
   const sample = '<rss><channel><item><title>안산 공개 정비사례</title><link>https://blog.naver.com/lsh861124/123456</link><description><![CDATA[<img src="https://blogthumb.pstatic.net/example.jpg">]]></description></item></channel></rss>';
@@ -14,8 +16,9 @@ function verifyNativeFeedRuntime() {
   if (posts.length !== 1 || posts[0].imageUrls?.length !== 1) throw new Error('네이티브 정비사례 읽기 검증에 실패했습니다.');
 }
 
-export type QaConfiguration = {screen: 'home' | 'booking' | 'mypage' | 'admin' | 'notifications' | 'updates' | 'setup' | 'setup-denied' | 'inbox' | 'detail' | 'customer' | 'login' | 'guest-booking' | 'admin-mypage' | 'branches' | 'work-detail'; requestOsPermission?: boolean};
+export type QaConfiguration = {screen: 'home' | 'booking' | 'mypage' | 'admin' | 'notifications' | 'updates' | 'setup' | 'setup-denied' | 'inbox' | 'detail' | 'customer' | 'login' | 'guest-booking' | 'admin-mypage' | 'branches' | 'work-detail' | 'branch-accounts'; requestOsPermission?: boolean};
 function qaInitialRoute(screen: QaConfiguration['screen']): Route {
+  if (screen === 'branch-accounts') return {name: 'management', section: 'accounts'};
   if (screen === 'branches') return {name: 'branches'};
   if (screen === 'work-detail') return {name: 'work-detail', id: 'qa-run'};
   if (screen === 'home') return {name: 'home'};
@@ -43,10 +46,39 @@ function prepareDashboardData(config: QaConfiguration, data: ReturnType<typeof c
   const steps = data.runs[0].steps as {submitted: boolean}[];
   steps[1].submitted = true;
 }
+function createQaBranchAccounts(auth: ReturnType<typeof createQaSession>, branches: string[], calls: string[]) {
+  const accounts: BranchAdminAccount[] = [
+    {id: 'qa-branch-ansan', loginId: 'qa-branch-ansan', label: '안산점 예시 관리자', branches: branches.slice(0, 1),
+      active: true, loginMode: 'id_password', createdAt: new Date().toISOString()},
+    {id: 'qa-internal-legacy', loginId: null, label: '기존 예시 관리자', branches: branches.slice(1, 2),
+      active: true, loginMode: 'legacy_password', createdAt: new Date().toISOString()},
+  ];
+  const copy = () => accounts.map(account => ({...account, branches: [...account.branches]}));
+  function requireMain() {if (auth.session.snapshot().role !== 'main') throw new ApiError('MAIN_ADMIN_REQUIRED');}
+  async function list() {requireMain(); return copy();}
+  async function create(input: BranchAdminCreate) {
+    requireMain();
+    const loginId = input.loginId.trim(), label = input.label.trim();
+    if (!/^[A-Za-z0-9._-]{4,40}$/.test(loginId)) throw new ApiError('INVALID_ID');
+    if (accounts.some(account => account.id === loginId)) throw new ApiError('DUPLICATE_ID');
+    if (!label || label.length > 60) throw new ApiError('INVALID_PAYLOAD');
+    const bytes = Array.from(input.password).reduce((count, ch) => {
+      const point = ch.codePointAt(0) || 0; return count + (point > 0xFFFF ? 4 : point > 0x7FF ? 3 : point > 0x7F ? 2 : 1);
+    }, 0);
+    if (input.password.length < 10 || bytes > 72 || !/[A-Za-z]/.test(input.password) || !/[0-9]/.test(input.password)) throw new ApiError('WEAK_PASSWORD');
+    if (!input.branches.length || new Set(input.branches).size !== input.branches.length || input.branches.some(branch => !branches.includes(branch))) throw new ApiError('INVALID_BRANCH');
+    const account: BranchAdminAccount = {id: loginId, loginId, label, branches: [...input.branches],
+      active: true, loginMode: 'id_password', createdAt: new Date().toISOString()};
+    accounts.push(account); calls.push('branch-account:create');
+    return {...account, branches: [...account.branches]};
+  }
+  return {list, create};
+}
 export function createQaEnvironment(config: QaConfiguration, imageUri: string) {
-  const admin = ['admin', 'notifications', 'inbox', 'detail', 'admin-mypage'].includes(config.screen);
+  const admin = ['admin', 'notifications', 'inbox', 'detail', 'admin-mypage', 'branch-accounts'].includes(config.screen);
   const data = createQaData(), auth = createQaSession(admin, ['login', 'guest-booking'].includes(config.screen)), calls: string[] = [];
   let rememberedId = ''; prepareDashboardData(config, data);
+  if (config.screen === 'branch-accounts') auth.update({role: 'main', branches: [], profile: {id: 'qa-main', name: '예시 통합관리자'}});
   data.notificationState.admin = admin;
   if (config.screen === 'branches') data.content.branches[0].imageKeys = ['qa-workshop', 'qa-workshop-second'];
   if (config.screen === 'customer' || config.screen === 'work-detail') {data.bookings[0].status = '예약'; data.runs[0].bookingKey = 'qa-pending';}
@@ -81,6 +113,7 @@ export function createQaEnvironment(config: QaConfiguration, imageUri: string) {
       schedule: async () => clone(scoped()), get: async (id: string) => ({booking: clone(requireBooking(id)), customerContext: clone(data.customerContext)}),
       accept: (id: string) => decide(id), reject: (id: string, reason: string) => decide(id, true, reason),
     },
+    branchAdminAccounts: createQaBranchAccounts(auth, data.content.branches.map(branch => branch.name), calls),
     adminWork: {list: async () => clone(qaWorkList(data))},
     adminInquiries: {list: async (): Promise<Inquiry[]> => [{id: 'qa-my-inquiry', memberId: qaProfile.id, branch: '프로모터스 안산점', from: 'customer', message: '방문 일정 문의 예시입니다.', createdAt: new Date().toISOString()}]},
     account: createQaAccount(data, auth, scoped, imageUri, calls),

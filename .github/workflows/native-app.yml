@@ -73,7 +73,7 @@ jobs:
           echo "::error::Select only one platform restriction."
           exit 1
       - name: Verify native server privacy, registration and reservation actions
-        run: node --test scripts/test-existing-testflight.cjs scripts/test-customer-activity-sql.cjs scripts/test-customer-push.cjs scripts/test-apns-activity-lifecycle.cjs scripts/test-native-activity-feedback.cjs scripts/test-fcm-account-switch.cjs scripts/test-fcm-subscribe.cjs scripts/test-fcm-transport.cjs scripts/test-fcm-worker.cjs scripts/test-native-booking-action.cjs scripts/test-native-push.cjs scripts/test-native-subscribe.cjs native-app/server/tests/test-native-sync.cjs
+        run: node --test scripts/test-existing-testflight.cjs scripts/test-customer-activity-sql.cjs scripts/test-customer-push.cjs scripts/test-apns-activity-lifecycle.cjs scripts/test-native-activity-feedback.cjs scripts/test-fcm-account-switch.cjs scripts/test-fcm-subscribe.cjs scripts/test-fcm-transport.cjs scripts/test-fcm-worker.cjs scripts/test-native-booking-action.cjs scripts/test-native-push.cjs scripts/test-native-subscribe.cjs native-app/server/tests/test-native-sync.cjs native-app/server/tests/test-branch-admin-accounts.cjs
   android:
     if: ${{ inputs.ios_only != true && inputs.testflight_only != true && inputs.review_only != true }}
     runs-on: ubuntu-latest

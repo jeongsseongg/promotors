@@ -16,7 +16,7 @@ ongoing_only = os.environ.get('PM_CAPTURE_SCOPE') == 'ongoing'
 titles = {'home': '정비예약', 'booking': '예약 지점 선택', 'mypage': '예시 고객님, 안녕하세요', 'admin': '예약관리',
           'notifications': '앱 알림 설정', 'updates': '새 버전이 나왔어요', 'setup': '앱 알림이 연결됐어요',
           'setup-denied': '앱 알림을 켜주세요', 'inbox': '프로모터스 알림', 'detail': '예약 상세',
-          'customer': '예시 고객님, 안녕하세요', 'login': '회원 로그인', 'guest-booking': '정비예약', 'admin-mypage': '관리자님, 안녕하세요', 'branches': '매장안내', 'work-detail': '정비 상세'}
+          'customer': '예시 고객님, 안녕하세요', 'login': '회원 로그인', 'guest-booking': '정비예약', 'admin-mypage': '관리자님, 안녕하세요', 'branches': '매장안내', 'work-detail': '정비 상세', 'branch-accounts': '업체 계정 관리'}
 
 def sim(*args):
     return subprocess.check_output(['xcrun', 'simctl', *args])
@@ -61,7 +61,7 @@ for kind, device in selected:
                 subprocess.run([str(checker), str(screenshot), '예약하기'], check=True)
             expected = {'mypage': ['BMW 520d', '엔진오일 교환'], 'customer': ['BMW 520d', '엔진오일 교환'],
                         'login': ['회원가입', '아이디 기억하기', '자동로그인'], 'guest-booking': ['비회원 예약'],
-                        'admin-mypage': ['오늘 예약', '프로모터스 안산점'], 'branches': ['프로모터스 안산점'], 'work-detail': ['입고', '작업', '차량 상태를 점검']}.get(screen, [])
+                        'admin-mypage': ['오늘 예약', '프로모터스 안산점'], 'branches': ['프로모터스 안산점'], 'work-detail': ['입고', '작업', '차량 상태를 점검'], 'branch-accounts': ['통합관리자 전용', '업체별 계정을 한곳에서']}.get(screen, [])
             for text in expected:
                 subprocess.run([str(checker), str(screenshot), text], check=True)
             process.terminate()
