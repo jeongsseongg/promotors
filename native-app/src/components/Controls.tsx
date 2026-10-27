@@ -41,7 +41,7 @@ const styles = StyleSheet.create({
   modalCancel: {minHeight: 48, borderRadius: 8, paddingHorizontal: 20, borderColor: '#D6DBE1'},
   modalCancelText: {fontFamily: font.regular, fontSize: 15, lineHeight: 22, color: '#555F6B'},
   reserveAuthButton: {minHeight: 52, paddingHorizontal: 6},
-  heroButton: {minHeight: 70, borderRadius: 12, borderBottomWidth: 6, borderBottomColor: color.yellow},
+  heroButton: {minHeight: 64, borderRadius: 12, paddingVertical: 18, paddingHorizontal: 32},
   secondary: {backgroundColor: color.surface, borderColor: color.border, borderWidth: 1},
   accent: {backgroundColor: color.yellow}, secondaryText: {color: color.navy}, danger: {backgroundColor: color.danger},
   disabled: {opacity: 0.42}, pressed: {opacity: 0.72}, field: {gap: 8},
