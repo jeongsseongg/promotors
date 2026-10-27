@@ -177,6 +177,14 @@ jobs:
         env:
           PM_CAPTURE_SCOPE: ${{ inputs.ongoing_only && 'ongoing' || 'all' }}
         run: python3 scripts/capture-ios.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: independent-ios
+          path: |
+            native-app/qa-results/**
+            ${{ runner.temp }}/native-ios.log
+          retention-days: 7
       - name: Install existing distribution identity
         if: github.event_name == 'workflow_dispatch' && inputs.archive
         env:
@@ -235,14 +243,6 @@ jobs:
             ${{ runner.temp }}/native-export/*.ipa
             ${{ runner.temp }}/native-archive.log
             ${{ runner.temp }}/testflight-assignment.json
-          retention-days: 7
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: independent-ios
-          path: |
-            native-app/qa-results/**
-            ${{ runner.temp }}/native-ios.log
           retention-days: 7
 
   testflight:

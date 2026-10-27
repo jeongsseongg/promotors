@@ -3,9 +3,9 @@ import {KeyboardAvoidingView, Platform, Pressable, RefreshControl, ScrollView, S
 import {SafeAreaView} from 'react-native-safe-area-context';
 import {color, font} from '../theme/tokens';
 
-type Props = {title: string; children: ReactNode; onBack?: () => void; action?: ReactNode; footer?: ReactNode; refreshing?: boolean; onRefresh?: () => void; testID?: string; hideHeader?: boolean; plain?: boolean; contentStyle?: StyleProp<ViewStyle>};
-export function Screen({title, children, onBack, action, footer, refreshing, onRefresh, testID, hideHeader, plain, contentStyle}: Props) {
-  return <SafeAreaView style={[styles.safe, plain && styles.plain]} edges={['top', 'left', 'right']} testID={testID}>
+type Props = {title: string; children: ReactNode; onBack?: () => void; action?: ReactNode; footer?: ReactNode; refreshing?: boolean; onRefresh?: () => void; testID?: string; hideHeader?: boolean; plain?: boolean; contentStyle?: StyleProp<ViewStyle>; backgroundColor?: string};
+export function Screen({title, children, onBack, action, footer, refreshing, onRefresh, testID, hideHeader, plain, contentStyle, backgroundColor}: Props) {
+  return <SafeAreaView style={[styles.safe, plain && styles.plain, backgroundColor ? {backgroundColor} : undefined]} edges={['top', 'left', 'right']} testID={testID}>
     {!hideHeader ? <View style={styles.header}>
       {onBack ? <Pressable accessibilityRole="button" accessibilityLabel="뒤로" onPress={onBack} style={styles.back}><Text style={styles.backText}>‹</Text></Pressable> : null}
       <Text accessibilityRole="header" style={styles.title}>{title}</Text>{action}

@@ -7,4 +7,5 @@ export const space = {xs: 4, sm: 8, md: 16, lg: 24, xl: 32};
 export const font = {
   regular: 'Pretendard-Regular', medium: 'Pretendard-Medium',
   semibold: 'Pretendard-SemiBold', bold: 'Pretendard-Bold',
+  extraBold: 'Pretendard-ExtraBold', black: 'Pretendard-Black',
 };
