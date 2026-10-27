@@ -18,10 +18,10 @@ export function Field({label, error, hideLabel, ...props}: TextInputProps & {lab
     {error ? <Text accessibilityRole="alert" style={ui.error}>{error}</Text> : null}
   </View>;
 }
-export function Choice({label, selected, onPress, disabled}: {label: string; selected: boolean; onPress: () => void; disabled?: boolean}) {
+export function Choice({label, selected, onPress, disabled, compact, appearance}: {label: string; selected: boolean; onPress: () => void; disabled?: boolean; compact?: boolean; appearance?: 'branch' | 'slot'}) {
   return <Pressable accessibilityRole="button" accessibilityState={{selected, disabled: !!disabled}} disabled={disabled}
-    onPress={onPress} style={[styles.choice, selected && styles.choiceSelected, disabled && styles.disabled]}>
-    <Text style={[styles.choiceText, selected && styles.choiceSelectedText]}>{label}</Text>
+    onPress={onPress} style={[styles.choice, selected && styles.choiceSelected, appearance === 'branch' && styles.branchChoice, appearance === 'slot' && styles.slotChoice, compact && styles.compactChoice, disabled && styles.disabled]}>
+    <Text style={[styles.choiceText, selected && styles.choiceSelectedText, appearance === 'branch' && styles.branchChoiceText, appearance === 'slot' && styles.slotChoiceText, appearance === 'slot' && selected && styles.slotChoiceSelectedText, compact && styles.compactChoiceText]}>{label}</Text>
   </Pressable>;
 }
 export function MenuRow({title, detail, onPress, danger, icon, compact}: {title: string; detail?: string; onPress: () => void; danger?: boolean; icon?: ImageSourcePropType; compact?: boolean}) {
@@ -43,6 +43,12 @@ const styles = StyleSheet.create({
   multiline: {minHeight: 112, textAlignVertical: 'top'},
   choice: {minHeight: 48, borderWidth: 1, borderColor: color.border, backgroundColor: color.surface, borderRadius: 14, paddingHorizontal: 16, paddingVertical: 12, alignItems: 'center', justifyContent: 'center'},
   choiceSelected: {backgroundColor: color.navy, borderColor: color.navy},
+  branchChoice: {width: '100%', minHeight: 56, borderRadius: 10, borderWidth: 1.5, borderColor: color.navy, paddingVertical: 14},
+  branchChoiceText: {fontFamily: font.bold, fontSize: 17, lineHeight: 25},
+  slotChoice: {minHeight: 44, borderRadius: 8, paddingHorizontal: 2, paddingVertical: 9},
+  slotChoiceText: {fontFamily: font.medium, fontSize: 13, lineHeight: 18, textAlign: 'center'}, slotChoiceSelectedText: {fontFamily: font.bold, color: color.yellow},
+  compactChoice: {minHeight: 44, paddingHorizontal: 0, paddingVertical: 0, borderWidth: 0, borderRadius: 0, backgroundColor: color.surface},
+  compactChoiceText: {fontFamily: font.regular, fontSize: 13, color: color.muted},
   choiceText: {fontFamily: font.semibold, fontSize: 16, color: color.navy}, choiceSelectedText: {color: color.surface},
   menu: {minHeight: 66, flexDirection: 'row', alignItems: 'center', gap: 16, paddingVertical: 12},
   chevron: {fontSize: 28, color: color.muted},

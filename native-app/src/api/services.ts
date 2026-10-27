@@ -22,6 +22,7 @@ export interface NativeServicesOptions extends ApiClientOptions {
   push?: NativePushPlatform;
   deviceId?: () => Promise<string>;
   connectionPreferences?: NotificationConnectionPreferences;
+  rememberedLogin?: {read(): Promise<string>; write(id: string | null): Promise<void>};
   idFactory?: () => string;
   photoPicker?: PhotoPicker;
 }
@@ -33,7 +34,7 @@ export function createNativeServices(options: NativeServicesOptions) {
   const bookingListeners = new Set<() => void>();
   const bookingChanged = () => { for (const listener of bookingListeners) { try { listener(); } catch {} } };
   const notifications = createNotificationsService(rpc, session, options.push, options.deviceId, bookingChanged, options.connectionPreferences);
-  return { session, publicContent: createPublicContentService(rpc),
+  return { session, rememberedLogin: options.rememberedLogin, publicContent: createPublicContentService(rpc),
     bookings: createBookingService(rpc, session, id), adminBookings: createAdminBookingService(rpc, session, bookingChanged),
     guest: createGuestBookingService(rpc, id), account: createAccountService(rpc, session, id, photos),
     adminWork: createAdminWorkService(admin, id, bookingChanged), adminCustomers: createAdminCustomersService(admin, id),
