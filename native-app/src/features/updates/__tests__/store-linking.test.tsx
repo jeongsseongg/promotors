@@ -103,4 +103,3 @@ test.each(['ios', 'android'] as const)('%s OS가 이동을 거부하면 오류�
   expect(transport.openURL.mock.calls).toEqual([...failedCalls, [platform === 'ios' ? appleUrl : marketUrl]]);
   expect(visible(tree)).toBe(false);
 });
-
