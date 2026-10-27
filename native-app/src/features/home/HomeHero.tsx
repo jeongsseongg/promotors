@@ -7,6 +7,7 @@ import {Button} from '../../components/Controls';
 export function HomeHero({viewportHeight}: {viewportHeight: number}) {
   const nav = useNav(), window = useWindowDimensions();
   const [body, setBody] = useState<{width: number; height: number | null}>({width: Math.max(1, window.width - 40), height: null});
+  const logoWidth = Math.min(350, body.width);
   const spacingHeight = 186, frameHeight = 84;
   const estimated = Math.min(350, body.width) * 542 / 1202 + body.width * 535 / 1632 + 8 + 105.25 * window.fontScale + Math.max(64, 28 * window.fontScale + 36);
   const bodyHeight = body.height ?? estimated;
@@ -17,7 +18,7 @@ export function HomeHero({viewportHeight}: {viewportHeight: number}) {
       const measured = {width: event.nativeEvent.layout.width, height: event.nativeEvent.layout.height - spacing * spacingHeight};
       setBody(current => Math.abs(current.width - measured.width) > 0.5 || current.height === null || Math.abs(current.height - measured.height) > 0.5 ? measured : current);
     }}>
-      <Image source={require('../../../assets/logo-lockup.png')} accessibilityLabel="프로모터스 PRO MOTORS 수입차 정비 전문" style={styles.logo} resizeMode="contain"/>
+      <Image source={require('../../../assets/logo-lockup.png')} accessibilityLabel="프로모터스 PRO MOTORS 수입차 정비 전문" style={[styles.logo, {width: logoWidth, height: logoWidth * 542 / 1202}]} resizeMode="contain"/>
       <View style={[styles.yellowLine, {marginTop: 18 * spacing}]}/>
       <Text accessibilityRole="header" style={[styles.title, {marginTop: 38 * spacing}]}>정비예약</Text>
       <Text style={[styles.description, {marginTop: 34 * spacing}]}>사진으로 확인하고, 기록으로 관리하세요.{ '\n' }소중한 내 차를 위한 맞춤형 프리미엄 케어 서비스.</Text>
@@ -36,7 +37,7 @@ export function HomeHero({viewportHeight}: {viewportHeight: number}) {
 }
 const styles = StyleSheet.create({
   hero: {paddingHorizontal: 20, paddingTop: 18, paddingBottom: 22, backgroundColor: color.surface, backgroundImage: 'linear-gradient(115deg, #FFFFFF 0%, #F3F4F6 30%, #FFFFFF 55%, #E9EBEF 80%, #FFFFFF 100%)'},
-  logo: {width: '100%', maxWidth: 350, height: undefined, aspectRatio: 1202 / 542},
+  logo: {alignSelf: 'flex-start'},
   yellowLine: {width: 68, height: 8, borderRadius: 3, backgroundColor: color.yellow},
   title: {fontFamily: font.black, fontSize: 71, lineHeight: 67.45, letterSpacing: -1, includeFontPadding: false, color: color.navy, textShadowColor: 'rgba(30,36,100,0.18)', textShadowOffset: {width: 3, height: 4}, textShadowRadius: 6},
   description: {maxWidth: 350, fontFamily: font.medium, fontSize: 14, lineHeight: 18.9, color: '#2B2F33'},
