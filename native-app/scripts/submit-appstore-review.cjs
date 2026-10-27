@@ -252,4 +252,10 @@ async function main() {
   console.log(output);
   if (process.env.RUNNER_TEMP) fs.writeFileSync(path.join(process.env.RUNNER_TEMP, 'appstore-review-status.json'), output);
 }
-main().catch(error => { console.error(/^[A-Z0-9_]+$/.test(error.message) ? error.message : 'APPSTORE_REVIEW_FAILED'); process.exitCode = 1; });
+main().catch(error => {
+  const known = /^[A-Z0-9_]+$/.test(error.message);
+  console.error(known ? error.message : 'APPSTORE_REVIEW_FAILED');
+  if (!known) console.error(JSON.stringify({type: error.name,
+    transportCode: error.cause?.code, location: error.stack?.match(/submit-appstore-review\.cjs:[0-9]+:[0-9]+/)?.[0]}));
+  process.exitCode = 1;
+});
