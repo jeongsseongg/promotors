@@ -113,8 +113,10 @@ async function prepare(ctx) {
   check(!ctx.versions.some(v => v.attributes.versionString !== TARGET.version && ['WAITING_FOR_REVIEW', 'IN_REVIEW'].includes(v.attributes.appStoreState)), 'OTHER_VERSION_IN_REVIEW');
   let target = ctx.target;
   if (!target) target = (await request('/v1/appStoreVersions', 'POST', data('appStoreVersions', null,
-    {platform: 'IOS', versionString: TARGET.version, copyright: previous.attributes.copyright, releaseType: 'MANUAL'}, {app: link('apps', APP)}))).data;
+    {platform: 'IOS', versionString: TARGET.version, copyright: previous.attributes.copyright, releaseType: 'AFTER_APPROVAL'}, {app: link('apps', APP)}))).data;
   check(['PREPARE_FOR_SUBMISSION', 'READY_FOR_REVIEW', 'DEVELOPER_REJECTED', 'REJECTED', 'METADATA_REJECTED'].includes(target.attributes.appStoreState), 'VERSION_NOT_EDITABLE');
+  if (target.attributes.releaseType !== 'AFTER_APPROVAL') await request(`/v1/appStoreVersions/${target.id}`, 'PATCH',
+    data('appStoreVersions', target.id, {releaseType: 'AFTER_APPROVAL'}));
   await request(`/v1/appStoreVersions/${target.id}/relationships/build`, 'PATCH', {data: {type: 'builds', id: ctx.build.id}});
   await prepareLocalization(target, previous);
   await prepareReviewDetail(target, previous);
@@ -175,6 +177,42 @@ async function cancelReview(ctx) {
   return {requestedAt: new Date().toISOString(), versionId: target.id, submissionId: submission.id,
     previousBuild, beforeState: current.attributes.state, afterState: canceled.attributes.state};
 }
+async function verifyAutomaticScope(target, build, submission, releaseType) {
+  const version = (await request(`/v1/appStoreVersions/${target.id}`)).data;
+  check(version?.id === target.id && version.attributes.versionString === TARGET.version &&
+    version.attributes.appStoreState === target.attributes.appStoreState &&
+    version.attributes.releaseType === releaseType, 'AUTOMATIC_VERSION_CHANGED');
+  const current = (await request(`/v1/reviewSubmissions/${submission.id}`)).data;
+  check(current?.id === submission.id && current.attributes.state === submission.attributes.state &&
+    current.attributes.submittedDate === submission.attributes.submittedDate, 'AUTOMATIC_SUBMISSION_CHANGED');
+  const scope = (await request(`/v1/reviewSubmissions/${submission.id}/items?include=appStoreVersion&limit=50`)).data;
+  check(scope.length === 1 && scope[0].relationships?.appStoreVersion?.data?.id === target.id &&
+    (current.attributes.state !== 'COMPLETE' || scope[0].attributes.state === 'APPROVED'), 'SUBMISSION_SCOPE_MISMATCH');
+  const attached = (await request(`/v1/appStoreVersions/${target.id}/relationships/build`)).data;
+  check(attached?.id === build.id, 'ATTACHED_BUILD_MISMATCH');
+}
+async function automatic(ctx) {
+  const target = ctx.target;
+  check(target?.id && target.attributes.versionString === TARGET.version, 'RELEASE_VERSION_ID_MISMATCH');
+  check(ctx.build.attributes.version === TARGET.build, 'RELEASE_BUILD_NUMBER_MISMATCH');
+  check(['WAITING_FOR_REVIEW', 'IN_REVIEW', 'PENDING_DEVELOPER_RELEASE'].includes(target.attributes.appStoreState),
+    'AUTOMATIC_PENDING_VERSION_REQUIRED');
+  check(['MANUAL', 'AFTER_APPROVAL'].includes(target.attributes.releaseType), 'AUTOMATIC_RELEASE_TYPE_UNEXPECTED');
+  const state = target.attributes.appStoreState === 'PENDING_DEVELOPER_RELEASE' ? 'COMPLETE' : target.attributes.appStoreState;
+  const items = ctx.submissions.included?.filter(i => i.type === 'reviewSubmissionItems' &&
+    i.relationships?.appStoreVersion?.data?.id === target.id) || [];
+  const candidates = ctx.submissions.data.filter(s => s.attributes.state === state &&
+    s.relationships?.items?.data?.some(i => items.some(j => j.id === i.id)));
+  check(candidates.length === 1 && candidates[0].attributes.submittedDate, 'EXACT_SUBMITTED_VERSION_REQUIRED');
+  const submission = candidates[0];
+  await verifyAutomaticScope(target, ctx.build, submission, target.attributes.releaseType);
+  const changed = target.attributes.releaseType !== 'AFTER_APPROVAL';
+  if (changed) await request(`/v1/appStoreVersions/${target.id}`, 'PATCH',
+    data('appStoreVersions', target.id, {releaseType: 'AFTER_APPROVAL'}));
+  await verifyAutomaticScope(target, ctx.build, submission, 'AFTER_APPROVAL');
+  return {versionId: target.id, buildId: ctx.build.id, submissionId: submission.id,
+    releaseType: 'AFTER_APPROVAL', changed};
+}
 async function releaseApprovedVersion(ctx) {
   const target = ctx.target;
   check(target?.id && target.attributes.versionString === TARGET.version, 'RELEASE_VERSION_ID_MISMATCH');
@@ -197,19 +235,27 @@ async function releaseApprovedVersion(ctx) {
   return {requestedAt: new Date().toISOString(), versionId: target.id, requestId: released.data.id};
 }
 async function main() {
-  check(['inspect', 'prepare', 'submit', 'release', 'cancel'].includes(mode), 'INVALID_MODE');
+  check(['inspect', 'prepare', 'submit', 'release', 'cancel', 'automatic'].includes(mode), 'INVALID_MODE');
   if (mode !== 'inspect') check(process.env.PM_CONFIRM_REVIEW_VERSION === `${TARGET.version}/${TARGET.build}`, 'EXPLICIT_VERSION_CONFIRMATION_REQUIRED');
   let ctx = await context();
   if (mode === 'prepare') { await prepare(ctx); ctx = await context(); }
   if (mode === 'submit') { await submit(ctx); ctx = await context(); }
-  let releaseAction, cancelAction;
+  let releaseAction, cancelAction, automaticAction;
   if (mode === 'cancel') { cancelAction = await cancelReview(ctx); ctx = await context(); }
+  if (mode === 'automatic') { automaticAction = await automatic(ctx); ctx = await context(); }
   if (mode === 'release') { releaseAction = await releaseApprovedVersion(ctx); ctx = await context(); }
   const result = await snapshot(ctx);
   if (releaseAction) result.releaseAction = releaseAction;
   if (cancelAction) result.cancelAction = cancelAction;
+  if (automaticAction) result.automaticAction = automaticAction;
   const output = JSON.stringify(result, null, 2);
   console.log(output);
   if (process.env.RUNNER_TEMP) fs.writeFileSync(path.join(process.env.RUNNER_TEMP, 'appstore-review-status.json'), output);
 }
-main().catch(error => { console.error(/^[A-Z0-9_]+$/.test(error.message) ? error.message : 'APPSTORE_REVIEW_FAILED'); process.exitCode = 1; });
+main().catch(error => {
+  const known = /^[A-Z0-9_]+$/.test(error.message);
+  console.error(known ? error.message : 'APPSTORE_REVIEW_FAILED');
+  if (!known) console.error(JSON.stringify({type: error.name,
+    transportCode: error.cause?.code, location: error.stack?.match(/submit-appstore-review\.cjs:[0-9]+:[0-9]+/)?.[0]}));
+  process.exitCode = 1;
+});

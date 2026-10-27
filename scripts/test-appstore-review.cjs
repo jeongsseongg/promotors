@@ -14,17 +14,18 @@ function fixture(change = {}) {
     attached: 'old', oldNumber: OLD, oldVersion: release.version, oldApp: APP,
     oldBundle: BUNDLE, submissionCount: 1, itemCount: 1, itemVersion: 'version',
     submissionState: 'WAITING_FOR_REVIEW', freshState: null, processing: 'VALID',
-    encryption: false, targetVersion: release.version, canceled: false, ...change};
+    encryption: false, targetVersion: release.version, canceled: false, releaseType: 'MANUAL',
+    submittedDate: '2001-01-01T00:00:00Z', readCounts: {}, ...change};
 }
 
 function version(state) {
-  return {type: 'appStoreVersions', id: 'version', attributes: {
-    versionString: state.targetVersion, appStoreState: state.targetState, releaseType: 'MANUAL'}};
+  return {type: 'appStoreVersions', id: state.versionId || 'version', attributes: {
+    versionString: state.targetVersion, appStoreState: state.targetState, releaseType: state.releaseType}};
 }
 
 function submission(state, id = 'submission') {
   return {type: 'reviewSubmissions', id, attributes: {
-    state: state.canceled ? 'COMPLETE' : state.submissionState},
+    state: state.canceled ? 'COMPLETE' : state.submissionState, submittedDate: state.submittedDate},
   relationships: {items: {data: [{type: 'reviewSubmissionItems', id: 'item'}]}}};
 }
 
@@ -36,17 +37,19 @@ function items(state) {
 
 function build(state, old = false) {
   return {type: 'builds', id: old ? 'old' : 'target', attributes: {
-    version: old ? state.oldNumber : TARGET, processingState: state.processing,
+    version: old ? state.oldNumber : (state.buildNumber || TARGET), processingState: state.processing,
     usesNonExemptEncryption: state.encryption},
   relationships: {app: relation('apps', old ? state.oldApp : APP)}};
 }
 
 function read(state, endpoint) {
+  state.readCounts[endpoint] = (state.readCounts[endpoint] || 0) + 1;
+  state.onRead?.(state, endpoint, state.readCounts[endpoint]);
   if (endpoint === `/v1/apps/${APP}`) return {data: {id: APP, attributes: {bundleId: state.bundle}}};
-  if (endpoint.startsWith(`/v1/apps/${APP}/appStoreVersions?`)) return {data: [version(state), {
+  if (endpoint.startsWith(`/v1/apps/${APP}/appStoreVersions?`)) return {data: [...(state.targetMissing ? [] : [version(state)]), {
     id: 'previous', attributes: {versionString: '0.0.1', appStoreState: 'READY_FOR_SALE'}}]};
-  if (endpoint.startsWith('/v1/builds?')) return {data: [build(state)]};
-  if (endpoint === '/v1/builds/target/preReleaseVersion') return {data: {attributes: {version: release.version}}};
+  if (endpoint.startsWith('/v1/builds?')) return {data: Array.from({length: state.buildCount ?? 1}, () => build(state))};
+  if (endpoint === '/v1/builds/target/preReleaseVersion') return {data: {attributes: {version: state.buildVersion || release.version}}};
   if (endpoint === '/v1/builds/old/preReleaseVersion') return {data: {attributes: {version: state.oldVersion}}};
   if (endpoint === '/v1/builds/old/app') return {data: {id: state.oldApp, attributes: {bundleId: state.oldBundle}}};
   if (endpoint === '/v1/builds/target/app') return {data: {id: APP, attributes: {bundleId: BUNDLE}}};
@@ -58,13 +61,15 @@ function read(state, endpoint) {
   if (/^\/v1\/reviewSubmissions\/submission\d*\/items\?/.test(endpoint)) return {data: items(state)};
   if (endpoint === '/v1/reviewSubmissions/submission') {
     const result = submission(state);
+    if (state.singleSubmissionId) result.id = state.singleSubmissionId;
     if (state.freshState) result.attributes.state = state.freshState;
     return {data: result};
   }
+  if (endpoint === '/v1/appStoreVersions/version') return {data: version(state)};
   if (endpoint === '/v1/appStoreVersions/version/relationships/build') return {
     data: state.attached ? {type: 'builds', id: state.attached} : null};
   if (/^\/v1\/appStoreVersions\/(version|previous)\/appStoreVersionLocalizations\?/.test(endpoint)) return {
-    data: [{id: 'ko', attributes: {locale: 'ko', whatsNew: '기존 설명'}}]};
+    data: [{id: 'ko', attributes: {locale: 'ko', whatsNew: state.notes || '기존 설명'}}]};
   if (endpoint.startsWith('/v1/appStoreVersionLocalizations/ko/appScreenshotSets?')) return {
     data: [{id: 'screenshots', attributes: {screenshotDisplayType: 'APP_IPHONE_67'},
       relationships: {appScreenshots: {data: [{id: 'image'}]}}}]};
@@ -75,6 +80,20 @@ function read(state, endpoint) {
 }
 
 function write(state, endpoint, method, body) {
+  if (endpoint === '/v1/appStoreVersions/version' && method === 'PATCH' && body?.data?.attributes?.releaseType === 'AFTER_APPROVAL') {
+    state.releaseType = body.data.attributes.releaseType; state.afterAutomaticPatch?.(state);
+    return {data: version(state)};
+  }
+  if (state.allowPrepare && endpoint === '/v1/appStoreVersions' && method === 'POST') {
+    state.targetMissing = false; state.targetState = 'PREPARE_FOR_SUBMISSION';
+    state.releaseType = body.data.attributes.releaseType; return {data: version(state)};
+  }
+  if (state.allowPrepare && endpoint === '/v1/appStoreVersions/version/relationships/build' && method === 'PATCH') {
+    state.attached = body.data.id; return {data: body.data};
+  }
+  if (state.allowPrepare && endpoint === '/v1/appStoreVersionLocalizations/ko' && method === 'PATCH') {
+    state.notes = body.data.attributes.whatsNew; return {data: {id: 'ko', attributes: body.data.attributes}};
+  }
   if (endpoint === '/v1/reviewSubmissions/submission' && method === 'PATCH' && body?.data?.attributes?.canceled === true) {
     state.canceled = true;
     state.targetState = 'DEVELOPER_REJECTED';
@@ -201,4 +220,101 @@ test('cancel refuses completed, approved or editable submissions', async () => {
 test('cancel rechecks the current submission state before sending any mutation', async () => {
   await rejected({freshState: 'COMPLETE'});
   await rejected({freshState: 'UNRESOLVED_ISSUES'});
+});
+const automatic = {mode: 'automatic'}, automaticFixture = change => ({attached: 'target', ...change});
+const automaticPatch = {endpoint: '/v1/appStoreVersions/version', method: 'PATCH', body: {
+  data: {type: 'appStoreVersions', id: 'version', attributes: {releaseType: 'AFTER_APPROVAL'}}}};
+const reviewStates = [['WAITING_FOR_REVIEW', 'WAITING_FOR_REVIEW'], ['IN_REVIEW', 'IN_REVIEW'], ['PENDING_DEVELOPER_RELEASE', 'COMPLETE']];
+
+test('automatic changes only the exact reviewed version release type and verifies unchanged scope', async () => {
+  for (const [targetState, submissionState] of reviewStates) {
+    const result = await execute(automaticFixture({targetState, submissionState, itemState: 'APPROVED'}), automatic);
+    assert.equal(result.exitCode, 0, result.errors.join('\n'));
+    assert.deepEqual(writes(result), [automaticPatch]);
+    assert.deepEqual(result.output.automaticAction, {versionId: 'version', buildId: 'target',
+      submissionId: 'submission', releaseType: 'AFTER_APPROVAL', changed: true});
+    assert.equal(result.output.versions.find(v => v.id === 'version').releaseType, 'AFTER_APPROVAL');
+    assert.equal(result.output.attachedBuild.id, 'target');
+    assert.equal(result.output.submissions[0].submittedDate, '2001-01-01T00:00:00Z');
+    const calls = result.state.calls, index = calls.findIndex(call => call.method !== 'GET');
+    for (const endpoint of ['/v1/appStoreVersions/version', '/v1/appStoreVersions/version/relationships/build',
+      '/v1/reviewSubmissions/submission', '/v1/reviewSubmissions/submission/items?include=appStoreVersion&limit=50']) {
+      assert.ok(calls.slice(0, index).some(call => call.endpoint === endpoint), 'fresh pre-write read: ' + endpoint);
+      assert.ok(calls.slice(index + 1).some(call => call.endpoint === endpoint), 'verified post-write read: ' + endpoint);
+    }
+  }
+});
+test('automatic requires exact version/build confirmation and valid app/build identity', async () => {
+  for (const confirmation of [null, 'wrong', `${release.version}/${release.iosBuild + 1}`])
+    await rejected(automaticFixture(), {...automatic, env: {PM_CONFIRM_REVIEW_VERSION: confirmation}});
+  for (const change of [{bundle: 'other.app'}, {targetVersion: release.version + '-other'},
+    {buildVersion: release.version + '-other'}, {buildNumber: String(release.iosBuild + 1)},
+    {buildCount: 0}, {buildCount: 2}, {processing: 'INVALID'}, {encryption: null}, {encryption: true}])
+    await rejected(automaticFixture(change), automatic);
+});
+test('automatic refuses wrong attachment, ambiguous or unrelated submissions, and unapproved completed scope', async () => {
+  for (const change of [{attached: 'old'}, {attached: null}, {submissionCount: 0}, {submissionCount: 2},
+    {itemCount: 0}, {itemCount: 2}, {itemVersion: 'another-version'}, {releaseType: 'SCHEDULED'},
+    {targetState: 'READY_FOR_SALE'}, {targetState: 'PREPARE_FOR_SUBMISSION'},
+    {submissionState: 'READY_FOR_REVIEW'}, {submissionState: 'UNRESOLVED_ISSUES'},
+    {targetState: 'PENDING_DEVELOPER_RELEASE', submissionState: 'COMPLETE', itemState: 'REJECTED'}])
+    await rejected(automaticFixture(change), automatic);
+});
+test('automatic detects version, state and release setting races on the fresh version read', async () => {
+  for (const change of [{versionId: 'another-version'}, {targetVersion: release.version + '-other'},
+    {targetState: 'READY_FOR_SALE'}, {targetState: 'IN_REVIEW'}, {releaseType: 'SCHEDULED'}]) {
+    await rejected(automaticFixture({onRead(state, endpoint) {
+      if (endpoint === '/v1/appStoreVersions/version') Object.assign(state, change);
+    }}), automatic);
+  }
+});
+test('automatic detects fresh submission identity, state, date and scope changes before any write', async () => {
+  for (const change of [{singleSubmissionId: 'another-submission'}, {submissionState: 'COMPLETE'},
+    {submissionState: 'IN_REVIEW'}, {submittedDate: '2001-01-02T00:00:00Z'}, {itemCount: 2},
+    {itemVersion: 'another-version'}, {attached: 'old'}]) {
+    await rejected(automaticFixture({onRead(state, endpoint) {
+      if (endpoint === '/v1/reviewSubmissions/submission') Object.assign(state, change);
+    }}), automatic);
+  }
+});
+test('automatic rejects attachment and scope races introduced by their fresh read', async () => {
+  for (const race of [
+    {endpoint: '/v1/appStoreVersions/version/relationships/build', change: {attached: 'old'}},
+    {endpoint: '/v1/reviewSubmissions/submission/items?include=appStoreVersion&limit=50', change: {itemCount: 2}},
+    {endpoint: '/v1/reviewSubmissions/submission/items?include=appStoreVersion&limit=50', change: {itemVersion: 'another-version'}},
+  ]) {
+    await rejected(automaticFixture({onRead(state, endpoint, count) {
+      if (endpoint === race.endpoint && (!endpoint.includes('/items?') || count > 1)) Object.assign(state, race.change);
+    }}), automatic);
+  }
+});
+test('automatic fails verification if Apple readback drifts instead of reporting configuration success', async () => {
+  for (const change of [{releaseType: 'MANUAL'}, {attached: 'old'}, {singleSubmissionId: 'another-submission'},
+    {submissionState: 'IN_REVIEW'}, {submittedDate: '2001-01-02T00:00:00Z'}, {itemCount: 2},
+    {itemVersion: 'another-version'}, {targetState: 'READY_FOR_SALE'}, {targetVersion: release.version + '-other'}]) {
+    const result = await execute(automaticFixture({afterAutomaticPatch: state => Object.assign(state, change)}), automatic);
+    assert.equal(result.exitCode, 1, 'readback drift must not be reported as verified');
+    assert.deepEqual(writes(result), [automaticPatch], 'verification failure must not trigger cancellation or other writes');
+    assert.equal(result.output, null);
+  }
+});
+test('automatic already configured remains idempotent with verified target and submission', async () => {
+  for (const [targetState, submissionState] of reviewStates) {
+    const result = await execute(automaticFixture({targetState, submissionState, itemState: 'APPROVED', releaseType: 'AFTER_APPROVAL'}), automatic);
+    assert.equal(result.exitCode, 0, result.errors.join('\n'));
+    assert.equal(writes(result).length, 0);
+    assert.equal(result.output.automaticAction.changed, false);
+    assert.equal(result.output.attachedBuild.id, 'target');
+  }
+});
+test('future prepare defaults both newly created and existing editable versions to automatic release', async () => {
+  for (const targetMissing of [false, true]) {
+    const result = await execute(automaticFixture({targetMissing, targetState: 'PREPARE_FOR_SUBMISSION',
+      submissionCount: 0, allowPrepare: true}), {mode: 'prepare'});
+    assert.equal(result.exitCode, 0, result.errors.join('\n'));
+    assert.equal(result.output.versions.find(v => v.id === 'version').releaseType, 'AFTER_APPROVAL');
+    const setup = writes(result).find(call => call.endpoint === (targetMissing ? '/v1/appStoreVersions' : '/v1/appStoreVersions/version'));
+    assert.equal(setup.body.data.attributes.releaseType, 'AFTER_APPROVAL');
+    assert.equal(result.output.attachedBuild.id, 'target');
+  }
 });
