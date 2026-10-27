@@ -33,6 +33,7 @@ import {NotificationPrompt, useAutomaticNotifications} from './features/notifica
 
 export type AppProps = {services: NativeServices; push: NativePush; initialRoute?: Route; updates?: StoreUpdates; notificationDisclosure?: string};
 const tabs = new Set(['home', 'branches', 'cases', 'notices', 'my']);
+const persistentTabs = new Set([...tabs, 'login', 'signup', 'reserve']);
 const privateRoutes = new Set(['bookings', 'booking', 'profile', 'history', 'work', 'work-detail', 'inquiry', 'coupons', 'events', 'notifications', 'notification-settings', 'admin', 'admin-booking', 'management']);
 function Content({route}: {route: Route}) {
   switch (route.name) {
@@ -98,7 +99,7 @@ export default function App({services, push, initialRoute, updates, notification
       {restoreError ? <Screen title="연결 확인"><Text accessibilityRole="alert" style={ui.error}>{restoreError}</Text><Button label="다시 시도" onPress={() => void restore()}/><Button secondary label="소개 화면 보기" onPress={() => {setRestoreError(''); go({name: 'home'});}}/></Screen> : session.status === 'restoring' ? <View style={styles.loading}><ActivityIndicator color={color.navy}/><Text style={ui.body}>로그인 상태를 확인하고 있어요.</Text></View> :
         <View style={ui.flex} key={session.authenticated ? [session.profile?.id, session.profile?.car, session.role, session.branches.join('|'), session.privacyEpoch].join(':') : 'signed-out'}>
           {protectedRoute ? <AuthScreen/> : adminForbidden ? <MyScreen/> : signupFlow ? <SignupFlow legal={signupLegal}/> : <Content key={stack.length + ':' + route.name + ('id' in route ? ':' + route.id : '')} route={route}/>}
-          {tabs.has(route.name) ? <TabBar active={route.name as Tab} onChange={tab => go({name: tab})}/> : null}
+          {persistentTabs.has(route.name) ? <TabBar active={tabs.has(route.name) ? route.name as Tab : route.name === 'reserve' ? 'home' : 'my'} onChange={tab => go({name: tab})}/> : null}
         </View>}
       <NotificationPrompt disclosure={notificationDisclosure} setup={automaticNotifications} onSettings={() => {automaticNotifications.dismiss(); go({name: 'notification-settings'});}}/>
       <UpdateNotice updates={updates} onNotificationSettings={session.authenticated ? () => go({name: 'notification-settings'}) : undefined} eligible={!automaticNotifications.blocking && !restoreError && session.status !== 'restoring' && ['home', 'my'].includes(route.name)}/>

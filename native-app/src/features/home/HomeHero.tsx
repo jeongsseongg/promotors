@@ -19,12 +19,12 @@ export function HomeHero() {
   </View>;
 }
 const styles = StyleSheet.create({
-  hero: {paddingHorizontal: 20, paddingTop: 8, paddingBottom: 24, minHeight: 680, backgroundColor: color.surface},
+  hero: {paddingHorizontal: 20, paddingTop: 8, paddingBottom: 24, minHeight: 680, backgroundColor: color.surface, backgroundImage: 'linear-gradient(115deg, #FFFFFF 0%, #F3F4F6 30%, #FFFFFF 55%, #E9EBEF 80%, #FFFFFF 100%)'},
   logo: {width: '100%', height: undefined, aspectRatio: 1202 / 542},
   yellowLine: {width: 66, height: 8, borderRadius: 4, backgroundColor: color.yellow, marginTop: 10},
-  title: {fontFamily: font.bold, fontSize: 68, lineHeight: 84, letterSpacing: -2, color: color.navy, marginTop: 28},
+  title: {fontFamily: font.bold, fontSize: 68, lineHeight: 84, letterSpacing: -2, color: color.navy, marginTop: 28, textShadowColor: 'rgba(30,36,100,0.18)', textShadowOffset: {width: 3, height: 4}, textShadowRadius: 6},
   description: {fontFamily: font.medium, fontSize: 13, lineHeight: 20, color: '#2B2F33', marginTop: 20},
-  reserve: {marginTop: 32},
+  reserve: {marginTop: 32, boxShadow: '0 12px 24px rgba(30,36,100,0.3)', borderRadius: 12},
   reserveText: {fontFamily: font.bold, fontSize: 23, color: color.yellow},
   arrow: {position: 'absolute', right: 24, fontFamily: font.bold, fontSize: 30, color: color.yellow},
   brands: {width: '100%', height: undefined, aspectRatio: 1632 / 535, marginTop: 44},

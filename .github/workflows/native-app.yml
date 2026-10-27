@@ -49,7 +49,7 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: ${{ inputs.review_only && 'promotors-store-review' || 'promotors-independent-native' }}
+  group: ${{ inputs.review_only && 'promotors-store-review' || inputs.android_only == true && inputs.archive == false && inputs.upload == false && 'promotors-independent-native-android-validation' || 'promotors-independent-native' }}
   cancel-in-progress: ${{ inputs.review_only != true }}
 jobs:
   server:

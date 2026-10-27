@@ -12,6 +12,7 @@ jest.mock('react-native', () => ({AppState: {currentState: 'background', addEven
 jest.mock('../../api/services', () => ({createNativeServices: () => mockServices}));
 jest.mock('../config', () => ({publicConfig: {}}));
 jest.mock('../session-storage', () => ({sessionStorage: {}}));
+jest.mock('../../features/auth/rememberedLogin', () => ({rememberedLogin: {read: async () => '', write: async () => {}}}));
 jest.mock('../photos', () => ({photoPicker: {}}));
 jest.mock('../notification-preferences', () => ({notificationConnectionPreferences: {}}));
 jest.mock('../push', () => ({nativePush: {}, deviceId: jest.fn(), bindingSnapshot: () => ({binding: '00000000-0000-4000-8000-000000000015', generation: 1}),

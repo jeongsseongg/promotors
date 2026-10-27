@@ -6,8 +6,9 @@ import {activityTokenSnapshot, bindingSnapshot, deviceId, nativePush, onActivity
 import {createActivitySync, type OngoingStatus} from './activity-sync';
 import {photoPicker} from './photos';
 import {notificationConnectionPreferences} from './notification-preferences';
+import {rememberedLogin} from '../features/auth/rememberedLogin';
 
-export const services = createNativeServices({...publicConfig, storage: sessionStorage, push: nativePush, deviceId, photoPicker, connectionPreferences: notificationConnectionPreferences});
+export const services = createNativeServices({...publicConfig, storage: sessionStorage, push: nativePush, deviceId, photoPicker, rememberedLogin, connectionPreferences: notificationConnectionPreferences});
 let requestScheduleRefresh: () => Promise<void> = async () => {};
 let requestActivityTokenRefresh: () => Promise<void> = async () => {};
 let ongoingStatus: () => OngoingStatus | undefined = () => undefined;

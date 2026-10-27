@@ -1,5 +1,5 @@
 import React from 'react';
-import {Text, View} from 'react-native';
+import {Image, Pressable, Text, View} from 'react-native';
 import {MenuRow} from '../../components/Controls';
 import {myPage as styles} from './myPageStyles';
 import {useNav} from '../../components/AppContext';
@@ -12,27 +12,37 @@ const icons = {
   lock: require('../../../assets/account/lock.png'), flag: require('../../../assets/account/flag.png'),
 };
 export type MyMenuItem = {title: string; detail?: string; icon: keyof typeof icons; onPress(): void};
+export function MyGreeting({title, subtitle}: {title: string; subtitle: string}) {
+  const nav = useNav();
+  return <View style={styles.greeting}>
+    <View style={styles.greetingRow}><Text accessibilityRole="header" style={styles.hello}>{title}</Text>
+      <Pressable accessibilityRole="button" accessibilityLabel="알림" testID="my-notifications" onPress={() => nav.go({name: 'notifications'})} style={styles.notificationButton}>
+        <Image source={icons.bell} accessible={false} style={styles.notificationIcon}/><Text style={styles.notificationLabel}>알림</Text>
+      </Pressable></View>
+    <Text style={styles.subtitle}>{subtitle}</Text>
+  </View>;
+}
 export function MyMenuSection({title, items}: {title: string; items: MyMenuItem[]}) {
   return <View style={styles.group}><Text style={styles.groupTitle}>{title}</Text><View style={styles.groupList}>
     {items.map(item => <MenuRow key={item.title} compact title={item.title} detail={item.detail} icon={icons[item.icon]} onPress={item.onPress}/>)}
   </View></View>;
 }
-export function MyCustomerMenus({model}: {model?: string}) {
+export function MyCustomerMenus({model, historyCount, bookingCount, messageCount}: {model?: string; historyCount?: number; bookingCount?: number; messageCount?: number}) {
   const nav = useNav();
   return <>
     <MyMenuSection title="내 차" items={[
       {title: '내 차 관리', detail: model || '차량정보 입력', icon: 'car', onPress: () => nav.go({name: 'profile'})},
-      {title: '정비 이력', icon: 'doc', onPress: () => nav.go({name: 'history'})},
-      {title: '공업사의 TIP', detail: '문의하기', icon: 'headset', onPress: () => nav.go({name: 'inquiry'})},
+      {title: '정비 이력', detail: historyCount === undefined ? '확인하기' : historyCount ? `${historyCount}건` : '내역 없음', icon: 'doc', onPress: () => nav.go({name: 'history'})},
+      {title: '공업사의 TIP', detail: messageCount ? `메시지 ${messageCount}` : '문의하기', icon: 'headset', onPress: () => nav.go({name: 'inquiry'})},
     ]}/>
     <MyMenuSection title="예약" items={[
-      {title: '예약 내역', icon: 'calendar', onPress: () => nav.go({name: 'bookings'})},
+      {title: '예약 내역', detail: bookingCount === undefined ? '확인하기' : bookingCount ? `${bookingCount}건` : '내역 없음', icon: 'calendar', onPress: () => nav.go({name: 'bookings'})},
       {title: '정비 예약하기', detail: '예약', icon: 'wrench', onPress: () => nav.go({name: 'reserve'})},
       {title: '작업사진·현황', detail: '확인하기', icon: 'check', onPress: () => nav.go({name: 'work'})},
     ]}/>
     <MyMenuSection title="혜택" items={[
-      {title: '내 쿠폰', icon: 'flag', onPress: () => nav.go({name: 'coupons'})},
-      {title: '이벤트', icon: 'flag', onPress: () => nav.go({name: 'events'})},
+      {title: '내 쿠폰', detail: '확인하기', icon: 'check', onPress: () => nav.go({name: 'coupons'})},
+      {title: '이벤트', detail: '확인하기', icon: 'flag', onPress: () => nav.go({name: 'events'})},
     ]}/>
   </>;
 }
