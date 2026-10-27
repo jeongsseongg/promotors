@@ -61,7 +61,7 @@ for kind, device in selected:
                 subprocess.run([str(checker), str(screenshot), '예약하기'], check=True)
             expected = {'mypage': ['BMW 520d', '엔진오일 교환'], 'customer': ['BMW 520d', '엔진오일 교환'],
                         'login': ['회원가입', '아이디 기억하기', '자동로그인'], 'guest-booking': ['비회원 예약'],
-                        'admin-mypage': ['오늘 예약', '프로모터스 안산점'], 'branches': ['프로모터스 안산점'], 'work-detail': ['내 차 정비 현황']}.get(screen, [])
+                        'admin-mypage': ['오늘 예약', '프로모터스 안산점'], 'branches': ['프로모터스 안산점'], 'work-detail': ['입고', '작업', '차량 상태를 점검']}.get(screen, [])
             for text in expected:
                 subprocess.run([str(checker), str(screenshot), text], check=True)
             process.terminate()

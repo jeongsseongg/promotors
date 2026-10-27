@@ -192,9 +192,11 @@ for screen, label in screen_titles.items():
         source = wait_for('프로모터스 안산점 사진 1 크게 보기')
         tap('프로모터스 안산점 다음 사진', source)
         source = wait_for('프로모터스 안산점 사진 2 크게 보기')
+        assert '2 / 2' in source, 'Branch gallery page did not change'
         save('branches-second-photo', source)
         tap('프로모터스 안산점 사진 2 크게 보기', source)
         source = wait_for('매장 사진 닫기')
+        assert '프로모터스 안산점 사진 2 확대' in source, 'Wrong branch photo opened'
         save('branches-photo-viewer', source)
         tap('매장 사진 닫기', source)
         source = wait_for('프로모터스 안산점 사진 2 크게 보기')
