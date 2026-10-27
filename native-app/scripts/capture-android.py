@@ -43,7 +43,7 @@ def hierarchy():
     except subprocess.CalledProcessError:
         return ''
 
-def wait_for(label):
+def wait_for(label, required=()):
     global launcher_recoveries, notification_drawer_recoveries
     drawer_attempts = 0
     for _ in range(35):
@@ -54,7 +54,7 @@ def wait_for(label):
             save('emulator-launcher-anr', source)
             tap('android:id/aerr_close', source)
             continue
-        if label in source and 'com.facebook.react.devsupport' not in source:
+        if label in source and all(value in source for value in required) and 'com.facebook.react.devsupport' not in source:
             return source
         if live_capture and 'package="com.google.android.apps.nexuslauncher"' in source and drawer_attempts < 3:
             # ADB may report success before the launcher finishes the HOME transition.
@@ -133,7 +133,7 @@ def save_ongoing_notification():
     save('booking-ongoing-after', after_source)
     tap('예시 고객', after_source)
     live_capture = False
-    source = wait_for('예약 상세')
+    source = wait_for('예약 상세', ('BMW 520d', '예약 승인', '예약 거절'))
     assert 'BMW 520d' in source and '예약 승인' in source and '예약 거절' in source
     save('ongoing-open-detail', source)
 
@@ -288,7 +288,7 @@ for screen, label in screen_titles.items():
         assert '예약 승인' in source and '예약 거절' in source, 'Native reservation actions missing'
         save('new-booking-notification', source)
         tap('새 예약이 들어왔어요 · 예시', source)
-        source = wait_for('예약 상세')
+        source = wait_for('예약 상세', ('예시 고객', 'BMW 520d'))
         assert '예시 고객' in source and 'BMW 520d' in source
         save('notification-open-detail', source)
 set_appearance('yes')
