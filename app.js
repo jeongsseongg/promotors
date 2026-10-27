@@ -1155,7 +1155,8 @@ function normalizeSubAdmin(value) {
       id: account.id || `sub-${i}`,
       label: String(account.label || `일반 관리자 ${i + 1}`).trim(),
       branches: toBranches(account),
-      createdAt: account.createdAt || ''
+      createdAt: account.createdAt || '',
+      loginMode: account.loginMode || 'unknown'
     }));
   return { accounts: normalized };
 }
@@ -8388,7 +8389,10 @@ function wireCredentialCopy(scope = document) {
 async function loadAdminAccounts() {
   if (!isTopAdmin()) return;
   const accounts = await supabaseRpc('pm_admin_accounts', { p_token: authToken });
-  adminAccountState = Array.isArray(accounts) ? accounts : [];
+  const accountModes = isDeveloper() ? [] : await supabaseRpc('pm_branch_admin_manage', { p_token: authToken, p_action: 'list', p_data: {} });
+  adminAccountState = (Array.isArray(accounts) ? accounts : []).map(account => ({
+    ...account, loginMode: accountModes.find(item => item.id === account.id)?.loginMode || 'unknown'
+  }));
   adminAccountsLoaded = true;
 }
 
@@ -8412,7 +8416,7 @@ function renderAdmSettings() {
         <em>${account.branches.length ? esc(account.branches.join(' · ')) : '담당 지점 미지정'}</em>
         <time>${account.createdAt ? esc(new Date(account.createdAt).toLocaleDateString('ko-KR')) : '생성일 없음'}</time>
         <span class="sub-admin-actions">
-          <button type="button" class="mini-btn sub-admin-reset" data-sub-admin="${esc(account.id)}">비밀번호 재설정</button>
+${account.loginMode === 'legacy_password' ? `<button type="button" class="mini-btn sub-admin-reset" data-sub-admin="${esc(account.id)}">비밀번호 재설정</button>` : `<span class="field-help">${account.loginMode === 'id_password' ? '업체 아이디 계정 · 재설정 미지원' : '계정 방식 확인 필요'}</span>`}
           <button type="button" class="mini-btn sub-admin-branch" data-sub-admin="${esc(account.id)}">지점변경</button>
           <button type="button" class="mini-btn danger sub-admin-delete" data-sub-admin="${esc(account.id)}">삭제</button>
         </span>
@@ -8426,7 +8430,7 @@ function renderAdmSettings() {
         <button type="button" class="mini-btn" id="make-sub-pw">자동생성</button>
         <button type="submit" class="mini-btn add">생성</button>
       </form>
-      <p class="field-help">저장된 비밀번호는 해시로 암호화되어 다시 볼 수 없습니다. 잊은 계정은 아래의 ‘비밀번호 재설정’을 사용하세요.</p>
+      <p class="field-help">저장된 비밀번호는 해시로 암호화되어 다시 볼 수 없습니다. 기존 비밀번호 로그인 계정만 아래의 ‘비밀번호 재설정’을 사용할 수 있습니다. 업체 아이디 계정은 이 화면에서 재설정하지 않습니다.</p>
       <p class="form-error inline-save-message" id="sub-admin-error" aria-live="polite"></p>
       ${lastGeneralAdminCredential ? credentialRevealMarkup(lastGeneralAdminCredential.message, lastGeneralAdminCredential.password, 'general-admin-credential') : ''}
       <div class="branch-check-list" id="sub-admin-branches">
@@ -8601,7 +8605,7 @@ function renderAdmSettings() {
 
 function openSubAdminPasswordReset(accountId) {
   const account = getSubAdmin().accounts.find(item => item.id === accountId);
-  if (!account) return;
+  if (!account || account.loginMode !== 'legacy_password') return;
   openModal(`
     <h3>일반관리자 비밀번호 재설정</h3>
     <p class="cal-msg">${esc(account.label)} · ${account.branches.length ? esc(account.branches.join(' · ')) : '담당 지점 미지정'}</p>
@@ -8638,12 +8642,17 @@ function openSubAdminPasswordReset(accountId) {
     let replacementId = '';
     let replacementComplete = false;
     try {
+      const currentAccounts = await supabaseRpc('pm_branch_admin_manage', { p_token: authToken, p_action: 'list', p_data: {} });
+      if (!currentAccounts.some(item => item.id === account.id && item.active && item.loginMode === 'legacy_password')) {
+        throw new Error('ACCOUNT_LOGIN_MODE_CHANGED');
+      }
       const created = await supabaseRpc('pm_admin_account_create', {
         p_token: authToken,
         p_password: password,
         p_branches: account.branches
       });
       replacementId = created?.id || '';
+      if (!replacementId) throw new Error('ACCOUNT_REPLACE_FAILED');
       const removed = await supabaseRpc('pm_admin_account_delete', { p_token: authToken, p_account_id: account.id });
       if (!removed?.ok) throw new Error('ACCOUNT_REPLACE_FAILED');
       replacementComplete = true;
