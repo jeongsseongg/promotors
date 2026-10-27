@@ -15,6 +15,6 @@ export const inboxStyles = StyleSheet.create({
   title: {fontFamily: font.semibold, fontSize: 17, lineHeight: 25, color: color.text},
   body: {fontFamily: font.regular, fontSize: 16, lineHeight: 24, color: color.muted},
   pending: {gap: 8}, meta: {paddingHorizontal: 4},
-  dot: {width: 6, height: 6, borderRadius: 3, backgroundColor: color.blue},
+  dot: {width: 6, height: 6, borderRadius: 3, backgroundColor: color.navy},
   titleRow: {flexDirection: 'row', alignItems: 'center', gap: 8}, flex: {flex: 1},
 });

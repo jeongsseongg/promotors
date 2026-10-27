@@ -1,12 +1,17 @@
 import ActivityKit
 import SwiftUI
 
+enum PromotorsActivityPalette {
+    static let navy = Color(red: 30.0 / 255, green: 36.0 / 255, blue: 100.0 / 255)
+    static let yellow = Color(red: 245.0 / 255, green: 196.0 / 255, blue: 0)
+}
+
 @available(iOS 16.2, *)
 struct BookingActivityCard: View {
     let state: BookingActivityAttributes.ContentState
     let binding: String
     var island = false
-    private var ink: Color { island ? .white : Color(red: 0.03, green: 0.12, blue: 0.33) }
+    private var ink: Color { island ? .white : PromotorsActivityPalette.navy }
     private var secondary: Color { island ? .white.opacity(0.72) : Color(red: 0.40, green: 0.46, blue: 0.53) }
     private var pending: Bool { state.pendingCount > 0 }
     private var time: String { state.schedule.split(separator: "·").last.map { String($0).trimmingCharacters(in: .whitespaces) } ?? "예약 일정" }
@@ -44,7 +49,7 @@ struct BookingActivityCard: View {
                 ProgressView(timerInterval: appointment.addingTimeInterval(-3600)...appointment, countsDown: false) {
                     EmptyView()
                 } currentValueLabel: { EmptyView() }
-                .tint(Color(red: 0.91, green: 0.71, blue: 0.08))
+                .tint(PromotorsActivityPalette.yellow)
                 .accessibilityLabel("예약 1시간 전부터의 시간 진행")
             }
             HStack(spacing: 8) {
