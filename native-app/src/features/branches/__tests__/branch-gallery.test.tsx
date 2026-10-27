@@ -4,6 +4,7 @@ import TestRenderer, {act, ReactTestRenderer} from 'react-test-renderer';
 import App from '../../../App';
 import {createQaEnvironment} from '../../../qa/fixture-services';
 import {branchMapUrl, branchPhoneUrl} from '../BranchesScreen';
+import type {Branch} from '../../../domain/types';
 
 jest.mock('react-native-safe-area-context', () => ({
   SafeAreaProvider: ({children}: {children: React.ReactNode}) => children,
@@ -11,10 +12,10 @@ jest.mock('react-native-safe-area-context', () => ({
 }));
 Object.assign(globalThis, {IS_REACT_ACT_ENVIRONMENT: true});
 const trees: ReactTestRenderer[] = [];
-async function mount() {
+async function mount(overrides: Partial<Branch> = {}) {
   const environment = createQaEnvironment({screen: 'home'}, 'data:image/png;base64,qa');
   environment.data.content.branches = [{name: '프로모터스 안산점', addr: '예시 주소', tel: '031-831-9738', mobile: '010-0000-0000',
-    map: 'https://naver.me/ExamplePlace', imageKeys: ['branch-first', 'branch-second']}];
+    map: 'https://naver.me/ExamplePlace', imageKeys: ['branch-first', 'branch-second'], ...overrides}];
   let tree!: ReactTestRenderer;
   await act(async () => {tree = TestRenderer.create(<App services={environment.services} push={environment.push} initialRoute={{name: 'branches'}}/>);});
   trees.push(tree); return tree;
@@ -60,4 +61,10 @@ test('HTTP 지도와 정상 전화번호만 연결하며 누락된 지도는 지
   expect(branchMapUrl({name: '예시 지점'})).toBe('https://map.naver.com/p/search/' + encodeURIComponent('예시 지점'));
   expect(branchPhoneUrl('+82 31-831-9738')).toBe('tel:+82318319738');
   expect(branchPhoneUrl('준비중')).toBe('');
+});
+
+test('사진 목록 형식이 잘못되어도 기존 단일 사진을 표시한다', async () => {
+  const tree = await mount({imageKeys: '잘못된 목록' as unknown as string[], imageKey: 'branch-fallback'});
+  expect(tree.root.findAll(node => node.props.accessibilityRole === 'button').some(row => row.props.accessibilityLabel === '프로모터스 안산점 사진 1 크게 보기')).toBe(true);
+  expect(tree.root.findAll(node => node.props.accessibilityLabel === '프로모터스 안산점 다음 사진')).toHaveLength(0);
 });
