@@ -95,24 +95,30 @@ def tap(text, source=None):
     raise RuntimeError('Native control unavailable: ' + text)
 
 def expand_card(source, title, expanded=True, exact=False):
-    document = ET.fromstring(source)
-    parents = {child: parent for parent in document.iter() for child in parent}
-    anchor = next((node for node in document.iter('node') if (title == node.get('text', '') if exact else title in node.get('text', ''))), None)
-    while anchor is not None:
-        candidates = [node for node in anchor.iter('node') if node.get('resource-id', '').endswith('/expand_button')]
-        if candidates:
-            control = candidates[0]
-            label = control.get('content-desc', '').lower()
-            is_expanded = '접' in label or 'collapse' in label
-            is_collapsed = '펼' in label or 'expand' in label
-            if (expanded and is_collapsed) or (not expanded and is_expanded):
-                x1, y1, x2, y2 = map(int, re.findall(r'\d+', control.get('bounds')))
-                adb('shell', 'input', 'tap', str((x1 + x2) // 2), str((y1 + y2) // 2))
-                time.sleep(1)
-                return hierarchy()
+    for attempt in range(4):
+        document = ET.fromstring(source)
+        parents = {child: parent for parent in document.iter() for child in parent}
+        anchor = next((node for node in document.iter('node') if (title == node.get('text', '') if exact else title in node.get('text', ''))), None)
+        clicked = False
+        while anchor is not None:
+            candidates = [node for node in anchor.iter('node') if node.get('resource-id', '').endswith('/expand_button')]
+            if candidates:
+                control = candidates[0]
+                label = control.get('content-desc', '').lower()
+                is_expanded = '접' in label or 'collapse' in label
+                is_collapsed = '펼' in label or 'expand' in label
+                if (expanded and is_collapsed) or (not expanded and is_expanded):
+                    x1, y1, x2, y2 = map(int, re.findall(r'\d+', control.get('bounds')))
+                    adb('shell', 'input', 'tap', str((x1 + x2) // 2), str((y1 + y2) // 2))
+                    time.sleep(1)
+                    source = wait_for(title)
+                    clicked = True
+                    break
+                return source
+            anchor = parents.get(anchor)
+        if not clicked:
             return source
-        anchor = parents.get(anchor)
-    return source
+    raise RuntimeError('Notification expansion did not settle: ' + title)
 
 
 def save_ongoing_notification():
