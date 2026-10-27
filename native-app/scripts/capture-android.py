@@ -14,6 +14,19 @@ output.mkdir(parents=True, exist_ok=True)
 def adb(*args):
     return subprocess.check_output(['adb', *args])
 
+def display_density_dpi():
+    values = {}
+    for line in adb('shell', 'wm', 'density').decode('utf8').splitlines():
+        if not line.strip():
+            continue
+        match = re.fullmatch(r'(Physical|Override) density:\s*([1-9][0-9]{0,4})', line.strip())
+        if not match or match[1] in values or int(match[2]) > 10000:
+            raise RuntimeError('Invalid adb wm density output')
+        values[match[1]] = int(match[2])
+    if 'Physical' not in values:
+        raise RuntimeError('Physical display density unavailable')
+    return values.get('Override', values['Physical'])
+
 def failed(kind, error, traceback):
     try:
         (output / 'failure.png').write_bytes(adb('exec-out', 'screencap', '-p'))
@@ -202,7 +215,7 @@ for screen, label in screen_titles.items():
         source = wait_for('프로모터스 안산점 사진 2 크게 보기')
     save(screen, source)
     if screen == 'home':
-        subprocess.run([sys.executable, str(root / 'scripts/check-home-layout.py'), str(output / 'home.xml')], check=True)
+        subprocess.run([sys.executable, str(root / 'scripts/check-home-layout.py'), str(output / 'home.xml'), str(display_density_dpi())], check=True)
     results.append({'screen': screen, 'systemAppearance': 'light', 'nativeViews': True, 'webViewCount': 0})
     if screen == 'customer':
         for phase, button, title in [('confirmed', '확정 예시', '예약이 확정되었어요'), ('visit', '방문 예시', '방문을 기다리고 있어요'), ('repair', '정비 예시', '내 차 정비 중'), ('completed', '완료 예시', '정비가 완료되었어요')]:
