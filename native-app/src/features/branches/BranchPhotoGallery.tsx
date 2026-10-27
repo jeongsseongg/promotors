@@ -9,7 +9,8 @@ export function BranchPhotoGallery({branch, actions}: {branch: Branch; actions?:
   const window = useWindowDimensions(), carousel = useRef<React.ComponentRef<typeof ScrollView>>(null);
   const [width, setWidth] = useState(Math.max(1, window.width - 72)), [index, setIndex] = useState(0);
   const [preview, setPreview] = useState<{uri: string; index: number} | null>(null);
-  const keys = (branch.imageKeys?.length ? branch.imageKeys : branch.imageKey ? [branch.imageKey] : []).filter(key => typeof key === 'string' && !!key);
+  const supplied = Array.isArray(branch.imageKeys) && branch.imageKeys.length ? branch.imageKeys : branch.imageKey ? [branch.imageKey] : [];
+  const keys = supplied.filter(key => typeof key === 'string' && !!key);
   const fingerprint = JSON.stringify(keys);
   useEffect(() => {setIndex(0); setPreview(null); carousel.current?.scrollTo({x: 0, animated: false});}, [fingerprint]);
   function move(offset: number) {
@@ -17,7 +18,7 @@ export function BranchPhotoGallery({branch, actions}: {branch: Branch; actions?:
     setIndex(next); carousel.current?.scrollTo({x: next * width, animated: true});
   }
   function scrolled(event: NativeSyntheticEvent<NativeScrollEvent>) {setIndex(Math.max(0, Math.min(keys.length - 1, Math.round(event.nativeEvent.contentOffset.x / width))));}
-  return <View onLayout={event => setWidth(Math.max(1, event.nativeEvent.layout.width))} style={styles.gallery}>
+  return <View onLayout={event => {const nextWidth = Math.max(1, event.nativeEvent.layout.width); setWidth(nextWidth); requestAnimationFrame(() => carousel.current?.scrollTo({x: index * nextWidth, animated: false}));}} style={styles.gallery}>
     <ScrollView ref={carousel} horizontal pagingEnabled showsHorizontalScrollIndicator={false} onMomentumScrollEnd={scrolled} style={styles.carousel}>
       {(keys.length ? keys : [undefined]).map((key, position) => <View key={String(key) + ':' + position} style={{width}}>
         <AssetImage assetKey={key} label={branch.name + ' 사진 ' + (position + 1)}
