@@ -6,6 +6,7 @@ import {Button, Field} from '../../components/Controls';
 import {createQaEnvironment} from '../../qa/fixture-services';
 
 jest.mock('react-native-safe-area-context', () => ({
+  ...jest.requireActual('react-native-safe-area-context/jest/mock').default,
   SafeAreaProvider: ({children}: {children: React.ReactNode}) => children,
   SafeAreaView: require('react-native').View,
 }));

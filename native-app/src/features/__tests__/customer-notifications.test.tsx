@@ -5,7 +5,8 @@ import App from '../../App';
 import {routeForNotification} from '../notifications/NotificationsScreen';
 import {createQaEnvironment} from '../../qa/fixture-services';
 import {runStage} from '../account/runDisplay';
-jest.mock('react-native-safe-area-context', () => ({SafeAreaProvider: ({children}: {children: React.ReactNode}) => children, SafeAreaView: require('react-native').View}));
+jest.mock('react-native-safe-area-context', () => ({
+  ...jest.requireActual('react-native-safe-area-context/jest/mock').default,SafeAreaProvider: ({children}: {children: React.ReactNode}) => children, SafeAreaView: require('react-native').View}));
 Object.assign(globalThis, {IS_REACT_ACT_ENVIRONMENT: true});
 function text(tree: TestRenderer.ReactTestRenderer) {return tree.root.findAllByType(Text).flatMap(row => row.props.children).flat(Infinity).join(' ');}
 test('고객 정비 알림은 전체 목록이 아닌 해당 정비 상세로 이동한다', () => {
