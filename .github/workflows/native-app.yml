@@ -10,9 +10,9 @@ on:
         type: boolean
         default: false
       review_mode:
-        description: inspect는 조회, prepare는 초안, submit은 제출, release는 공개, cancel은 확인한 기존 빌드 심사 취소
+        description: inspect는 조회, prepare는 초안, submit은 제출, release는 공개, automatic은 승인 후 자동 공개, cancel은 확인한 기존 빌드 심사 취소
         type: choice
-        options: [inspect, prepare, submit, release, cancel]
+        options: [inspect, prepare, submit, release, cancel, automatic]
         default: inspect
       confirm_review_version:
         description: 준비·제출·공개할 정확한 버전/빌드 (예 1.1.2/38)
