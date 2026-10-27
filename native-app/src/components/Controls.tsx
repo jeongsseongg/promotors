@@ -34,7 +34,7 @@ export function MenuRow({title, detail, onPress, danger, icon, compact, brand, b
 }
 const styles = StyleSheet.create({
   button: {minHeight: 54, paddingHorizontal: 20, paddingVertical: 14, borderRadius: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: color.navy},
-  buttonText: {fontFamily: font.bold, fontSize: 17, lineHeight: 25, color: color.surface, textAlign: 'center'},
+  buttonText: {alignSelf: 'stretch', flexShrink: 1, fontFamily: font.bold, fontSize: 17, lineHeight: 25, color: color.surface, textAlign: 'center'},
   brand: {minHeight: 50, borderRadius: 9, paddingVertical: 12}, brandText: {fontSize: 15, lineHeight: 23}, brandPrimaryText: {color: color.yellow},
   modalPrimary: {minHeight: 52, paddingVertical: 12, borderRadius: 12},
   modalPrimaryText: {fontFamily: font.extraBold, fontSize: 16, lineHeight: 24},
