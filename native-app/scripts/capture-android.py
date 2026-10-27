@@ -95,24 +95,30 @@ def tap(text, source=None):
     raise RuntimeError('Native control unavailable: ' + text)
 
 def expand_card(source, title, expanded=True, exact=False):
-    document = ET.fromstring(source)
-    parents = {child: parent for parent in document.iter() for child in parent}
-    anchor = next((node for node in document.iter('node') if (title == node.get('text', '') if exact else title in node.get('text', ''))), None)
-    while anchor is not None:
-        candidates = [node for node in anchor.iter('node') if node.get('resource-id', '').endswith('/expand_button')]
-        if candidates:
-            control = candidates[0]
-            label = control.get('content-desc', '').lower()
-            is_expanded = '접' in label or 'collapse' in label
-            is_collapsed = '펼' in label or 'expand' in label
-            if (expanded and is_collapsed) or (not expanded and is_expanded):
-                x1, y1, x2, y2 = map(int, re.findall(r'\d+', control.get('bounds')))
-                adb('shell', 'input', 'tap', str((x1 + x2) // 2), str((y1 + y2) // 2))
-                time.sleep(1)
-                return hierarchy()
+    for attempt in range(4):
+        document = ET.fromstring(source)
+        parents = {child: parent for parent in document.iter() for child in parent}
+        anchor = next((node for node in document.iter('node') if (title == node.get('text', '') if exact else title in node.get('text', ''))), None)
+        clicked = False
+        while anchor is not None:
+            candidates = [node for node in anchor.iter('node') if node.get('resource-id', '').endswith('/expand_button')]
+            if candidates:
+                control = candidates[0]
+                label = control.get('content-desc', '').lower()
+                is_expanded = '접' in label or 'collapse' in label
+                is_collapsed = '펼' in label or 'expand' in label
+                if (expanded and is_collapsed) or (not expanded and is_expanded):
+                    x1, y1, x2, y2 = map(int, re.findall(r'\d+', control.get('bounds')))
+                    adb('shell', 'input', 'tap', str((x1 + x2) // 2), str((y1 + y2) // 2))
+                    time.sleep(1)
+                    source = wait_for(title)
+                    clicked = True
+                    break
+                return source
+            anchor = parents.get(anchor)
+        if not clicked:
             return source
-        anchor = parents.get(anchor)
-    return source
+    raise RuntimeError('Notification expansion did not settle: ' + title)
 
 
 def save_ongoing_notification():
@@ -181,7 +187,7 @@ results = [{'screen': 'setup', 'systemAppearance': 'light', 'nativeViews': True,
 screen_titles = {'home': '정비예약', 'booking': '예약 지점 선택', 'mypage': '예시 고객님, 안녕하세요', 'admin': '예약관리',
                  'notifications': '앱 알림 설정', 'updates': '새 버전이 나왔어요', 'setup-denied': '앱 알림을 켜주세요',
                  'inbox': '프로모터스 알림', 'detail': '예약 상세', 'customer': '예시 고객님, 안녕하세요',
-                 'login': '회원 로그인', 'guest-booking': '정비예약', 'admin-mypage': '관리자님, 안녕하세요', 'branches': '매장안내', 'work-detail': '정비 상세'}
+                 'login': '회원 로그인', 'guest-booking': '정비예약', 'admin-mypage': '관리자님, 안녕하세요', 'branches': '매장안내', 'work-detail': '정비 상세', 'branch-accounts': '업체 계정 관리'}
 for screen, label in screen_titles.items():
     adb('shell', 'am', 'force-stop', 'kr.promotors.app')
     adb('shell', 'am', 'start', '-n', 'kr.promotors.app/.MainActivity', '--es', 'qaScreen', screen)
@@ -193,6 +199,9 @@ for screen, label in screen_titles.items():
     if screen == 'admin-mypage':
         source = wait_for('오늘 예약')
         assert '프로모터스 안산점' in source and '확정' in source and '작업중' in source
+    if screen == 'branch-accounts':
+        assert all(value in source for value in ['통합관리자 전용', '업체 계정 만들기', '업체 아이디', '업체 비밀번호'])
+        assert '__general__' not in source, 'Legacy internal account identifier must stay hidden'
     if screen == 'login':
         assert all(value in source for value in ['회원가입', '아이디', '비밀번호', '아이디 기억하기', '자동로그인', '취소'])
         assert 'android.widget.EditText' in source, 'Native login text input absent'

@@ -29,6 +29,9 @@ const messages: Record<string, string> = {
   BOOKING_BUSINESS_CLOSED: '지점의 예약 가능한 시간을 확인해 주세요.', BOOKING_LUNCH_TIME: '점심시간에는 예약할 수 없습니다.',
   BOOKING_INVALID_DATE: '예약 날짜를 확인해 주세요.', BOOKING_INVALID_TIME: '예약 시간을 확인해 주세요.', BOOKING_SLOT_TAKEN: '이미 예약된 시간입니다.',
   ACTIVE_BOOKING_EXISTS: '진행 중인 예약을 먼저 확인해 주세요.', BOOKING_INVALID_PROFILE: '회원정보의 이름·전화번호·차량을 확인해 주세요.',
+  INVALID_ID: '아이디는 영문·숫자와 마침표·밑줄·하이픈으로 4~40자 입력해 주세요.',
+  DUPLICATE_ADMIN_PASSWORD: '다른 관리자와 다른 비밀번호를 사용해 주세요.',
+  BRANCH_ACCOUNTS_NOT_READY: '업체 계정 기능을 준비 중입니다. 기존 관리자 로그인은 계속 이용할 수 있어요.',
   DUPLICATE_ID: '이미 가입된 아이디입니다.', DUPLICATE_CAR: '이미 가입된 차량번호입니다.',
   ALREADY_ENTERED: '이미 응모한 이벤트입니다.', INVALID_PAYLOAD: '입력한 정보를 확인해 주세요.',
   INVALID_RESPONSE: '서버 응답을 확인하지 못했습니다. 다시 시도해 주세요.',
@@ -51,7 +54,9 @@ export function responseError(body: unknown, status: number, traceId?: string): 
   const text = [value.code, value.message, value.hint].filter(x => typeof x === 'string').join(' ');
   const code = Object.keys(messages).find(key => new RegExp(`(^|[^A-Z_])${key}([^A-Z_]|$)`).test(text));
   const privacy = /PRIVACY_EPOCH/.test(text) ? 'PRIVACY_EPOCH_CHANGED' : undefined;
-  return new ApiError(code || privacy || (status === 401 ? 'AUTH_REQUIRED' : status === 403 ? 'FORBIDDEN' : 'SERVER_ERROR'), { status, traceId });
+  const branchApiMissing = value.code === 'PGRST202' && /pm_branch_admin_(login|manage)/.test(text);
+  return new ApiError(branchApiMissing ? 'BRANCH_ACCOUNTS_NOT_READY' : code || privacy ||
+    (status === 401 ? 'AUTH_REQUIRED' : status === 403 ? 'FORBIDDEN' : 'SERVER_ERROR'), { status, traceId });
 }
 
 export function requireValue(condition: unknown, code = 'INVALID_PAYLOAD'): asserts condition {

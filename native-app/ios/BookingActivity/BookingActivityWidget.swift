@@ -8,7 +8,7 @@ struct BookingActivityWidget: Widget {
         ActivityConfiguration(for: BookingActivityAttributes.self) { context in
             BookingActivityCard(state: context.state, binding: context.attributes.binding)
                 .activityBackgroundTint(.white)
-                .activitySystemActionForegroundColor(Color(red: 0.03, green: 0.12, blue: 0.33))
+                .activitySystemActionForegroundColor(PromotorsActivityPalette.navy)
                 .widgetURL(BookingActivityCard.url(context.state.bookingId, binding: context.attributes.binding, runId: context.state.runId))
         } dynamicIsland: { context in
             DynamicIsland {
@@ -24,13 +24,13 @@ struct BookingActivityWidget: Widget {
                 }
             } compactLeading: {
                 HStack(spacing: 3) {
-                    Image(systemName: "car.fill").foregroundStyle(.yellow).font(.system(size: 10))
+                    Image(systemName: "car.fill").foregroundStyle(PromotorsActivityPalette.yellow).font(.system(size: 10))
                     Text(context.state.audience == "customer" ? (context.state.phase == "completed" ? "완료" : "내 차") : "대기 \(context.state.pendingCount)").font(.system(size: 11, weight: .bold))
                 }
             } compactTrailing: {
                 Text(context.state.audience == "customer" ? (context.state.phase == "repair" ? "정비 중" : context.state.phase == "completed" ? "정비 완료" : "방문 예정") : "방문 \(context.state.upcomingCount)").font(.system(size: 12, weight: .semibold))
             } minimal: {
-                Image(systemName: "car.fill").foregroundStyle(.yellow)
+                Image(systemName: "car.fill").foregroundStyle(PromotorsActivityPalette.yellow)
             }
             .widgetURL(BookingActivityCard.url(context.state.bookingId, binding: context.attributes.binding, runId: context.state.runId))
         }

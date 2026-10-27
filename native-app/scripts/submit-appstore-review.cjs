@@ -5,7 +5,7 @@ const APP = '6810716100';
 const BUNDLE = 'kr.promotors.app';
 const release = require('../release.json');
 const TARGET = {version: release.version, build: String(release.iosBuild)};
-const NOTES = '기존 화면에 맞춰 글꼴과 메뉴·버튼 간격을 정리했습니다.\n홈 화면과 예약·마이페이지의 표시를 개선했습니다.\n업데이트 안내에서 스토어로 이동하지 않던 문제를 수정했습니다.';
+const NOTES = '프로모터스 시그니처 색상으로 정비·알림 화면을 통일했습니다.\n통합관리자가 업체별 계정과 담당 지점을 지정할 수 있습니다.\n업체 아이디 로그인과 자동 알림 연결 안내를 추가했습니다.';
 const mode = process.env.PM_REVIEW_MODE || 'inspect';
 const accepted = new Set(['WAITING_FOR_REVIEW', 'IN_REVIEW', 'PENDING_DEVELOPER_RELEASE', 'PENDING_APPLE_RELEASE', 'PROCESSING_FOR_APP_STORE', 'READY_FOR_SALE', 'READY_FOR_DISTRIBUTION']);
 function check(value, code) { if (!value) throw Error(code); }

@@ -101,6 +101,7 @@ function AdminMenus({summary}: {summary: Summary}) {
     <MyMenuSection title="운영 설정" items={[
       {title: '영업시간 · 휴무', detail: '담당 지점', icon: 'calendar', onPress: () => nav.go({name: 'management', section: 'hours'})},
       ...(role === 'main' ? [
+        {title: '업체 계정 관리', detail: '아이디 · 담당 지점', badge: '메인', icon: 'user' as const, onPress: () => nav.go({name: 'management', section: 'accounts'})},
         {title: '게시글 · 매장 정보', badge: '메인', icon: 'doc' as const, onPress: () => nav.go({name: 'management', section: 'content'})},
         {title: '쿠폰 · 이벤트', badge: '메인', icon: 'flag' as const, onPress: () => nav.go({name: 'management', section: 'promotions'})},
       ] : []),

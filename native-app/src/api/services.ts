@@ -16,6 +16,7 @@ import { createAdminCustomersService } from './admin-customers';
 import { createAdminContentService } from './admin-content';
 import { createAdminPromotionsService } from './admin-promotions';
 import { createAdminInquiriesService } from './admin-inquiries';
+import { createBranchAdminAccountsService } from './branch-admin-accounts';
 
 export interface NativeServicesOptions extends ApiClientOptions {
   storage: SessionStorage;
@@ -40,7 +41,7 @@ export function createNativeServices(options: NativeServicesOptions) {
     adminWork: createAdminWorkService(admin, id, bookingChanged), adminCustomers: createAdminCustomersService(admin, id),
     adminContent: createAdminContentService(admin), adminPromotions: createAdminPromotionsService(admin, id),
     adminAssets: createAdminAssetsService(admin, id, options.photoPicker, photos),
-    adminInquiries: createAdminInquiriesService(admin, id),
+    adminInquiries: createAdminInquiriesService(admin, id), branchAdminAccounts: createBranchAdminAccountsService(admin),
     deletion: createDeletionService(rpc, session, options.storage), notifications,
     subscribeBookingChange(listener: () => void) { bookingListeners.add(listener); return () => { bookingListeners.delete(listener); }; },
     dispose: () => { bookingListeners.clear(); return notifications.dispose(); } };

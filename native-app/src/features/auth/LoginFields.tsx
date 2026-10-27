@@ -3,11 +3,11 @@ import {Pressable, Text, View} from 'react-native';
 import {Field} from '../../components/Controls';
 import {authStyles as styles} from './authStyles';
 
-type Props = {admin: boolean; signup: boolean; id: string; password: string; onId(value: string): void; onPassword(value: string): void};
-export function LoginFields({admin, signup, id, password, onId, onPassword}: Props) {
+type Props = {admin: boolean; branchAdmin?: boolean; signup: boolean; id: string; password: string; onId(value: string): void; onPassword(value: string): void};
+export function LoginFields({admin, branchAdmin = false, signup, id, password, onId, onPassword}: Props) {
   const [visible, setVisible] = useState(false);
   return <View style={styles.form}>
-    {!admin ? <Field label="아이디" hideLabel={!signup} placeholder="아이디" style={styles.input} value={id} onChangeText={onId}
+    {!admin || branchAdmin ? <Field label={branchAdmin ? '업체 아이디' : '아이디'} hideLabel={!signup} placeholder={branchAdmin ? '업체 아이디' : '아이디'} style={styles.input} value={id} onChangeText={onId}
       autoCapitalize="none" autoCorrect={false} textContentType="username" testID="auth-id"/> : null}
     <View style={styles.password}>
       <Field label={admin ? '관리자 비밀번호' : '비밀번호'} hideLabel placeholder={admin ? '관리자 비밀번호' : '비밀번호'}

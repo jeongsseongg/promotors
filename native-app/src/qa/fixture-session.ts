@@ -12,6 +12,7 @@ export function createQaSession(admin: boolean, signedOut = false) {
     refresh: async () => {},
     loginMember: async (_id: string, _password: string, _remember?: boolean) => {update({status: 'signedIn', authenticated: true, role: 'customer', branches: [], profile: qaProfile});},
     loginAdmin: async (_password: string, _remember?: boolean) => {update({status: 'signedIn', authenticated: true, role: 'general', branches: ['프로모터스 안산점'], profile: {id: 'qa-manager', name: '예시 관리자'}});},
+    loginBranchAdmin: async (_id: string, _password: string, _remember?: boolean) => {update({status: 'signedIn', authenticated: true, role: 'general', branches: ['프로모터스 안산점'], profile: {id: 'qa-manager', name: '예시 관리자'}});},
     register: async (profile: MemberProfile, _password: string) => {update({status: 'signedIn', authenticated: true, role: 'customer', branches: [], profile});},
     logout: async () => {update({status: 'signedOut', authenticated: false, role: null, branches: [], profile: null});},
   };

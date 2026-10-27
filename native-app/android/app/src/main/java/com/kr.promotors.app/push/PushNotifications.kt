@@ -53,7 +53,7 @@ object PushNotifications {
       .setContentText("앱에서 예약 알림을 확인해 주세요.").build()
     return NotificationCompat.Builder(context, channel).setSmallIcon(R.drawable.ic_stat_promotors)
       .setLargeIcon(BitmapFactory.decodeResource(context.resources, R.drawable.promotors_logo))
-      .setColor(0xFF14245F.toInt()).setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
+      .setColor(ContextCompat.getColor(context, R.color.promotors_navy)).setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
       .setPublicVersion(public).setCategory(NotificationCompat.CATEGORY_EVENT)
   }
 
