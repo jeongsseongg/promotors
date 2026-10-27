@@ -5,7 +5,7 @@ const APP = '6810716100';
 const BUNDLE = 'kr.promotors.app';
 const release = require('../release.json');
 const TARGET = {version: release.version, build: String(release.iosBuild)};
-const NOTES = '앱 알림 연결이 지연될 때 자동으로 다시 연결하도록 개선했습니다.\n아이폰 상시 알림 연결을 복구하고 연결 상태를 더 정확하게 표시합니다.\n예약과 정비 알림의 안정성을 개선했습니다.';
+const NOTES = '로그인과 예약 화면을 기존 디자인에 맞춰 개선했습니다.\n마이페이지의 정비 진행 표시와 관리자 예약 현황을 복원했습니다.\n알림 화면 접근과 지점별 정보 표시를 개선했습니다.';
 const mode = process.env.PM_REVIEW_MODE || 'inspect';
 const accepted = new Set(['WAITING_FOR_REVIEW', 'IN_REVIEW', 'PENDING_DEVELOPER_RELEASE', 'PENDING_APPLE_RELEASE', 'PROCESSING_FOR_APP_STORE', 'READY_FOR_SALE', 'READY_FOR_DISTRIBUTION']);
 function check(value, code) { if (!value) throw Error(code); }
