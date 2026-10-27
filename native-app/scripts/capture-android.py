@@ -175,7 +175,7 @@ for screen, label in screen_titles.items():
     source = wait_for('실제 발송 없음')
     source = wait_for(label)
     if screen in ['mypage', 'customer']:
-        source = wait_for('엔진오일 교환 진행 중이에요')
+        source = wait_for('60%', required=('BMW 520d', '엔진오일 교환', '접수', '진단', '작업', '검수', '출고'))
         assert 'BMW 520d' in source and '차량번호 비공개' in source
     if screen == 'admin-mypage':
         source = wait_for('오늘 예약')
