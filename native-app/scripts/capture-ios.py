@@ -13,7 +13,10 @@ checker = pathlib.Path(os.environ['RUNNER_TEMP']) / 'verify-native-screen'
 subprocess.run(['swiftc', str(root / 'scripts/verify-native-screen.swift'), '-o', str(checker)], check=True)
 ongoing_only = os.environ.get('PM_CAPTURE_SCOPE') == 'ongoing'
 
-titles = {'home': '정비예약', 'booking': '정비 예약', 'mypage': '마이페이지', 'admin': '예약관리', 'notifications': '앱 알림 설정', 'updates': '새 버전이 나왔어요', 'setup': '앱 알림이 연결됐어요', 'setup-denied': '앱 알림을 켜주세요', 'inbox': '프로모터스 알림', 'detail': '예약 상세', 'customer': '마이페이지'}
+titles = {'home': '정비예약', 'booking': '예약 지점 선택', 'mypage': '예시 고객님, 안녕하세요', 'admin': '예약관리',
+          'notifications': '앱 알림 설정', 'updates': '새 버전이 나왔어요', 'setup': '앱 알림이 연결됐어요',
+          'setup-denied': '앱 알림을 켜주세요', 'inbox': '프로모터스 알림', 'detail': '예약 상세',
+          'customer': '예시 고객님, 안녕하세요', 'login': '회원 로그인', 'guest-booking': '정비예약', 'admin-mypage': '관리자님, 안녕하세요'}
 
 def sim(*args):
     return subprocess.check_output(['xcrun', 'simctl', *args])
@@ -33,7 +36,8 @@ for kind, device in selected:
     for screen, appearance in captures:
         sim('ui', device, 'appearance', appearance)
         assert sim('ui', device, 'appearance').decode().strip().lower().endswith(appearance), 'System appearance not applied'
-        name = kind + '-' + screen + ('-dark' if appearance == 'dark' else '')
+        capture_screen = 'guest-booking-entry' if screen == 'guest-booking' else screen
+        name = kind + '-' + capture_screen + ('-dark' if appearance == 'dark' else '')
         subprocess.run(['xcrun', 'simctl', 'terminate', device, 'kr.promotors.app'], capture_output=True)
         log = output / (name + '.log')
         with log.open('wb') as handle:
@@ -55,6 +59,11 @@ for kind, device in selected:
             subprocess.run([str(checker), str(screenshot), titles[screen]], check=True)
             if screen == 'home':
                 subprocess.run([str(checker), str(screenshot), '예약하기'], check=True)
+            expected = {'mypage': ['BMW 520d', '엔진오일 교환'], 'customer': ['BMW 520d', '엔진오일 교환'],
+                        'login': ['회원가입', '아이디 기억하기', '자동로그인'], 'guest-booking': ['비회원 예약'],
+                        'admin-mypage': ['오늘 예약', '프로모터스 안산점']}.get(screen, [])
+            for text in expected:
+                subprocess.run([str(checker), str(screenshot), text], check=True)
             process.terminate()
         if '"operationalRequests":0' not in source.replace(' ', '').replace('\\"', '"'):
             raise RuntimeError('QA production-request check missing')
@@ -75,8 +84,8 @@ for kind, device in selected:
                     target = output / (kind + '-customer-' + phase + '-' + presentation + '.png')
                     shutil.copyfile(rendered, target)
                     subprocess.run([str(checker), str(target), '정비 진행'], check=True)
-        results.append({'device': kind, 'screen': screen, 'systemAppearance': appearance, 'nativeQaReady': True, 'operationalRequests': 0})
+        results.append({'device': kind, 'screen': screen, 'systemAppearance': appearance, 'captureStage': 'entry' if screen == 'guest-booking' else 'screen', 'nativeQaReady': True, 'operationalRequests': 0})
     sim('ui', device, 'appearance', 'light')
     sim('shutdown', device)
-(output / 'verification.json').write_text(json.dumps({'screens': results, 'physicalPushDelivery': 'not-tested'}, indent=2), encoding='utf8')
+(output / 'verification.json').write_text(json.dumps({'screens': results, 'guestBookingInteraction': 'not-tested', 'physicalPushDelivery': 'not-tested'}, indent=2), encoding='utf8')
 print('Independent iOS app rendered. Screenshots require visual review; real push not tested.')

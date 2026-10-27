@@ -165,11 +165,29 @@ source = wait_for('앱 알림 설정')
 assert '연결됨' in source and '테스트 알림 보내기' in source
 save('automatic-notification-settings', source)
 results = [{'screen': 'setup', 'systemAppearance': 'light', 'nativeViews': True, 'webViewCount': 0, 'automaticOsPermission': True, 'allowImmediatelyConnected': True, 'settingsOpened': True}]
-for screen, label in [('home', '정비예약'), ('booking', '정비 예약'), ('mypage', '마이페이지'), ('admin', '예약관리'), ('notifications', '앱 알림 설정'), ('updates', '새 버전이 나왔어요'), ('setup-denied', '앱 알림을 켜주세요'), ('inbox', '프로모터스 알림'), ('detail', '예약 상세'), ('customer', '마이페이지')]:
+screen_titles = {'home': '정비예약', 'booking': '예약 지점 선택', 'mypage': '예시 고객님, 안녕하세요', 'admin': '예약관리',
+                 'notifications': '앱 알림 설정', 'updates': '새 버전이 나왔어요', 'setup-denied': '앱 알림을 켜주세요',
+                 'inbox': '프로모터스 알림', 'detail': '예약 상세', 'customer': '예시 고객님, 안녕하세요',
+                 'login': '회원 로그인', 'guest-booking': '정비예약', 'admin-mypage': '관리자님, 안녕하세요'}
+for screen, label in screen_titles.items():
     adb('shell', 'am', 'force-stop', 'kr.promotors.app')
     adb('shell', 'am', 'start', '-n', 'kr.promotors.app/.MainActivity', '--es', 'qaScreen', screen)
     source = wait_for('실제 발송 없음')
     source = wait_for(label)
+    if screen in ['mypage', 'customer']:
+        source = wait_for('엔진오일 교환 진행 중이에요')
+        assert 'BMW 520d' in source and '차량번호 비공개' in source
+    if screen == 'admin-mypage':
+        source = wait_for('오늘 예약')
+        assert '프로모터스 안산점' in source and '확정' in source and '작업중' in source
+    if screen == 'login':
+        assert all(value in source for value in ['회원가입', '아이디', '비밀번호', '아이디 기억하기', '자동로그인', '취소'])
+        assert 'android.widget.EditText' in source, 'Native login text input absent'
+    if screen == 'guest-booking':
+        save('guest-booking-entry', source)
+        tap('비회원 예약', source)
+        source = wait_for('예약 확인하기')
+        assert all(value in source for value in ['비회원 예약', '프로모터스 안산점', '프로모터스 새솔점', '프로모터스 부천점'])
     save(screen, source)
     if screen == 'home':
         subprocess.run([sys.executable, str(root / 'scripts/check-home-layout.py'), str(output / 'home.xml')], check=True)
@@ -233,7 +251,7 @@ for screen, label in [('home', '정비예약'), ('booking', '정비 예약'), ('
     if screen == 'updates':
         assert '업데이트' in source and '나중에' in source, 'Update choices absent'
         tap('나중에', source)
-        dismissed = wait_for('마이페이지')
+        dismissed = wait_for('예시 고객님, 안녕하세요')
         assert '새 버전이 나왔어요' not in dismissed, 'Dismissed update still blocks the app'
     if screen == 'booking':
         tap('프로모터스 안산점', source)
@@ -262,7 +280,7 @@ for screen, label in [('home', '정비예약'), ('booking', '정비 예약'), ('
         assert '예시 고객' in source and 'BMW 520d' in source
         save('notification-open-detail', source)
 set_appearance('yes')
-for screen, label in [('booking', '정비 예약'), ('mypage', '마이페이지')]:
+for screen, label in [('booking', '예약 지점 선택'), ('mypage', '예시 고객님, 안녕하세요')]:
     adb('shell', 'am', 'force-stop', 'kr.promotors.app')
     adb('shell', 'am', 'start', '-n', 'kr.promotors.app/.MainActivity', '--es', 'qaScreen', screen)
     source = wait_for(label)
@@ -273,5 +291,5 @@ set_appearance('no')
 logs = adb('logcat', '-d', '-s', 'ReactNativeJS').decode('utf8')
 assert 'PROMOTORS_NATIVE_QA_READY' in logs, 'Native QA readiness marker absent'
 assert not re.search(r'operationalRequests["\\: ]+[1-9]', logs), 'QA made a production network request'
-(output / 'verification.json').write_text(json.dumps({'screens': results, 'osPermissionApp': '프로모터스', 'automaticPermissionAndConnection': True, 'operationalRequests': 0, 'physicalPushDelivery': 'not-tested', 'emulatorLauncherRecoveries': launcher_recoveries, 'notificationDrawerRecoveries': notification_drawer_recoveries}, ensure_ascii=False, indent=2), encoding='utf8')
+(output / 'verification.json').write_text(json.dumps({'screens': results, 'osPermissionApp': '프로모터스', 'automaticPermissionAndConnection': True, 'guestBookingEntryAndBranchSelection': True, 'operationalRequests': 0, 'physicalPushDelivery': 'not-tested', 'emulatorLauncherRecoveries': launcher_recoveries, 'notificationDrawerRecoveries': notification_drawer_recoveries}, ensure_ascii=False, indent=2), encoding='utf8')
 print('Independent Android native UI and OS permission verified; no real push sent.')

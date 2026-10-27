@@ -1,5 +1,6 @@
 import {NativeServices, Route} from '../components/AppContext';
-import {Booking, BookingInput, GuestBookingInput} from '../domain/types';
+import {Booking, BookingInput, GuestBookingInput, Inquiry} from '../domain/types';
+import type {ManagedRun, WorkList, WorkStep} from '../domain/management';
 import {createQaData, qaDate, qaProfile} from './fixture-data';
 import {createQaSession} from './fixture-session';
 import {createQaPush} from './fixture-push';
@@ -13,10 +14,37 @@ function verifyNativeFeedRuntime() {
   if (posts.length !== 1 || posts[0].imageUrls?.length !== 1) throw new Error('네이티브 정비사례 읽기 검증에 실패했습니다.');
 }
 
-export type QaConfiguration = {screen: 'home' | 'booking' | 'mypage' | 'admin' | 'notifications' | 'updates' | 'setup' | 'setup-denied' | 'inbox' | 'detail' | 'customer'; requestOsPermission?: boolean};
+export type QaConfiguration = {screen: 'home' | 'booking' | 'mypage' | 'admin' | 'notifications' | 'updates' | 'setup' | 'setup-denied' | 'inbox' | 'detail' | 'customer' | 'login' | 'guest-booking' | 'admin-mypage'; requestOsPermission?: boolean};
+function qaInitialRoute(screen: QaConfiguration['screen']): Route {
+  if (screen === 'home') return {name: 'home'};
+  if (screen === 'login') return {name: 'login'};
+  if (screen === 'booking' || screen === 'guest-booking') return {name: 'reserve'};
+  if (['mypage', 'customer', 'updates', 'setup', 'setup-denied', 'admin-mypage'].includes(screen)) return {name: 'my'};
+  if (screen === 'admin') return {name: 'admin'};
+  if (screen === 'inbox') return {name: 'notifications'};
+  if (screen === 'detail') return {name: 'admin-booking', id: 'qa-pending'};
+  return {name: 'notification-settings'};
+}
+function qaWorkList(data: ReturnType<typeof createQaData>): WorkList {
+  const runs: ManagedRun[] = data.runs.map(run => ({...run, branch: String(run.branch || ''), bookingKey: String(run.bookingKey || 'qa-pending'),
+    currentStep: Number(run.currentStep || 0), name: qaProfile.name, model: qaProfile.model, car: qaProfile.car,
+    steps: (Array.isArray(run.steps) ? run.steps : []).map((step: Partial<WorkStep>) => ({...step, name: String(step.name || ''),
+      photoRequired: !!step.photoRequired, memoRequired: !!step.memoRequired, approvalRequired: !!step.approvalRequired,
+      photoKeys: Array.isArray(step.photoKeys) ? step.photoKeys : [], memo: String(step.memo || step.note || ''), submitted: !!step.submitted, approved: !!step.approved}))}));
+  return {runs, bookings: data.bookings, branches: data.content.branches.map(branch => branch.name),
+    products: data.content.products.map(row => ({...row, name: String(row.name || ''), steps: []}))};
+}
+function prepareDashboardData(config: QaConfiguration, data: ReturnType<typeof createQaData>) {
+  if (config.screen !== 'admin-mypage') return;
+  data.bookings[0].date = qaDate();
+  data.bookings[1].date = qaDate(); data.bookings[1].branch = '프로모터스 안산점';
+  const steps = data.runs[0].steps as {submitted: boolean}[];
+  steps[1].submitted = true;
+}
 export function createQaEnvironment(config: QaConfiguration, imageUri: string) {
-  const admin = ['admin', 'notifications', 'inbox', 'detail'].includes(config.screen);
-  const data = createQaData(), auth = createQaSession(admin), calls: string[] = [];
+  const admin = ['admin', 'notifications', 'inbox', 'detail', 'admin-mypage'].includes(config.screen);
+  const data = createQaData(), auth = createQaSession(admin, ['login', 'guest-booking'].includes(config.screen)), calls: string[] = [];
+  let rememberedId = ''; prepareDashboardData(config, data);
   data.notificationState.admin = admin;
   if (config.screen === 'customer') {data.bookings[0].status = '예약'; data.runs[0].bookingKey = 'qa-pending';}
   const clone = <T,>(value: T): T => JSON.parse(JSON.stringify(value));
@@ -36,7 +64,7 @@ export function createQaEnvironment(config: QaConfiguration, imageUri: string) {
   }
   const push = createQaPush(!!config.requestOsPermission, enabled => {data.notificationState.preferences.enabled = enabled;}, config.screen.startsWith('setup'), config.screen === 'setup-denied');
   const services = {
-    session: auth.session,
+    session: auth.session, rememberedLogin: {read: async () => rememberedId, write: async (value: string | null) => {rememberedId = value || ''; }},
     publicContent: {load: async () => clone(data.content), caseFeed: async () => {verifyNativeFeedRuntime(); return clone(data.content);}, assetUrl: (_key: string) => imageUri, legacyAsset: async (_key: string) => null},
     bookings: {
       list: async () => clone(scoped()),
@@ -50,10 +78,12 @@ export function createQaEnvironment(config: QaConfiguration, imageUri: string) {
       schedule: async () => clone(scoped()), get: async (id: string) => ({booking: clone(requireBooking(id)), customerContext: clone(data.customerContext)}),
       accept: (id: string) => decide(id), reject: (id: string, reason: string) => decide(id, true, reason),
     },
+    adminWork: {list: async () => clone(qaWorkList(data))},
+    adminInquiries: {list: async (): Promise<Inquiry[]> => [{id: 'qa-my-inquiry', memberId: qaProfile.id, branch: '프로모터스 안산점', from: 'customer', message: '방문 일정 문의 예시입니다.', createdAt: new Date().toISOString()}]},
     account: createQaAccount(data, auth, scoped, imageUri, calls),
     notifications: createQaNotifications(data, push, calls),
     deletion: createQaDeletion(calls),
   } as unknown as NativeServices;
-  const initialRoute: Route = config.screen === 'home' ? {name: 'home'} : config.screen === 'customer' ? {name: 'my'} : config.screen === 'booking' ? {name: 'reserve'} : ['mypage', 'updates', 'setup', 'setup-denied'].includes(config.screen) ? {name: 'my'} : config.screen === 'admin' ? {name: 'admin'} : config.screen === 'inbox' ? {name: 'notifications'} : config.screen === 'detail' ? {name: 'admin-booking', id: 'qa-pending'} : {name: 'notification-settings'};
+  const initialRoute = qaInitialRoute(config.screen);
   return {services, push, initialRoute, calls, data, qaDate, updates: config.screen === 'updates' ? {check: async () => ({key: 'qa-update', version: '2.0.0 (실제 발송 없음)'}), openStore: async () => {calls.push('updates.openStore');}} : undefined};
 }
