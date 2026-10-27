@@ -11,7 +11,7 @@ export type RpcName = 'pm_login' | 'pm_admin_login' | 'pm_register' | 'pm_logout
   | 'pm_account_deletion' | 'pm_deletion_receipt' | 'pm_asset_get' | 'pm_change_password'
   | 'pm_guest_booking_create_v2' | 'pm_guest_booking_lookup' | 'pm_guest_booking_cancel'
   | 'pm_messages_read' | 'pm_promo_read' | 'pm_coupon_use' | 'pm_event_enter' | 'pm_promo_write'
-  | 'pm_branch_hours_write' | 'pm_customer_accounts' | 'pm_admin_accounts';
+  | 'pm_branch_hours_write' | 'pm_customer_accounts' | 'pm_admin_accounts' | 'pm_branch_admin_login' | 'pm_branch_admin_manage';
 export interface Credentials { token: string | null; state: SessionSnapshot }
 interface SessionHooks {
   credentials(): Credentials;
@@ -31,10 +31,10 @@ export interface ApiClientOptions { supabaseUrl: string; publicAnonKey: string; 
 const signedIn = new Set<RpcName>(['pm_sync_write', 'pm_sync_merge_by_id', 'pm_member_booking_create',
   'pm_admin_booking_actions', 'pm_notifications', 'pm_native_push_subscribe', 'pm_customer_activity', 'pm_account_deletion',
   'pm_change_password', 'pm_messages_read', 'pm_promo_read', 'pm_coupon_use', 'pm_event_enter',
-  'pm_promo_write', 'pm_branch_hours_write', 'pm_customer_accounts', 'pm_admin_accounts']);
+  'pm_promo_write', 'pm_branch_hours_write', 'pm_customer_accounts', 'pm_admin_accounts', 'pm_branch_admin_manage']);
 const epochRequired = new Set<RpcName>(['pm_sync_write', 'pm_sync_merge_by_id', 'pm_member_booking_create',
   'pm_register', 'pm_guest_booking_create_v2', 'pm_guest_booking_cancel', 'pm_change_password',
-  'pm_admin_booking_actions', 'pm_native_push_subscribe', 'pm_customer_activity', 'pm_coupon_use', 'pm_event_enter', 'pm_promo_write', 'pm_branch_hours_write']);
+  'pm_admin_booking_actions', 'pm_native_push_subscribe', 'pm_customer_activity', 'pm_coupon_use', 'pm_event_enter', 'pm_promo_write', 'pm_branch_hours_write', 'pm_branch_admin_manage']);
 function validateConfig(options: ApiClientOptions) {
   if (options.supabaseUrl.replace(/\/$/, '') !== PROMOTORS_SERVER || !options.publicAnonKey) throw new ApiError('API_CONFIG_INVALID');
   const key = options.publicAnonKey;

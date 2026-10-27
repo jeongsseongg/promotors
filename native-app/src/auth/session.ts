@@ -157,6 +157,11 @@ class SessionController {
     const result = await this.rpc.call<LoginResult>('pm_admin_login', { p_password: password, p_remember: remember }, { allowDetached: true });
     return this.acceptLogin(result, revision, remember);
   }
+  async loginBranchAdmin(id: string, password: string, remember = false) {
+    const revision = await this.beginLogin();
+    const result = await this.rpc.call<LoginResult>('pm_branch_admin_login', {p_login_id: id.trim(), p_password: password, p_remember: remember}, {allowDetached: true});
+    return this.acceptLogin(result, revision, remember);
+  }
   async register(profile: MemberProfile, password: string) {
     const revision = await this.beginLogin(); await this.ensureReady();
     const result = await this.rpc.call<LoginResult>('pm_register', { p_login_id: profile.id, p_password: password, p_profile: { ...profile, role: 'customer' } }, { allowDetached: true });

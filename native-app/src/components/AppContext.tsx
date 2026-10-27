@@ -9,7 +9,7 @@ export type Tab = 'home' | 'branches' | 'cases' | 'notices' | 'my';
 export type Route =
   | {name: Tab}
   | {name: 'login' | 'signup' | 'reserve' | 'bookings' | 'profile' | 'history' | 'work' | 'inquiry' | 'coupons' | 'events' | 'deletion' | 'notifications' | 'notification-settings' | 'admin' | 'guest-lookup' | 'privacy' | 'terms'}
-  | {name: 'management'; section?: 'work' | 'customers' | 'content' | 'hours' | 'promotions' | 'inquiries'; id?: string}
+  | {name: 'management'; section?: 'work' | 'customers' | 'content' | 'hours' | 'promotions' | 'inquiries' | 'accounts'; id?: string}
   | {name: 'case' | 'notice' | 'booking' | 'admin-booking' | 'work-detail'; id: string; notice?: string};
 export type Navigation = {go(route: Route): void; back(): void};
 const Services = createContext<NativeServices | null>(null);

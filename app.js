@@ -8409,7 +8409,7 @@ function renderAdmSettings() {
       <li>
         <span class="sub-admin-index">${i + 1}</span>
         <strong>${esc(account.label)}</strong>
-        <em>${account.branches.length ? esc(account.branches.join(' · ')) : '전체 지점'}</em>
+        <em>${account.branches.length ? esc(account.branches.join(' · ')) : '담당 지점 미지정'}</em>
         <time>${account.createdAt ? esc(new Date(account.createdAt).toLocaleDateString('ko-KR')) : '생성일 없음'}</time>
         <span class="sub-admin-actions">
           <button type="button" class="mini-btn sub-admin-reset" data-sub-admin="${esc(account.id)}">비밀번호 재설정</button>
@@ -8432,7 +8432,7 @@ function renderAdmSettings() {
       <div class="branch-check-list" id="sub-admin-branches">
         ${branches.map(b => `<label class="branch-check"><input type="checkbox" value="${esc(b.name)}"> ${esc(b.name)}</label>`).join('')}
       </div>
-      <p class="field-help">담당 지점을 체크하세요 — 여러 지점 선택 가능. 아무 지점도 체크하지 않으면 전체 지점 보조 관리자로 생성됩니다. 지점 계정은 담당 지점의 예약관리·작업현황·고객문의만 볼 수 있습니다.</p>
+      <p class="field-help">담당 지점을 한 곳 이상 선택하세요. 여러 지점을 담당하면 해당 지점을 모두 선택해 주세요. 지점 계정은 담당 지점의 예약관리·작업현황·고객문의만 볼 수 있습니다.</p>
       <div class="sub-admin-summary">
         <strong>생성된 일반관리자 ${sub.accounts.length}개</strong>
         <ul class="sub-admin-list">${subRows}</ul>
@@ -8515,6 +8515,7 @@ function renderAdmSettings() {
     const passwordIssue = adminPasswordIssue(password);
     if (passwordIssue) { errorBox.textContent = passwordIssue; return; }
     const selectedBranches = [...document.querySelectorAll('#sub-admin-branches input:checked')].map(el => el.value);
+    if (!selectedBranches.length) { errorBox.textContent = '담당 지점을 한 곳 이상 선택해 주세요.'; return; }
     try {
       await supabaseRpc('pm_admin_account_create', { p_token: authToken, p_password: password, p_branches: selectedBranches });
       lastGeneralAdminCredential = { message: '새 일반관리자 비밀번호 — 지금 복사해 보관하세요.', password };
@@ -8603,7 +8604,7 @@ function openSubAdminPasswordReset(accountId) {
   if (!account) return;
   openModal(`
     <h3>일반관리자 비밀번호 재설정</h3>
-    <p class="cal-msg">${esc(account.label)} · ${account.branches.length ? esc(account.branches.join(' · ')) : '전체 지점'}</p>
+    <p class="cal-msg">${esc(account.label)} · ${account.branches.length ? esc(account.branches.join(' · ')) : '담당 지점 미지정'}</p>
     <form id="sub-admin-reset-form">
       ${passwordFieldMarkup('sub-admin-reset-password', '새 비밀번호 (영문+숫자 10자 이상)')}
       <div class="modal-actions">
@@ -8670,11 +8671,11 @@ function openSubAdminBranchModal(accountId) {
   const branches = getBranches();
   openModal(`
     <h3>담당 지점 변경</h3>
-    <p class="cal-msg">${esc(account.label)} · 현재: ${account.branches.length ? esc(account.branches.join(' · ')) : '전체 지점'}</p>
+    <p class="cal-msg">${esc(account.label)} · 현재: ${account.branches.length ? esc(account.branches.join(' · ')) : '담당 지점 미지정'}</p>
     <div class="branch-check-list" id="edit-sub-branches">
       ${branches.map(b => `<label class="branch-check"><input type="checkbox" value="${esc(b.name)}" ${account.branches.includes(b.name) ? 'checked' : ''}> ${esc(b.name)}</label>`).join('')}
     </div>
-    <p class="field-help">여러 지점을 선택할 수 있습니다. 아무 지점도 체크하지 않으면 전체 지점 보조 관리자가 됩니다.</p>
+    <p class="field-help">담당 지점을 한 곳 이상 선택해 주세요. 미지정 계정은 지점 예약과 알림을 받을 수 없습니다.</p>
     <p class="form-error" id="sub-admin-branch-error" aria-live="polite"></p>
     <div class="modal-actions">
       <button type="button" class="modal-submit" id="save-sub-branches">저장</button>
@@ -8685,6 +8686,7 @@ function openSubAdminBranchModal(accountId) {
     const branches = [...document.querySelectorAll('#edit-sub-branches input:checked')].map(el => el.value);
     const errorBox = $('#sub-admin-branch-error');
     errorBox.textContent = '';
+    if (!branches.length) { errorBox.textContent = '담당 지점을 한 곳 이상 선택해 주세요.'; return; }
     try {
       await supabaseRpc('pm_admin_account_branches', { p_token: authToken, p_account_id: account.id, p_branches: branches });
       adminAccountsLoaded = false;
