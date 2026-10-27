@@ -14,8 +14,10 @@ function verifyNativeFeedRuntime() {
   if (posts.length !== 1 || posts[0].imageUrls?.length !== 1) throw new Error('네이티브 정비사례 읽기 검증에 실패했습니다.');
 }
 
-export type QaConfiguration = {screen: 'home' | 'booking' | 'mypage' | 'admin' | 'notifications' | 'updates' | 'setup' | 'setup-denied' | 'inbox' | 'detail' | 'customer' | 'login' | 'guest-booking' | 'admin-mypage'; requestOsPermission?: boolean};
+export type QaConfiguration = {screen: 'home' | 'booking' | 'mypage' | 'admin' | 'notifications' | 'updates' | 'setup' | 'setup-denied' | 'inbox' | 'detail' | 'customer' | 'login' | 'guest-booking' | 'admin-mypage' | 'branches' | 'work-detail'; requestOsPermission?: boolean};
 function qaInitialRoute(screen: QaConfiguration['screen']): Route {
+  if (screen === 'branches') return {name: 'branches'};
+  if (screen === 'work-detail') return {name: 'work-detail', id: 'qa-run'};
   if (screen === 'home') return {name: 'home'};
   if (screen === 'login') return {name: 'login'};
   if (screen === 'booking' || screen === 'guest-booking') return {name: 'reserve'};
@@ -46,7 +48,8 @@ export function createQaEnvironment(config: QaConfiguration, imageUri: string) {
   const data = createQaData(), auth = createQaSession(admin, ['login', 'guest-booking'].includes(config.screen)), calls: string[] = [];
   let rememberedId = ''; prepareDashboardData(config, data);
   data.notificationState.admin = admin;
-  if (config.screen === 'customer') {data.bookings[0].status = '예약'; data.runs[0].bookingKey = 'qa-pending';}
+  if (config.screen === 'branches') data.content.branches[0].imageKeys = ['qa-workshop', 'qa-workshop-second'];
+  if (config.screen === 'customer' || config.screen === 'work-detail') {data.bookings[0].status = '예약'; data.runs[0].bookingKey = 'qa-pending';}
   const clone = <T,>(value: T): T => JSON.parse(JSON.stringify(value));
   const requireBooking = (id: string) => {const row = data.bookings.find(item => item.id === id); if (!row) throw new Error('예약을 찾을 수 없습니다.'); return row;};
   const scoped = () => data.bookings.filter(row => admin ? row.branch === '프로모터스 안산점' : row.memberId === qaProfile.id);

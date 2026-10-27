@@ -168,7 +168,7 @@ results = [{'screen': 'setup', 'systemAppearance': 'light', 'nativeViews': True,
 screen_titles = {'home': '정비예약', 'booking': '예약 지점 선택', 'mypage': '예시 고객님, 안녕하세요', 'admin': '예약관리',
                  'notifications': '앱 알림 설정', 'updates': '새 버전이 나왔어요', 'setup-denied': '앱 알림을 켜주세요',
                  'inbox': '프로모터스 알림', 'detail': '예약 상세', 'customer': '예시 고객님, 안녕하세요',
-                 'login': '회원 로그인', 'guest-booking': '정비예약', 'admin-mypage': '관리자님, 안녕하세요'}
+                 'login': '회원 로그인', 'guest-booking': '정비예약', 'admin-mypage': '관리자님, 안녕하세요', 'branches': '매장안내', 'work-detail': '정비 상세'}
 for screen, label in screen_titles.items():
     adb('shell', 'am', 'force-stop', 'kr.promotors.app')
     adb('shell', 'am', 'start', '-n', 'kr.promotors.app/.MainActivity', '--es', 'qaScreen', screen)
@@ -188,6 +188,16 @@ for screen, label in screen_titles.items():
         tap('비회원 예약', source)
         source = wait_for('예약 확인하기')
         assert all(value in source for value in ['비회원 예약', '프로모터스 안산점', '프로모터스 새솔점', '프로모터스 부천점'])
+    if screen == 'branches':
+        source = wait_for('프로모터스 안산점 사진 1 크게 보기')
+        tap('프로모터스 안산점 다음 사진', source)
+        source = wait_for('프로모터스 안산점 사진 2 크게 보기')
+        save('branches-second-photo', source)
+        tap('프로모터스 안산점 사진 2 크게 보기', source)
+        source = wait_for('매장 사진 닫기')
+        save('branches-photo-viewer', source)
+        tap('매장 사진 닫기', source)
+        source = wait_for('프로모터스 안산점 사진 2 크게 보기')
     save(screen, source)
     if screen == 'home':
         subprocess.run([sys.executable, str(root / 'scripts/check-home-layout.py'), str(output / 'home.xml')], check=True)
@@ -291,5 +301,5 @@ set_appearance('no')
 logs = adb('logcat', '-d', '-s', 'ReactNativeJS').decode('utf8')
 assert 'PROMOTORS_NATIVE_QA_READY' in logs, 'Native QA readiness marker absent'
 assert not re.search(r'operationalRequests["\\: ]+[1-9]', logs), 'QA made a production network request'
-(output / 'verification.json').write_text(json.dumps({'screens': results, 'osPermissionApp': '프로모터스', 'automaticPermissionAndConnection': True, 'guestBookingEntryAndBranchSelection': True, 'operationalRequests': 0, 'physicalPushDelivery': 'not-tested', 'emulatorLauncherRecoveries': launcher_recoveries, 'notificationDrawerRecoveries': notification_drawer_recoveries}, ensure_ascii=False, indent=2), encoding='utf8')
+(output / 'verification.json').write_text(json.dumps({'screens': results, 'osPermissionApp': '프로모터스', 'automaticPermissionAndConnection': True, 'guestBookingEntryAndBranchSelection': True, 'branchGalleryPagingAndViewer': True, 'operationalRequests': 0, 'physicalPushDelivery': 'not-tested', 'emulatorLauncherRecoveries': launcher_recoveries, 'notificationDrawerRecoveries': notification_drawer_recoveries}, ensure_ascii=False, indent=2), encoding='utf8')
 print('Independent Android native UI and OS permission verified; no real push sent.')

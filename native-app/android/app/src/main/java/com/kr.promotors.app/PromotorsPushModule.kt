@@ -49,7 +49,7 @@ class PromotorsPushModule(private val context: ReactApplicationContext) : ReactC
   @ReactMethod fun getQaConfiguration(promise: Promise) {
     if (!BuildConfig.DEBUG || !BuildConfig.QA_BUNDLED) { promise.resolve(null); return }
     val supplied = context.currentActivity?.intent?.getStringExtra("qaScreen")
-    val allowed = setOf("home", "booking", "mypage", "admin", "notifications", "updates", "setup", "setup-denied", "inbox", "detail", "customer", "login", "guest-booking", "admin-mypage")
+    val allowed = setOf("home", "booking", "mypage", "admin", "notifications", "updates", "setup", "setup-denied", "inbox", "detail", "customer", "login", "guest-booking", "admin-mypage", "branches", "work-detail")
     val preferences = context.getSharedPreferences("promotors_native_qa", 0)
     val screen = if (supplied == null) preferences.getString("screen", null)
       else supplied.takeIf { it in allowed }?.also { preferences.edit().putString("screen", it).apply() }
