@@ -182,14 +182,14 @@ async function verifyAutomaticScope(target, build, submission, releaseType) {
   check(version?.id === target.id && version.attributes.versionString === TARGET.version &&
     version.attributes.appStoreState === target.attributes.appStoreState &&
     version.attributes.releaseType === releaseType, 'AUTOMATIC_VERSION_CHANGED');
-  const attached = (await request(`/v1/appStoreVersions/${target.id}/relationships/build`)).data;
-  check(attached?.id === build.id, 'ATTACHED_BUILD_MISMATCH');
   const current = (await request(`/v1/reviewSubmissions/${submission.id}`)).data;
   check(current?.id === submission.id && current.attributes.state === submission.attributes.state &&
     current.attributes.submittedDate === submission.attributes.submittedDate, 'AUTOMATIC_SUBMISSION_CHANGED');
   const scope = (await request(`/v1/reviewSubmissions/${submission.id}/items?include=appStoreVersion&limit=50`)).data;
   check(scope.length === 1 && scope[0].relationships?.appStoreVersion?.data?.id === target.id &&
     (current.attributes.state !== 'COMPLETE' || scope[0].attributes.state === 'APPROVED'), 'SUBMISSION_SCOPE_MISMATCH');
+  const attached = (await request(`/v1/appStoreVersions/${target.id}/relationships/build`)).data;
+  check(attached?.id === build.id, 'ATTACHED_BUILD_MISMATCH');
 }
 async function automatic(ctx) {
   const target = ctx.target;
