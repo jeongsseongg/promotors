@@ -1,5 +1,6 @@
 import React, {useCallback, useState} from 'react';
-import {StyleSheet, Text, View} from 'react-native';
+import {StyleSheet, Text, useWindowDimensions, View} from 'react-native';
+import {useSafeAreaFrame, useSafeAreaInsets} from 'react-native-safe-area-context';
 import {Screen} from '../../components/Screen';
 import {Button, Choice, MenuRow} from '../../components/Controls';
 import {useNav, useServices} from '../../components/AppContext';
@@ -9,14 +10,17 @@ import {ui} from '../../theme/styles';
 import {color} from '../../theme/tokens';
 import {HomeHero} from './HomeHero';
 import {CaseCards} from '../cases/CaseCards';
+import {tabBarHeight} from '../../components/Navigation';
 
 export function HomeScreen() {
   const services = useServices(), nav = useNav();
+  const frame = useSafeAreaFrame(), insets = useSafeAreaInsets(), window = useWindowDimensions();
+  const viewportHeight = Math.max(0, frame.height - insets.top - insets.bottom - tabBarHeight(window.fontScale));
   const [branch, setBranch] = useState('프로모터스 안산점');
   const content = useResource(useCallback(() => services.publicContent.caseFeed(true), [services]));
   const posts = content.data?.cases.filter(row => row.branch === branch) || [];
   return <Screen title="프로모터스" hideHeader contentStyle={styles.content} refreshing={content.loading} onRefresh={content.reload} testID="home-screen">
-    <HomeHero/>
+    <HomeHero viewportHeight={viewportHeight}/>
     <View style={styles.details}>
     <Text style={ui.heading}>프로모터스의 작업 기록</Text>
     <View style={ui.wrap}>{content.data?.branches.map(row => <Choice key={row.name} label={row.name.replace(/^프로모터스\s*/, '')} selected={row.name === branch} onPress={() => setBranch(row.name)}/>)}</View>
