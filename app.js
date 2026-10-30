@@ -75,6 +75,16 @@ function getRememberedAdminSession() {
 let authToken = sessionStorage.getItem('pm-auth-token') || localStorage.getItem('pm-auth-token') || '';
 const rememberedAdminSession = authToken ? getRememberedAdminSession() : null;
 const remoteAssets = Object.create(null);
+let assetScopeVersion = 0;
+function captureAssetScope() {
+  return { version: assetScopeVersion, token: authToken };
+}
+function assertAssetScope(scope) {
+  if (scope.version === assetScopeVersion && scope.token === authToken) return;
+  const error = new Error('SESSION_CHANGED');
+  error.code = 'SESSION_CHANGED';
+  throw error;
+}
 
 const assetDb = {
   open() {
@@ -97,7 +107,9 @@ const assetDb = {
     });
   },
   async set(key, value) {
+    const scope = captureAssetScope();
     const db = await this.open();
+    try { assertAssetScope(scope); } catch (error) { db.close(); throw error; }
     return new Promise((resolve, reject) => {
       const tx = db.transaction('files', 'readwrite');
       tx.objectStore('files').put(value, key);
@@ -138,6 +150,7 @@ function storageHeaders(supa, contentType = '') {
 }
 
 async function storageAssetUrl(key) {
+  const scope = captureAssetScope();
   const supa = getSupabaseConfig();
   if (!supa) return '';
   const bucket = assetBucket(key);
@@ -151,32 +164,39 @@ async function storageAssetUrl(key) {
     body: JSON.stringify({ expiresIn: 3600 })
   });
   const data = await response.json().catch(() => null);
+  assertAssetScope(scope);
   if (!response.ok || !data?.signedURL) throw new Error(data?.message || `Storage ${response.status}`);
   return data.signedURL.startsWith('http') ? data.signedURL : `${supa.url}/storage/v1${data.signedURL}`;
 }
 
 async function legacyAssetSrc(key) {
+  const scope = captureAssetScope();
   const dataUrl = await supabaseRpc('pm_asset_get', { p_key: key, p_token: authToken || null });
+  assertAssetScope(scope);
   return typeof dataUrl === 'string' ? dataUrl : '';
 }
 
 async function assetSrc(key, { refresh = false } = {}) {
   if (!key) return '';
+  const scope = captureAssetScope();
+  try { await authScopeCleanup; assertAssetScope(scope); } catch { return ''; }
   const cached = remoteAssets[key];
   if (!refresh && cached?.url && (!cached.expiresAt || cached.expiresAt > Date.now() + 30000)) return cached.url;
   if (!refresh && objectUrls.has(key)) return objectUrls.get(key);
   try {
     const file = await assetDb.get(key);
+    assertAssetScope(scope);
     if (file && !refresh) {
       const url = URL.createObjectURL(file);
       objectUrls.set(key, url);
       return url;
     }
-  } catch {}
+  } catch (error) { if (error.code === 'SESSION_CHANGED') return ''; }
   const supa = getSupabaseConfig();
   if (!supa) return '';
   try {
     const url = await storageAssetUrl(key);
+    assertAssetScope(scope);
     if (!url) return '';
     remoteAssets[key] = {
       url,
@@ -184,9 +204,11 @@ async function assetSrc(key, { refresh = false } = {}) {
     };
     return url;
   } catch (err) {
+    if (err.code === 'SESSION_CHANGED') return '';
     console.warn('Storage asset load failed', key, err);
     try {
       const url = await legacyAssetSrc(key);
+      assertAssetScope(scope);
       if (url) {
         remoteAssets[key] = { url, expiresAt: Date.now() + 10 * 60 * 1000 };
         return url;
@@ -200,12 +222,15 @@ async function assetSrc(key, { refresh = false } = {}) {
 
 async function recoverAssetImage(img, key) {
   if (!img || !key) return;
+  const scope = captureAssetScope();
   img.addEventListener('error', async () => {
+    try { assertAssetScope(scope); } catch { return; }
     if (img.dataset.assetRecovered) return;
     img.dataset.assetRecovered = 'true';
     delete remoteAssets[key];
     try {
       const fallback = await legacyAssetSrc(key);
+      assertAssetScope(scope);
       if (fallback && img.isConnected) img.src = fallback;
     } catch {}
   }, { once: true });
@@ -216,16 +241,23 @@ function safeDownloadName(value) {
 }
 
 async function fetchAssetBlob(key) {
+  const scope = captureAssetScope();
   let src = await assetSrc(key);
+  assertAssetScope(scope);
   if (!src) throw new Error('사진을 불러오지 못했습니다.');
   let response = await fetch(src);
+  assertAssetScope(scope);
   if (!response.ok) {
     delete remoteAssets[key];
     src = await assetSrc(key, { refresh: true });
+    assertAssetScope(scope);
     response = src ? await fetch(src) : null;
+    assertAssetScope(scope);
   }
   if (!response?.ok) throw new Error('사진 다운로드에 실패했습니다.');
-  return response.blob();
+  const blob = await response.blob();
+  assertAssetScope(scope);
+  return blob;
 }
 
 function crc32(bytes) {
@@ -355,10 +387,15 @@ function imageFileToOptimizedBlob(file, maxSize = 1200, quality = .72) {
 
 async function rememberRemoteAsset(key, file) {
   if (!key || !file || remoteAssets[key]?.url) return;
+  const scope = captureAssetScope();
   try {
+    await authScopeCleanup; assertAssetScope(scope);
     const blob = await imageFileToOptimizedBlob(file);
+    assertAssetScope(scope);
     await uploadStorageAsset(key, blob);
+    assertAssetScope(scope);
     const url = objectUrls.get(key) || await storageAssetUrl(key);
+    assertAssetScope(scope);
     remoteAssets[key] = { url };
   } catch (err) {
     console.warn('Storage asset save failed', key, err);
@@ -367,6 +404,7 @@ async function rememberRemoteAsset(key, file) {
 }
 
 async function uploadStorageAsset(key, blob) {
+  const scope = captureAssetScope();
   const supa = getSupabaseConfig();
   if (!supa) throw new Error('SUPABASE_NOT_CONFIGURED');
   const bucket = assetBucket(key);
@@ -381,6 +419,7 @@ async function uploadStorageAsset(key, blob) {
     body: blob
   });
   const data = await response.json().catch(() => null);
+  assertAssetScope(scope);
   const alreadyExists = response.status === 409 || /already exists/i.test(String(data?.message || ''));
   if (!response.ok && !alreadyExists) {
     const cause = String(data?.message || data?.error || '');
@@ -395,19 +434,26 @@ async function uploadStorageAsset(key, blob) {
 }
 
 async function migrateLegacyAssetsToStorage() {
-  if (!getSupabaseConfig() || !authToken || !isAdmin) return { total: 0, migrated: 0 };
+  if (!getSupabaseConfig() || !authToken || !isTopAdmin()) return { total: 0, migrated: 0 };
+  const scope = captureAssetScope();
   const keys = await supabaseRpc('pm_legacy_asset_keys', { p_token: authToken });
+  assertAssetScope(scope);
   if (!Array.isArray(keys) || !keys.length) return { total: 0, migrated: 0 };
   let migrated = 0;
   let nextIndex = 0;
   const worker = async () => {
     while (nextIndex < keys.length) {
+      assertAssetScope(scope);
       const key = keys[nextIndex++];
       const asset = await supabaseRpc('pm_asset_get', { p_key: key, p_token: authToken });
+      assertAssetScope(scope);
       if (!asset?.dataUrl) continue;
       const sourceBlob = await fetch(asset.dataUrl).then(response => response.blob());
+      assertAssetScope(scope);
       const blob = await imageFileToOptimizedBlob(sourceBlob);
+      assertAssetScope(scope);
       await uploadStorageAsset(key, blob);
+      assertAssetScope(scope);
       migrated += 1;
     }
   };
@@ -417,26 +463,32 @@ async function migrateLegacyAssetsToStorage() {
 }
 
 async function saveFiles(files, prefix, limit, onLocalReady = null) {
+  const scope = captureAssetScope();
+  await authScopeCleanup; assertAssetScope(scope);
   const selected = [...files].slice(0, limit);
   const entries = selected.map((file, index) => ({
     file,
     key: `${prefix}-${Date.now()}-${index}-${Math.random().toString(36).slice(2)}`
   }));
   await Promise.all(entries.map(({ key, file }) => assetDb.set(key, file)));
+  assertAssetScope(scope);
   entries.forEach(({ key, file }) => {
     if (!objectUrls.has(key)) objectUrls.set(key, URL.createObjectURL(file));
   });
   const keys = entries.map(entry => entry.key);
   if (typeof onLocalReady === 'function' && keys.length) await onLocalReady(keys);
+  assertAssetScope(scope);
 
   let nextIndex = 0;
   const uploadWorker = async () => {
     while (nextIndex < entries.length) {
+      assertAssetScope(scope);
       const entry = entries[nextIndex++];
       await rememberRemoteAsset(entry.key, entry.file);
     }
   };
   await Promise.all(Array.from({ length: Math.min(4, entries.length) }, uploadWorker));
+  assertAssetScope(scope);
   return keys;
 }
 
@@ -457,15 +509,20 @@ function collectAssetKeys(value, found = new Set()) {
 
 async function migrateLocalAssetsToSupabase() {
   if (!getSupabaseConfig() || !authToken || !isAdmin) return;
-  const sources = ['pm-notices', 'pm-branches', 'pm-intro-slides', 'promotors-cases', 'pm-service-runs'];
+  const scope = captureAssetScope();
+  const sources = isTopAdmin()
+    ? ['pm-notices', 'pm-branches', 'pm-intro-slides', 'promotors-cases', 'pm-service-runs']
+    : ['pm-service-runs'];
   const keys = [...sources.reduce((set, key) => collectAssetKeys(store.get(key, null), set), new Set())];
   for (const key of keys) {
     if (remoteAssets[key]) continue;
     const file = await assetDb.get(key).catch(() => null);
+    assertAssetScope(scope);
     if (file) {
       try {
         await rememberRemoteAsset(key, file);
       } catch (error) {
+        if (error.code === 'SESSION_CHANGED') throw error;
         console.warn('Local asset migration skipped', key, error);
       }
     }
@@ -594,10 +651,20 @@ const PM_PRIVATE_MUTATORS = new Set([
   'pm_guest_booking_create_v2','pm_guest_booking_cancel'
 ]);
 let privacyReloading = false;
+let hydratedAuthScope = '';
+let authScopeCleanup = Promise.resolve();
+function clearAuthScopeCache() {
+  privacyClearMemory();
+  hydratedAuthScope = '';
+  authScopeCleanup = authScopeCleanup.catch(() => {}).then(() => privacyClearAssets());
+  void authScopeCleanup.catch(() => {});
+  return authScopeCleanup;
+}
 function privacyStopError(error) {
   return /PRIVACY_EPOCH|ASSET_PENDING_ERASURE|ACCOUNT_DELETION_PENDING|AUTH_REQUIRED|SESSION_CHANGED/.test(String(error?.code || '') + ' ' + String(error?.message || ''));
 }
 function privacyClearMemory() {
+  assetScopeVersion += 1;
   locallyModifiedKeys.clear();
   SUPABASE_DATA_KEYS.filter(key => !SUPABASE_PUBLIC_DATA_KEYS.has(key)).forEach(key => {
     delete remoteState[key]; localStorage.removeItem(key);
@@ -724,28 +791,39 @@ async function refreshCanonicalMembers(force = false) {
     canonicalMembers = [];
     return canonicalMembers;
   }
+  if (!isTopAdmin()) {
+    canonicalMembers = mergeCustomerDirectory();
+    return canonicalMembers;
+  }
+  const requestedToken = authToken;
   if (!force && Date.now() - canonicalMembersRefreshedAt < 15000) {
     canonicalMembers = mergeCustomerDirectory(canonicalMembers);
     return canonicalMembers;
   }
   if (canonicalMembersRefresh) {
     const pendingMembers = await canonicalMembersRefresh;
+    if (requestedToken !== authToken || !isTopAdmin()) return [];
     canonicalMembers = mergeCustomerDirectory(pendingMembers);
     return canonicalMembers;
   }
-  canonicalMembersRefresh = supabaseRpc('pm_customer_accounts', { p_token: authToken })
+  const operation = supabaseRpc('pm_customer_accounts', { p_token: requestedToken })
     .then(rows => {
+      if (requestedToken !== authToken || !isTopAdmin()) return [];
       if (!Array.isArray(rows)) throw new Error('INVALID_CUSTOMER_ACCOUNTS');
       canonicalMembers = mergeCustomerDirectory(rows);
       canonicalMembersRefreshedAt = Date.now();
       return canonicalMembers;
     })
-    .finally(() => { canonicalMembersRefresh = null; });
-  return canonicalMembersRefresh;
+    .finally(() => { if (canonicalMembersRefresh === operation) canonicalMembersRefresh = null; });
+  canonicalMembersRefresh = operation;
+  return operation;
 }
 
 function saveAuthSession(result, { remember = false, admin = false } = {}) {
-  if (authToken && authToken !== result?.token) window.PMPush?.disconnect();
+  if (authToken !== result?.token) {
+    window.PMPush?.disconnect();
+    clearAuthScopeCache();
+  }
   authToken = result?.token || '';
   window.PMPrivacyEpoch.reset();
   setTimeout(() => { window.PMPush?.sessionChanged(); window.PMDeletionBridge?.sessionChanged(); }, 0);
@@ -767,6 +845,7 @@ function saveAuthSession(result, { remember = false, admin = false } = {}) {
 function clearAuthSession() {
   window.PMPrivacyEpoch.reset();
   window.PMPush?.disconnect();
+  clearAuthScopeCache();
   const token = authToken;
   authToken = '';
   sessionStorage.removeItem('pm-auth-token');
@@ -812,6 +891,7 @@ async function hydrateSupabaseData() {
   const supa = getSupabaseConfig();
   if (!supa) return { ok: false, reason: 'not-configured' };
   try {
+    await authScopeCleanup;
     const hydrateToken = authToken;
     const rows = await supabaseRpc('pm_sync_read', { p_token: hydrateToken || null });
     if (!Array.isArray(rows)) throw new Error('INVALID_SYNC_RESPONSE');
@@ -819,6 +899,13 @@ async function hydrateSupabaseData() {
       ? await supabaseRpc('pm_sync_read', { p_token: null }).catch(() => [])
       : rows;
     if (hydrateToken !== authToken) throw new Error('SESSION_CHANGED');
+    const context = rows.find(row => row.data_key === 'pm-auth-context')?.payload || { authenticated: false };
+    const nextScope = JSON.stringify([hydrateToken, context.role || '', context.branches || [], context.profile?.id || '']);
+    if (nextScope !== hydratedAuthScope) {
+      await clearAuthScopeCache();
+      if (hydrateToken !== authToken) throw new Error('SESSION_CHANGED');
+      hydratedAuthScope = nextScope;
+    }
     isHydratingSupabase = true;
     await window.PMPrivacyEpoch.accept(rows, { resetPrivateCache: async ({rows: fresh}) => {
       privacyClearMemory();
@@ -827,7 +914,6 @@ async function hydrateSupabaseData() {
       fresh.forEach(row => { if (row.data_key !== 'pm-auth-context') store.setLocal(row.data_key, row.payload); });
     }});
     if (hydrateToken !== authToken || privacyReloading) throw new Error('SESSION_CHANGED');
-    const context = rows.find(row => row.data_key === 'pm-auth-context')?.payload || { authenticated: false };
     rows.forEach(row => {
       if (row.data_key !== 'pm-auth-context' && row.data_key !== 'pm-privacy-epoch' && !locallyModifiedKeys.has(row.data_key)) store.setLocal(row.data_key, row.payload);
     });
